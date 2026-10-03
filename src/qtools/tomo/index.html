@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Two-Photon Polarization Entanglement Explorer</title>
+  <style>
+    :root{color-scheme:light;--ink:#182322;--muted:#65736f;--line:#d7dfda;--paper:#f4f6f2;--white:#fff;--blue:#1769aa;--red:#d62728;--green:#159447;--yellow:#c99500}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif}
+    .app{max-width:1440px;margin:auto;padding:24px 28px 32px}.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:18px;gap:16px}.eyebrow{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--green);text-transform:uppercase}.top h1{font-size:24px;line-height:1.2;margin:5px 0;font-weight:650}.subtitle{color:var(--muted);max-width:720px}.status{font:12px ui-monospace,monospace;color:var(--muted);white-space:nowrap;padding-top:8px}
+    .layout{display:grid;grid-template-columns:375px minmax(0,1fr);gap:24px;padding-top:20px}.controls{border-right:1px solid var(--line);padding-right:22px}.section{padding:0 0 19px;margin:0 0 18px;border-bottom:1px solid var(--line)}.section:last-child{border:0}.section h2{font-size:13px;margin:0 0 12px;font-weight:700}.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}.section-head h2{font-size:13px;margin:0;font-weight:700;white-space:nowrap;display:inline-flex;align-items:baseline;gap:4px}.section-head .quiet{color:var(--muted);font-size:12px;white-space:nowrap}.quiet{color:var(--muted);font-size:12px}.row{display:grid;grid-template-columns:68px 1fr 52px;align-items:center;gap:8px;margin:9px 0}.row label{font:12px ui-monospace,monospace;color:#45514e;white-space:nowrap}.row output{font:12px ui-monospace,monospace;text-align:right;color:var(--muted);white-space:nowrap}input[type=range]{width:100%;accent-color:var(--green)}input[type=number]{width:68px;padding:5px;border:1px solid var(--line);border-radius:4px;font:12px ui-monospace,monospace;background:var(--white)}
+    .dirac-ket{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:600;color:var(--ink);display:inline-flex;align-items:baseline;letter-spacing:-0.5px}
+    .complex{display:grid;grid-template-columns:36px 1fr 48px;align-items:center;gap:8px;margin:7px 0}.complex label{font:12px ui-monospace,monospace;cursor:pointer;white-space:nowrap}.complex label.phase-target{font-weight:700;color:var(--green)}.complex input[type=range]{width:100%}.complex output{font:12px ui-monospace,monospace;text-align:right;color:var(--muted);white-space:nowrap}.preset-line{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.segmented,.basis-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.preset-line button,.segmented button,.basis-grid button,.mode button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:4px;padding:6px 9px;font-size:12px;cursor:pointer;text-align:center;transition:background 0.15s,color 0.15s,border-color 0.15s}.preset-line button:hover{border-color:var(--ink);background:#eef2ef}.preset-line button.active{background:var(--ink)!important;border-color:var(--ink)!important;color:#fff!important;font-weight:600}.segmented button.active,.mode button.active{border-color:var(--green);color:var(--green);background:#e7f0ec}.basis-grid button{background:var(--white);min-width:38px}.basis-grid button.active{background:var(--ink);border-color:var(--ink);color:white}.basis-definition{margin-top:9px;padding:8px 10px;background:#edf3ef;border-left:3px solid var(--green);color:#34413d;font-size:12px}.basis-definition:empty{display:none}.main{min-width:0}
+    .summary{display:grid;grid-template-columns:1.35fr 0.95fr 0.95fr;gap:0;border-bottom:1px solid var(--line);padding:0 0 17px;margin-bottom:17px}.metric{padding:0 16px;border-left:1px solid var(--line)}.metric:first-child{padding-left:0;border:0}.metric-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}.metric .label{font-size:11px;color:var(--muted);margin-bottom:0}.metric strong{font:600 18px ui-monospace,monospace}.metric .small{font-size:11px;color:var(--muted);margin-top:3px}.segmented-xs{display:inline-flex;gap:3px;margin:0}.segmented-xs button{padding:2px 7px;font-size:10px;line-height:1.2;border-radius:3px}.state-eq{display:flex;align-items:baseline;gap:6px;font:13px/1.6 ui-monospace,monospace}.state-lhs{color:var(--ink);white-space:nowrap;font-weight:600;display:inline-flex;align-items:baseline;gap:4px}.state-rhs{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 6px}.state-term{white-space:nowrap;display:inline-flex;align-items:baseline;gap:2px}.state-term .op{color:var(--muted);font-weight:500;margin-right:2px}.chart-head{margin-bottom:8px}.chart-head-row{display:flex;justify-content:space-between;align-items:center;gap:14px}.chart-head h2{font-size:14px;margin:0}.mode{display:flex;gap:4px}.mode button{padding:5px 8px}.chart-wrap{position:relative;width:100%;height:390px;background:var(--white);border:1px solid var(--line);border-radius:5px}.chart-wrap canvas{width:100%;height:100%;display:block}.chsh-chart{height:260px;margin-top:10px}.legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 0 9px;color:var(--muted);font-size:12px;min-height:18px}.key{display:flex;align-items:center;gap:6px}.swatch{width:16px;height:3px}.formula-note{background:#edf3ef;border-left:3px solid var(--green);padding:11px 13px;color:#34413d;font-size:12px;margin-top:12px}.formula-note strong{color:var(--ink)}.formula-note code{font:12px ui-monospace,monospace;color:var(--ink)}.table-wrap{overflow:auto;margin-top:18px}.table-wrap h2{font-size:13px;margin:0 0 8px}.table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}.table th,.table td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}.table th:first-child,.table td:first-child{text-align:left}.table th{color:var(--muted);font-weight:600}.foot{font-size:11px;color:var(--muted);margin-top:10px}
+    .chsh-table tr.correlation-row td{border-bottom:0;padding-top:4px;padding-bottom:2px}.chsh-table tr.correlation-row + tr.basis-row td{border-bottom:1px solid var(--line);padding-top:0;padding-bottom:3px;color:var(--muted);font-size:10px}.chsh-table tr.correlation-row + tr.basis-row td:not(:first-child){text-align:center}.chsh-table tr.single-row td{border-bottom:0;padding-top:3px;padding-bottom:3px}.chsh-table tr.single-row.group-end td{border-bottom:1px solid var(--line);padding-bottom:5px}.chsh-table td[rowspan]{vertical-align:middle}.chsh-table tr.group-end td{border-bottom:1px solid var(--line)}
+    @media(max-width:850px){.app{padding:17px 16px}.layout{grid-template-columns:1fr}.controls{border-right:0;border-bottom:1px solid var(--line);padding:0}.section{max-width:none}.chart-wrap{height:330px}.chsh-chart{height:240px}.status{display:none}}
+    @media(max-width:520px){.top h1{font-size:20px}.summary{grid-template-columns:1fr;row-gap:12px}.metric{border-left:0;padding-left:0}.chart-head-row{align-items:flex-start;flex-direction:column}.chart-wrap{height:290px}.chsh-chart{height:220px}.row{grid-template-columns:60px 1fr 50px}.complex{grid-template-columns:32px 1fr 44px}}
+    .chsh-settings{display:grid;grid-template-columns:1fr;gap:10px;color:var(--muted);font-size:12px;min-width:240px}
+    .chsh-setting-item{display:flex;flex-direction:column;gap:1px}
+    .chsh-setting-row{display:grid;grid-template-columns:36px 1fr 68px;align-items:center;gap:8px}
+    .chsh-setting-row span{white-space:nowrap;font-size:13px;font-weight:700}
+    .chsh-setting-row input{width:100%}
+    .chsh-setting-row output{font:12px ui-monospace,monospace;text-align:right;white-space:nowrap}
+    .chsh-hwp-sub{font:11px/1.3 ui-monospace,monospace;color:var(--muted);padding-left:44px}
+    .label-a{color:var(--blue)!important;font-weight:700}.input-a{accent-color:var(--blue)!important}.val-a{color:var(--blue)!important;font-weight:600}.label-ap{color:var(--green)!important;font-weight:700}.input-ap{accent-color:var(--green)!important}.val-ap{color:var(--green)!important;font-weight:600}.label-b{color:#8e24aa!important;font-weight:700}.input-b{accent-color:#8e24aa!important}.val-b{color:#8e24aa!important;font-weight:600}.label-bp{color:#182322!important;font-weight:700}.input-bp{accent-color:#182322!important}.val-bp{color:#182322!important;font-weight:600}.chsh-measurement{display:flex;gap:5px;align-items:center;margin-top:0}.chsh-measurement button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:4px;padding:5px 8px;font-size:12px;cursor:pointer}.chsh-measurement button.active{border-color:var(--green);color:var(--green);background:#e7f0ec}.chsh-note{color:var(--muted);font-size:12px;margin-top:9px}.chsh-surface{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:16px;align-items:stretch;margin-top:10px}.chsh-formulas{font-size:12px;color:#34413d;padding:3px 0}.chsh-formulas code{font:12px ui-monospace,monospace;color:var(--ink)}.chsh-formulas strong{color:var(--ink)}.sphere-wrap{background:var(--white);border:1px solid var(--line);border-radius:5px;min-height:250px;height:250px}.sphere-wrap canvas{width:100%;height:100%;display:block}.chsh-section h2{font-size:14px;margin:0}.chsh-table{font-size:11px}.chsh-table th,.chsh-table td{padding:6px 7px}.chsh-table td[rowspan]{vertical-align:middle}
+    .table-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px}.table-head h2{margin:0}.table-head .chsh-measurement{margin-left:auto}.table-head #resetChshCounts,.table-head #toggleMeasurementMarkers{flex:0 0 auto}
+    .header-switcher{display:inline-flex;align-items:center;flex-wrap:wrap;gap:12px;margin:5px 0;font-size:24px;line-height:1.25;font-weight:650}
+    .header-tab{background:none;border:none;padding:0;font:inherit;color:var(--muted);cursor:pointer;text-align:left;transition:color 0.18s ease,opacity 0.18s ease;opacity:0.45}
+    .header-tab:hover{color:var(--ink);opacity:0.8}
+    .header-tab.active{color:var(--ink);opacity:1;font-weight:700;cursor:default}
+    .header-divider{color:var(--line);font-weight:300;user-select:none;font-size:20px}
+    .tab-pane{display:none}
+    .tab-pane.active{display:block}
+    .tomo-placeholder{padding:90px 20px;display:flex;justify-content:center;align-items:center}
+    .tomo-placeholder-card{background:var(--white);border:1px dashed var(--line);border-radius:8px;padding:56px 40px;text-align:center;max-width:620px;width:100%}
+    .tomo-placeholder-card h2{font-size:18px;margin:8px 0 0;color:var(--ink)}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div>
+        <div class="eyebrow" id="eyebrowText">Entanglement & Bell Measurements · Two Photons</div>
+        <h1 class="header-switcher">
+          <button type="button" class="header-tab active" data-tab="bell">Two-Photon Polarization Entanglement</button>
+          <span class="header-divider">/</span>
+          <button type="button" class="header-tab" data-tab="tomo">Quantum State Tomography</button>
+        </h1>
+        <div class="subtitle" id="pageSubtitle">Choose the representation basis for the two-photon state, configure Alice's analyzer bases, and explore Bob's HWP coincidence curves alongside CHSH Bell inequality measurements.</div>
+      </div>
+    </header>
+    <div id="tabBell" class="tab-pane active">
+      <div class="layout">
+      <aside class="controls">
+        <section class="section">
+          <div class="section-head"><h2>Two-Photon State <span class="dirac-ket">|ψ⟩</span></h2><span class="quiet">Complex amplitudes (normalized)</span></div>
+          <div class="segmented" id="stateBasisButtons"><button data-state-basis="linear" class="active">H / V</button><button data-state-basis="circular">R / L</button></div>
+          <div class="basis-definition" id="basisDefinition"></div>
+          <div id="complexInputs"></div>
+          <div class="row"><label>Phase φ</label><input id="phase" type="range" min="-180" max="180" step="1" value="0"><output id="phaseVal">0°</output></div>
+          <div class="quiet">Click a coefficient label to select which phase to adjust; amplitudes normalize automatically.</div>
+          <div class="preset-line"><button data-preset="phi+" class="active">|Φ⁺⟩</button><button data-preset="phi-">|Φ⁻⟩</button><button data-preset="psi+">|Ψ⁺⟩</button><button data-preset="psi-">|Ψ⁻⟩</button></div>
+        </section>
+        <section class="section">
+          <div class="section-head"><h2>Alice Analyzer Bases</h2><span class="quiet">Multi-select</span></div>
+          <div class="basis-grid" id="aliceButtons"></div>
+        </section>
+        <section class="section">
+          <h2>Bob HWP Scan</h2>
+          <div class="row"><label>Start θ<sub>b</sub></label><input id="minAngle" list="hwpPresets" type="range" min="-90" max="0" step="0.5" value="-45"><output id="minVal">−45°</output></div>
+          <div class="row"><label>End θ<sub>b</sub></label><input id="maxAngle" list="hwpPresets" type="range" min="0" max="180" step="0.5" value="45"><output id="maxVal">45°</output></div>
+          <datalist id="hwpPresets"><option value="-45"><option value="-33.75"><option value="-22.5"><option value="-11.25"><option value="0"><option value="11.25"><option value="22.5"><option value="33.75"><option value="45"></datalist>
+          <div class="row"><label>Step</label><input id="stepAngle" type="range" min="1" max="10" step="1" value="2"><output id="stepVal">2°</output></div>
+          <div class="quiet">Bob's polarization angle b is defined relative to H; HWP mechanical angle is θ<sub>b</sub> with b = 2θ<sub>b</sub>. b = 0°, 45°, 90° correspond to H, D, V. Alice HWP angle is θ<sub>a</sub> with a = 2θ<sub>a</sub>.</div>
+        </section>
+      </aside>
+      <main class="main">
+        <div class="summary">
+          <div class="metric">
+            <div class="metric-head">
+              <div class="label">Input State <span class="dirac-ket">|ψ⟩</span></div>
+              <div class="segmented segmented-xs" id="dispBasisButtons">
+                <button data-disp-basis="linear" class="active" type="button">H/V</button>
+                <button data-disp-basis="circular" type="button">R/L</button>
+              </div>
+            </div>
+            <div class="state-eq" id="stateText"></div>
+          </div>
+          <div class="metric"><div class="label">Entanglement · Concurrence</div><strong id="concurrence">—</strong><div class="small" id="entLabel">—</div></div>
+          <div class="metric"><div class="label">CHSH Bell Parameter · Smax</div><strong id="chshSmax">—</strong><div class="small" id="chshLabel">—</div></div>
+        </div>
+        <div class="chart-head">
+          <div class="chart-head-row">
+            <h2 id="chartTitle">Bob Conditional Coincidence Rate · Alice = H</h2>
+            <div class="mode"><button data-mode="prob">Probability</button><button class="active" data-mode="rate">Normalized Rate</button></div>
+          </div>
+          <div class="legend" id="legend"></div>
+        </div>
+        <div class="chart-wrap"><canvas id="plot" aria-label="Coincidence curves vs HWP rotation for Alice analyzer bases"></canvas></div>
+        <section class="chsh-section">
+          <div class="chsh-surface">
+            <div>
+              <div class="chart-head-row"><h2>CHSH Bell Parameters</h2></div>
+              <div class="chsh-settings">
+                <div class="chsh-setting-item">
+                  <div class="chsh-setting-row">
+                    <span class="label-a">a</span>
+                    <input id="thetaA" class="input-a" list="anglePresets" type="range" min="-90" max="90" step="0.5" value="0">
+                    <output id="thetaAVal" class="val-a">+0.0°</output>
+                  </div>
+                  <div class="chsh-hwp-sub" id="thetaASub">HWP θ<sub>a</sub> = +0.0°</div>
+                </div>
+                <div class="chsh-setting-item">
+                  <div class="chsh-setting-row">
+                    <span class="label-ap">a′</span>
+                    <input id="thetaAp" class="input-ap" list="anglePresets" type="range" min="-90" max="90" step="0.5" value="45">
+                    <output id="thetaApVal" class="val-ap">+45.0°</output>
+                  </div>
+                  <div class="chsh-hwp-sub" id="thetaApSub">HWP θ<sub>a</sub>′ = +22.5°</div>
+                </div>
+                <div class="chsh-setting-item">
+                  <div class="chsh-setting-row">
+                    <span class="label-b">b</span>
+                    <input id="thetaB" class="input-b" list="anglePresets" type="range" min="-90" max="90" step="0.5" value="22.5">
+                    <output id="thetaBVal" class="val-b">+22.5°</output>
+                  </div>
+                  <div class="chsh-hwp-sub" id="thetaBSub">HWP θ<sub>b</sub> = +11.3°</div>
+                </div>
+                <div class="chsh-setting-item">
+                  <div class="chsh-setting-row">
+                    <span class="label-bp">b′</span>
+                    <input id="thetaBp" class="input-bp" list="anglePresets" type="range" min="-90" max="90" step="0.5" value="67.5">
+                    <output id="thetaBpVal" class="val-bp">+67.5°</output>
+                  </div>
+                  <div class="chsh-hwp-sub" id="thetaBpSub">HWP θ<sub>b</sub>′ = +33.8°</div>
+                </div>
+              </div>
+              <datalist id="anglePresets"><option value="-90"><option value="-67.5"><option value="-45"><option value="-22.5"><option value="0"><option value="22.5"><option value="45"><option value="67.5"><option value="90"></datalist>
+              <div class="chsh-note">Polarization angles: a = 2θ<sub>a</sub>, a′ = 2θ<sub>a</sub>′, b = 2θ<sub>b</sub>, b′ = 2θ<sub>b</sub>′ relative to H. Selected analyzer difference: (b − a) = 2(θ<sub>b</sub> − θ<sub>a</sub>).</div>
+            </div>
+            <div class="sphere-wrap"><canvas id="polarizationSphere" aria-label="Poincaré sphere analyzer orientations for Alice and Bob"></canvas></div>
+          </div>
+          <div class="chart-wrap chsh-chart"><canvas id="chshPlot" aria-label="CHSH parameter vs Bob relative polarization angle"></canvas></div>
+          <div class="table-wrap">
+            <div class="table-head"><h2>CHSH Settings & Coincidences</h2><div class="chsh-measurement"><button data-chsh-mode="dual" class="active" type="button">Dual-Channel: PBS + 2 Detectors</button><button data-chsh-mode="single" type="button">Single-Channel: Four Basis Settings</button></div><button id="resetChshCounts" type="button">Reset as input</button><button id="toggleMeasurementMarkers" type="button" aria-pressed="true">Hide 16 combinations</button></div>
+            <div class="chsh-formulas" id="chshCalculation"></div>
+            <table class="table chsh-table">
+              <thead id="chshHead"></thead>
+              <tbody id="chshRows"></tbody>
+            </table>
+          </div>
+        </section>
+        <div class="foot">Ideal projective measurement model; detector efficiency, dark counts, accidental coincidences, background noise, and waveplate imperfections are not included.</div>
+      </main>
+    </div>
+  </div>
+  <div id="tabTomo" class="tab-pane">
+    <div class="tomo-placeholder">
+      <div class="tomo-placeholder-card">
+        <div class="eyebrow" style="color:var(--muted)">Future Workspace</div>
+        <h2>Quantum State Tomography (QST)</h2>
+        <p class="quiet" style="max-width:540px;margin:10px auto 0;line-height:1.6">
+          This module is reserved for two-photon quantum state reconstruction, maximum likelihood estimation (MLE), density matrix Stokes tomography, and fidelity analysis.
+        </p>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <script>
+    (()=>{
+      const $=s=>document.querySelector(s); const $$=s=>[...document.querySelectorAll(s)];
+      const colors={H:'#1769aa',V:'#d62728',D:'#159447',A:'#c99500',R:'#8e24aa',L:'#00897b'};
+      const c=(re=0,im=0)=>({re,im});
+      const add=(a,b)=>c(a.re+b.re,a.im+b.im);
+      const mul=(a,b)=>c(a.re*b.re-a.im*b.im,a.re*b.im+a.im*b.re);
+      const scale=(a,s)=>c(a.re*s,a.im*s);
+      const abs=a=>Math.hypot(a.re,a.im);
+
+      // Exact 2-photon unitary basis transformations:
+      // Linear [HH, HV, VH, VV] <-> Circular [RR, RL, LR, LL]
+      function linToCirc(v){
+        const [hh,hv,vh,vv]=v;
+        const rr = scale(add(add(hh, mul(c(0,-1),hv)), add(mul(c(0,-1),vh), scale(vv,-1))), 0.5);
+        const rl = scale(add(add(hh, mul(c(0,1),hv)),  add(mul(c(0,-1),vh), vv)), 0.5);
+        const lr = scale(add(add(hh, mul(c(0,-1),hv)), add(mul(c(0,1),vh),  vv)), 0.5);
+        const ll = scale(add(add(hh, mul(c(0,1),hv)),  add(mul(c(0,1),vh),  scale(vv,-1))), 0.5);
+        return [rr, rl, lr, ll];
+      }
+      function circToLin(v){
+        const [rr,rl,lr,ll]=v;
+        const hh = scale(add(add(rr, rl), add(lr, ll)), 0.5);
+        const hv = scale(add(add(mul(c(0,1),rr), mul(c(0,-1),rl)), add(mul(c(0,1),lr), mul(c(0,-1),ll))), 0.5);
+        const vh = scale(add(add(mul(c(0,1),rr), mul(c(0,1),rl)),  add(mul(c(0,-1),lr), mul(c(0,-1),ll))), 0.5);
+        const vv = scale(add(add(scale(rr,-1), rl), add(lr, scale(ll,-1))), 0.5);
+        return [hh, hv, vh, vv];
+      }
+
+      function normalize(values){
+        const norm=Math.hypot(...values.map(abs));
+        return norm>1e-12 ? values.map(v=>scale(v,1/norm)) : values;
+      }
+
+      const state={
+        basis:'linear',
+        dispBasis:'linear',
+        inputAmplitudes:[c(1/Math.sqrt(2)),c(),c(),c(1/Math.sqrt(2))],
+        phaseTarget:3,
+        activePreset:'phi+',
+        aliceBases:['H','V','D','A'],
+        mode:'rate',
+        chshMode:'dual',
+        showMeasurementMarkers:true,
+        a:0,
+        ap:45,
+        b:22.5,
+        bp:67.5,
+        offset:45
+      };
+
+      let latest=null,requestSerial=0,refreshTimer=null,refreshController=null;
+      const fmt=(n,d=3)=>Number(n).toFixed(d);
+      const labelsFor=()=>state.basis==='linear'?['H','V']:['R','L'];
+      const aliceLabels=()=>['H','V','D','A','R','L'];
+      const coefficientLabels=()=>{const [a,b]=labelsFor();return [a+a,a+b,b+a,b+b]};
+
+      function displayToPayload(values){
+        const labels=coefficientLabels();
+        return Object.fromEntries(labels.map((label,i)=>{
+          const value=values[i], magnitude=abs(value);
+          return [label,{magnitude, phase:magnitude>1e-12 ? Math.atan2(value.im,value.re)*180/Math.PI : 0}];
+        }));
+      }
+
+      function detectMatchingPreset(){
+        const [c0, c1, c2, c3] = state.inputAmplitudes;
+        const m0 = abs(c0), m1 = abs(c1), m2 = abs(c2), m3 = abs(c3);
+        const invSq2 = 1 / Math.sqrt(2);
+        const tol = 0.05;
+
+        // Check Phi+ and Phi- (|HH> +/- |VV>)
+        if(Math.abs(m0 - invSq2) < tol && Math.abs(m3 - invSq2) < tol && m1 < tol && m2 < tol){
+          const p0 = Math.atan2(c0.im, c0.re);
+          const p3 = Math.atan2(c3.im, c3.re);
+          let diff = (p3 - p0) * 180 / Math.PI;
+          while(diff > 180) diff -= 360;
+          while(diff < -180) diff += 360;
+          if(Math.abs(diff) < 8) return 'phi+';
+          if(Math.abs(Math.abs(diff) - 180) < 8) return 'phi-';
+        }
+
+        // Check Psi+ and Psi- (|HV> +/- |VH>)
+        if(Math.abs(m1 - invSq2) < tol && Math.abs(m2 - invSq2) < tol && m0 < tol && m3 < tol){
+          const p1 = Math.atan2(c1.im, c1.re);
+          const p2 = Math.atan2(c2.im, c2.re);
+          let diff = (p2 - p1) * 180 / Math.PI;
+          while(diff > 180) diff -= 360;
+          while(diff < -180) diff += 360;
+          if(Math.abs(diff) < 8) return 'psi+';
+          if(Math.abs(Math.abs(diff) - 180) < 8) return 'psi-';
+        }
+
+        return null;
+      }
+
+      function updatePresetButtons(){
+        const active = detectMatchingPreset();
+        state.activePreset = active;
+        $$('.preset-line button').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.preset === active);
+        });
+      }
+
+      function renderAliceButtons(){
+        const allowed=aliceLabels();
+        state.aliceBases=state.aliceBases.filter(item=>allowed.includes(item));
+        if(!state.aliceBases.length)state.aliceBases=['H','V','D','A'];
+        $('#aliceButtons').innerHTML=allowed.map(label=>`<button data-basis="${label}" class="${state.aliceBases.includes(label)?'active':''}">${label}</button>`).join('');
+      }
+
+      function renderComplex(){
+        const labels=coefficientLabels();
+        state.inputAmplitudes=normalize(state.inputAmplitudes);
+        $('#complexInputs').innerHTML=labels.map((label,i)=>`
+          <div class="complex">
+            <label data-index="${i}" class="${i===state.phaseTarget?'phase-target':''}">${label}</label>
+            <input data-index="${i}" type="range" min="0" max="1" step="0.001" value="${abs(state.inputAmplitudes[i]).toFixed(3)}">
+            <output id="val${i}">${abs(state.inputAmplitudes[i]).toFixed(3)}</output>
+          </div>
+        `).join('');
+        $('#basisDefinition').innerHTML=state.basis==='linear'?'':'Circular basis: |R⟩=(|H⟩+i|V⟩)/√2, |L⟩=(|H⟩−i|V⟩)/√2.';
+        renderAliceButtons();
+        labelsAndPhase();
+        updatePresetButtons();
+      }
+
+      function syncComplexValues(){
+        state.inputAmplitudes=normalize(state.inputAmplitudes);
+        state.inputAmplitudes.forEach((value,i)=>{
+          const inp = $(`#complexInputs input[data-index="${i}"]`);
+          const out = $(`#val${i}`);
+          const lbl = $(`#complexInputs label[data-index="${i}"]`);
+          if(inp) inp.value=abs(value).toFixed(3);
+          if(out) out.textContent=abs(value).toFixed(3);
+          if(lbl) lbl.classList.toggle('phase-target',i===state.phaseTarget);
+        });
+        labelsAndPhase();
+        updatePresetButtons();
+      }
+
+      function labelsAndPhase(){
+        const curTarget = state.inputAmplitudes[state.phaseTarget] || c();
+        let phase = Math.round(Math.atan2(curTarget.im, curTarget.re) * 180 / Math.PI);
+        if (abs(curTarget) < 1e-6) phase = 0;
+        $('#phaseVal').textContent = (phase >= 0 ? '+' : '') + phase + '°';
+        $('#phase').value = phase;
+        $('#minVal').textContent = $('#minAngle').value + '°';
+        $('#maxVal').textContent = $('#maxAngle').value + '°';
+        $('#stepVal').textContent = $('#stepAngle').value + '°';
+      }
+
+      function payload(){
+        return {
+          state_basis:state.basis,
+          amplitudes:displayToPayload(state.inputAmplitudes),
+          alice_bases:state.aliceBases,
+          phase_target:coefficientLabels()[state.phaseTarget],
+          scan:{min:+$('#minAngle').value,max:+$('#maxAngle').value,step:+$('#stepAngle').value},
+          chsh:{a:state.a,ap:state.ap,b:state.b,bp:state.bp}
+        };
+      }
+
+      let chshCountsOverride=null;
+      let skipChshCountsOnce=false;
+      function collectChshCounts(){
+        if(skipChshCountsOnce){
+          skipChshCountsOnce=false;
+          return null;
+        }
+        const counts={};
+        $$('.chsh-count').forEach(input=>{
+          const setting=input.dataset.setting;
+          const outcome=input.dataset.outcome;
+          if(!counts[setting])counts[setting]={};
+          counts[setting][outcome]=Math.max(0,Number(input.value)||0);
+        });
+        return Object.keys(counts).length?counts:null;
+      }
+
+      function schedule(){
+        labelsAndPhase();
+        updatePresetButtons();
+        clearTimeout(refreshTimer);
+        refreshTimer=setTimeout(refresh,35);
+      }
+
+      async function refresh(){
+        const serial=++requestSerial;
+        if(refreshController)refreshController.abort();
+        refreshController=new AbortController();
+        try{
+          const request=payload();
+          const counts=collectChshCounts();
+          if(counts)request.chsh_counts=counts;
+          const response=await fetch('/api/calculate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request),signal:refreshController.signal});
+          const body=await response.json();
+          if(!response.ok)throw new Error(body.detail||'Calculation failed');
+          if(serial!==requestSerial)return;
+          latest=body;
+          // Keep the manual-count override only while the user is editing it.
+          render(body);
+        }catch(error){
+          if(error.name==='AbortError')return;
+          if(serial!==requestSerial)return;
+        }
+      }
+
+      function formatTerm(x, isFirst){
+        const mag = fmt(x.magnitude, 2);
+        let ph = x.phase;
+        while(ph > 180) ph -= 360;
+        while(ph <= -180) ph += 360;
+
+        let sign = isFirst ? '' : '<span class="op">+</span> ';
+        let factor = mag;
+
+        if (Math.abs(Math.abs(ph) - 180) < 4) {
+          sign = isFirst ? '− ' : '<span class="op">−</span> ';
+          factor = mag;
+        } else if (Math.abs(ph) < 4) {
+          sign = isFirst ? '' : '<span class="op">+</span> ';
+          factor = mag;
+        } else if (Math.abs(ph - 90) < 4) {
+          sign = isFirst ? 'i·' : '<span class="op">+</span> i·';
+          factor = mag;
+        } else if (Math.abs(ph + 90) < 4) {
+          sign = isFirst ? '−i·' : '<span class="op">−</span> i·';
+          factor = mag;
+        } else {
+          const ratio = (ph / 180).toFixed(2);
+          const s = ratio >= 0 ? '+' : '';
+          factor = `${mag}e<sup>${s}${ratio}iπ</sup>`;
+        }
+        return `<span class="state-term">${sign}${factor}<span class="dirac-ket">|${x.label}⟩</span></span>`;
+      }
+
+      function renderSummary(data){
+        const stateList=data.states_by_basis?.[state.dispBasis]||data.normalized_state;
+        const activeTerms=stateList.filter(x=>x.magnitude>.005);
+        if(!activeTerms.length){
+          $('#stateText').innerHTML='<span class="state-lhs"><span class="dirac-ket">|ψ⟩</span> =</span><div class="state-rhs"><span class="state-term">0</span></div>';
+        }else{
+          const termHtml=activeTerms.map((x,i)=>formatTerm(x, i===0)).join('');
+          $('#stateText').innerHTML=`<span class="state-lhs"><span class="dirac-ket">|ψ⟩</span> =</span><div class="state-rhs">${termHtml}</div>`;
+        }
+        $$('#dispBasisButtons button').forEach(item=>item.classList.toggle('active',item.dataset.dispBasis===state.dispBasis));
+        $('#concurrence').textContent=fmt(data.concurrence);
+        $('#entLabel').textContent=data.concurrence>.999?'Maximally entangled (pure)':data.concurrence<.001?'Separable (pure)':'Partially entangled (pure)';
+        $('#chshSmax').textContent=fmt(data.smax);
+        $('#chshLabel').textContent=`Theoretical Smax · ${data.smax>2?'Violates Bell inequality':'Bell inequality satisfied'}`;
+        const names=data.alice_bases.join(', ');
+        $('#chartTitle').innerHTML=`${state.mode==='prob'?'Bob Joint Coincidence Probability':'Bob Conditional Coincidence Rate'} · Alice = ${names}`;
+      }
+
+      function renderChshSettings(){
+        $('#thetaA').value=state.a;
+        $('#thetaAp').value=state.ap;
+        $('#thetaB').value=state.b;
+        $('#thetaBp').value=state.bp;
+        $('#thetaAVal').textContent=`${state.a>=0?'+':''}${state.a.toFixed(1)}°`;
+        $('#thetaASub').innerHTML=`HWP θ<sub>a</sub> = ${(state.a/2>=0?'+':'')}${(state.a/2).toFixed(1)}°`;
+        $('#thetaApVal').textContent=`${state.ap>=0?'+':''}${state.ap.toFixed(1)}°`;
+        $('#thetaApSub').innerHTML=`HWP θ<sub>a</sub>′ = ${(state.ap/2>=0?'+':'')}${(state.ap/2).toFixed(1)}°`;
+        $('#thetaBVal').textContent=`${state.b>=0?'+':''}${state.b.toFixed(1)}°`;
+        $('#thetaBSub').innerHTML=`HWP θ<sub>b</sub> = ${(state.b/2>=0?'+':'')}${(state.b/2).toFixed(1)}°`;
+        $('#thetaBpVal').textContent=`${state.bp>=0?'+':''}${state.bp.toFixed(1)}°`;
+        $('#thetaBpSub').innerHTML=`HWP θ<sub>b</sub>′ = ${(state.bp/2>=0?'+':'')}${(state.bp/2).toFixed(1)}°`;
+      }
+
+      function previewChshSettings(){
+        if(!latest?.chsh)return;
+        const preview=JSON.parse(JSON.stringify(latest));
+        const old=preview.chsh.settings_current||preview.chsh.settings_at_smax;
+        if(old){
+          preview.chsh.current_b=state.b;
+          preview.chsh.current_bp=state.bp;
+          preview.chsh.current_s=old.s;
+          preview.chsh.curve_bp_minus_b=state.bp-state.b;
+        }
+        drawChshPlot(preview);
+        drawPolarizationSphere(preview);
+      }
+
+      function renderChshTable(data){
+        const selected=data.chsh.settings_current||data.chsh.settings_at_smax;
+        const dual=state.chshMode==='dual';
+        $('#chshHead').innerHTML='<tr><th>Correlation</th><th>Alice a (HWP θ<sub>a</sub>)</th><th>Bob b (HWP θ<sub>b</sub>)</th><th>N++</th><th>N--</th><th>N+-</th><th>N-+</th><th>P++</th><th>P--</th><th>P+-</th><th>P-+</th><th>E</th></tr>';
+        const specs=[['E(a,b)',selected.a,selected.b,'a','b'],["E(a,b')",selected.a,selected.bp,'a',"b′"],["E(a',b)",selected.ap,selected.b,"a′",'b'],["E(a',b')",selected.ap,selected.bp,"a′","b′"]];
+        const rows=specs.map(([name,aliceAngle,bobAngle,aliceLabel,bobLabel])=>{
+          const probabilities=selected.probabilities[name], counts=selected.counts[name];
+          if(dual){
+            const basisLabels=['N('+aliceLabel+', '+bobLabel+')','N('+aliceLabel+'−90°, '+bobLabel+'−90°)','N('+aliceLabel+', '+bobLabel+'−90°)','N('+aliceLabel+'−90°, '+bobLabel+')'];
+            return `<tr class="correlation-row"><td>${name}</td><td>${aliceAngle.toFixed(1)}° (${(aliceAngle/2).toFixed(2)}°)</td><td>${bobAngle.toFixed(1)}° (${(bobAngle/2).toFixed(2)}°)</td>${['++','--','+-','-+'].map(outcome=>`<td><input class="chsh-count" data-setting="${name}" data-outcome="${outcome}" type="number" min="0" step="1" value="${counts[outcome].toFixed(1)}"></td>`).join('')}${['++','--','+-','-+'].map(outcome=>`<td>${probabilities[outcome].toFixed(4)}</td>`).join('')}<td>${selected.correlations[name].toFixed(4)}</td></tr><tr class="basis-row"><td></td><td></td><td></td>${basisLabels.map(label=>`<td>${label}</td>`).join('')}<td colspan="5"></td></tr>`;
+          }
+          const items=selected.measurement_rows[name]||[];
+          return items.map((item,index)=>{
+            const outcome=item.outcome;
+            const nCells=['++','--','+-','-+'].map(key=>key===outcome?`<td><input class="chsh-count" data-setting="${name}" data-outcome="${outcome}" type="number" min="0" step="1" value="${counts[outcome].toFixed(1)}"></td>`:'<td></td>').join('');
+            const pCells=['++','--','+-','-+'].map(key=>key===outcome?`<td>${probabilities[outcome].toFixed(4)}</td>`:'<td></td>').join('');
+            const correlationCell=index===0?`<td rowspan="4">${name}</td>`:'';
+            const eCell=index===0?`<td rowspan="4">${selected.correlations[name].toFixed(4)}</td>`:'';
+            return `<tr class="single-row ${index===3?'group-end':''}">${correlationCell}<td>${item.single_alice_label}</td><td>${item.single_bob_label}</td>${nCells}${pCells}${eCell}</tr>`;
+          }).join('');
+        }).join('');
+        $('#chshRows').innerHTML=rows+`<tr><th colspan="11">S</th><th>${selected.s.toFixed(4)}</th></tr>`;
+      }
+
+      function renderChshCalculation(data){
+        const selected=data.chsh.settings_current||data.chsh.settings_at_smax;
+        $('#chshCalculation').innerHTML='<code>E = P(++) + P(−−) − P(+−) − P(−+)</code><br><code>S = E(a,b) − E(a,b′) + E(a′,b) + E(a′,b′)</code>';
+      }
+
+      function renderFormattedText(ctx,text,x,y,align='center',baseline='middle'){
+        if(!text||!text.includes('_')){
+          ctx.textAlign=align;
+          ctx.textBaseline=baseline;
+          ctx.fillText(text,x,y);
+          return;
+        }
+        const parts=[];
+        const regex=/([^_]+)(?:_([a-zA-Z0-9′]+))?/g;
+        let m;
+        while((m=regex.exec(text))!==null){
+          if(m[1])parts.push({text:m[1],sub:false});
+          if(m[2])parts.push({text:m[2],sub:true});
+        }
+        const mainFont=ctx.font;
+        const match=mainFont.match(/(\d+)px/);
+        const baseSize=match?parseInt(match[1],10):11;
+        const subFont=mainFont.replace(/\d+px/,`${Math.max(8,Math.round(baseSize*0.75))}px`);
+
+        let totalW=0;
+        parts.forEach(p=>{
+          ctx.font=p.sub?subFont:mainFont;
+          p.w=ctx.measureText(p.text).width;
+          totalW+=p.w;
+        });
+
+        let curX=x;
+        if(align==='center')curX-=totalW/2;
+        else if(align==='right')curX-=totalW;
+
+        parts.forEach(p=>{
+          ctx.font=p.sub?subFont:mainFont;
+          ctx.textAlign='left';
+          ctx.textBaseline=baseline;
+          const dy=p.sub?baseSize*0.32:0;
+          ctx.fillText(p.text,curX,y+dy);
+          curX+=p.w;
+        });
+        ctx.font=mainFont;
+      }
+
+      function drawPolarizationSphere(data){
+        const canvas=$('#polarizationSphere'),rect=canvas.getBoundingClientRect();
+        if(rect.width<20||rect.height<20)return;
+        const dpr=window.devicePixelRatio||1;
+        canvas.width=Math.round(rect.width*dpr);
+        canvas.height=Math.round(rect.height*dpr);
+        const ctx=canvas.getContext('2d');
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        const w=rect.width,h=rect.height,cx=w/2,cy=h/2+8;
+        const r=Math.min(w*0.35,h*0.33);
+        ctx.clearRect(0,0,w,h);
+        ctx.fillStyle='#596762';
+        ctx.font='600 11px -apple-system,BlinkMacSystemFont,sans-serif';
+        ctx.textAlign='center';
+        ctx.textBaseline='top';
+        ctx.fillText('Poincaré Sphere (Analyzers)',cx,6);
+        const sinB=0.32,cosB=Math.sqrt(1-sinB*sinB);
+        const radA=-30*Math.PI/180;
+        const cosA=Math.cos(radA),sinA=Math.sin(radA);
+        function projectStokes(s1,s2,s3){
+          const xPrime=-s1*sinA+s2*cosA;
+          const yPrime=s1*cosA+s2*sinA;
+          return {x:cx+r*xPrime,y:cy-r*(s3*cosB-yPrime*sinB)};
+        }
+        function projectLinear(thetaDeg){
+          const rad2=2*thetaDeg*Math.PI/180;
+          return projectStokes(Math.cos(rad2),Math.sin(rad2),0);
+        }
+        ctx.strokeStyle='#c2cdc8';
+        ctx.lineWidth=1.2;
+        ctx.beginPath();
+        ctx.arc(cx,cy,r,0,Math.PI*2);
+        ctx.stroke();
+        ctx.save();
+        ctx.setLineDash([2,3]);
+        ctx.strokeStyle='#b0bec5';
+        ctx.beginPath();
+        ctx.moveTo(cx,cy-r*cosB);
+        ctx.lineTo(cx,cy+r*cosB);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(cx,cy,r,r*sinB,0,Math.PI,2*Math.PI);
+        ctx.stroke();
+        ctx.restore();
+        ctx.strokeStyle='#90a4ae';
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.ellipse(cx,cy,r,r*sinB,0,0,Math.PI);
+        ctx.stroke();
+        // 6 Basis points: V, H, A, D, R, L with identical font size, clean text, NO frame/box
+        ctx.font='bold 11px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+        const ptR=projectStokes(0,0,1);
+        const ptL=projectStokes(0,0,-1);
+        const ptH=projectLinear(0);
+        const ptD=projectLinear(45);
+        const ptV=projectLinear(90);
+        const ptA=projectLinear(135);
+
+        const basisDefs=[
+          {pt:ptR,label:'R',align:'center',baseline:'bottom',ox:0,oy:-4},
+          {pt:ptL,label:'L',align:'center',baseline:'top',ox:0,oy:4},
+          {pt:ptH,label:'H',align:'left',baseline:'middle',ox:8,oy:0},
+          {pt:ptD,label:'D',align:'left',baseline:'top',ox:6,oy:5},
+          {pt:ptV,label:'V',align:'right',baseline:'middle',ox:-8,oy:0},
+          {pt:ptA,label:'A',align:'right',baseline:'bottom',ox:-6,oy:-5}
+        ];
+
+        basisDefs.forEach(b=>{
+          ctx.fillStyle='#78909c';
+          ctx.beginPath();
+          ctx.arc(b.pt.x,b.pt.y,2.4,0,Math.PI*2);
+          ctx.fill();
+          ctx.fillStyle='#37474f';
+          ctx.textAlign=b.align;
+          ctx.textBaseline=b.baseline;
+          ctx.fillText(b.label,b.pt.x+b.ox,b.pt.y+b.oy);
+        });
+
+        const aVal=state.a,apVal=state.ap;
+        const bVal=state.b!==null?state.b:(data?.chsh?.current_b??data?.chsh?.scan_smax_b??22.5);
+        const bpVal=state.bp!==null?state.bp:(data?.chsh?.current_bp??data?.chsh?.settings_at_smax?.bp??-22.5);
+        const rawVectors=[
+          {label:'a',angle:aVal,color:'#1769aa'},
+          {label:"a′",angle:apVal,color:'#159447'},
+          {label:'b',angle:bVal,color:'#8e24aa'},
+          {label:"b′",angle:bpVal,color:'#182322'}
+        ];
+        const vectors=rawVectors.map(v=>{
+          const pt=projectLinear(v.angle);
+          const dx=pt.x-cx,dy=pt.y-cy;
+          const len=Math.hypot(dx,dy)||1;
+          const phi=Math.atan2(dy,dx);
+          return {...v,pt,dx,dy,ux:dx/len,uy:dy/len,phi};
+        });
+        vectors.forEach(v=>{
+          ctx.strokeStyle=v.color;
+          ctx.lineWidth=2.2;
+          ctx.beginPath();
+          ctx.moveTo(cx,cy);
+          ctx.lineTo(v.pt.x,v.pt.y);
+          ctx.stroke();
+          ctx.fillStyle=v.color;
+          ctx.beginPath();
+          ctx.arc(v.pt.x,v.pt.y,3.5,0,Math.PI*2);
+          ctx.fill();
+          ctx.strokeStyle='#fff';
+          ctx.lineWidth=1;
+          ctx.stroke();
+        });
+        const sorted=[...vectors].sort((p,q)=>p.phi-q.phi);
+        const dists=new Map();
+        for(let i=0;i<sorted.length;i++){
+          const prev=sorted[(i-1+sorted.length)%sorted.length];
+          let diff=Math.abs(sorted[i].phi-prev.phi);
+          if(diff>Math.PI)diff=2*Math.PI-diff;
+          if(diff<0.48&&dists.get(prev)===r+26){
+            dists.set(sorted[i],r+42);
+          }else{
+            dists.set(sorted[i],r+26);
+          }
+        }
+        vectors.forEach(v=>{
+          const targetDist=dists.get(v)||(r+26);
+          const bx=cx+v.ux*targetDist;
+          const by=cy+v.uy*targetDist;
+          ctx.save();
+          ctx.setLineDash([2,2]);
+          ctx.strokeStyle=v.color;
+          ctx.lineWidth=1;
+          ctx.beginPath();
+          ctx.moveTo(v.pt.x,v.pt.y);
+          ctx.lineTo(bx,by);
+          ctx.stroke();
+          ctx.restore();
+
+          const text=`${v.label} ${v.angle>=0?'+':''}${v.angle.toFixed(1)}°`;
+          ctx.font='bold 10px ui-monospace,monospace';
+          const tm=ctx.measureText(text);
+          const badgeW=tm.width+8,badgeH=16;
+          let rx=bx-badgeW/2;
+          let ry=by-badgeH/2;
+          rx=Math.max(4,Math.min(w-badgeW-4,rx));
+          ry=Math.max(16,Math.min(h-badgeH-3,ry));
+          ctx.fillStyle='rgba(255,255,255,0.95)';
+          ctx.strokeStyle=v.color;
+          ctx.lineWidth=1.2;
+          ctx.beginPath();
+          ctx.roundRect(rx,ry,badgeW,badgeH,3);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle=v.color;
+          ctx.textAlign='center';
+          ctx.textBaseline='middle';
+          ctx.fillText(text,rx+badgeW/2,ry+badgeH/2);
+        });
+      }
+
+      function drawSubscriptLabel(ctx,prefix,basis,start,y){
+        const mainFont='bold 9px ui-monospace,monospace';
+        const subFont='bold 6px ui-monospace,monospace';
+        ctx.font=mainFont;
+        const prefixWidth=ctx.measureText(prefix).width;
+        ctx.font=subFont;
+        const basisWidth=ctx.measureText(basis).width;
+        ctx.textAlign='left';
+        ctx.textBaseline='middle';
+        ctx.fillStyle='#111';
+        ctx.font=mainFont;
+        ctx.fillText(prefix,start,y-1);
+        ctx.font=subFont;
+        ctx.fillText(basis,start+prefixWidth+1,y+3);
+      }
+
+      function drawMeasurementMarkers(data){
+        const canvas=$('#plot'),rect=canvas.getBoundingClientRect();
+        if(!state.showMeasurementMarkers||rect.width<10)return;
+        const dpr=window.devicePixelRatio||1;
+        const ctx=canvas.getContext('2d');
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        const w=rect.width,h=rect.height,pad={l:60,r:18,t:46,b:68},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,xMin=Math.min(...data.angles),xMax=Math.max(...data.angles),xSpan=xMax-xMin||1;
+        const selected=data.chsh.settings_current||data.chsh.settings_at_smax;
+        const settings=Object.entries(selected.probabilities);
+        const outcomeNames=['++','--','+-','-+'];
+        const curveByAlice=Object.fromEntries(data.curves.map(curve=>[curve.alice,curve]));
+        const occupiedLabels=[];
+        function placeLabel(x,y,width,height,preferredSide,preferredDy){
+          const candidates=[
+            {side:preferredSide,dy:preferredDy},
+            {side:preferredSide==='left'?'right':'left',dy:preferredDy},
+            {side:preferredSide,dy:preferredDy+14},
+            {side:preferredSide,dy:preferredDy-14},
+            {side:preferredSide==='left'?'right':'left',dy:preferredDy+14},
+            {side:preferredSide==='left'?'right':'left',dy:preferredDy-14}
+          ];
+          for(const candidate of candidates){
+            const labelWidth=width+14;
+            const left=candidate.side==='left'?x+7:x-7-labelWidth;
+            const top=y+candidate.dy-8;
+            const right=left+labelWidth,bottom=top+16;
+            if(left<pad.l||right>w-pad.r||top<pad.t||bottom>pad.t+ph)continue;
+            if(occupiedLabels.every(box=>right<box.left-2||left>box.right+2||bottom<box.top-2||top>box.bottom+2)){
+              const box={left,right,top,bottom};
+              occupiedLabels.push(box);
+              return {x:left,y:y+candidate.dy};
+            }
+          }
+          return {x:preferredSide==='left'?x+7:x-7-(width+14),y:y+preferredDy};
+        }
+        settings.forEach(([name,probability],row)=>{
+          const b=name.includes("b'")?selected.bp:selected.b;
+          const values=state.mode==='rate' ? selected.normalized_rates[name] : probability;
+          outcomeNames.forEach((outcome,index)=>{
+            // Map detector outcomes to the equivalent plus-analyzer basis on
+            // the curve: Bob's minus detector is the orthogonal basis b−90°.
+            // This puts P(a,b), P(a−90,b−90), P(a,b−90), P(a−90,b) on the
+            // corresponding Alice curve and Bob x-coordinate.
+            const bobPoint = outcome[1]==='-' ? b-90 : b;
+            const theta=bobPoint/2;
+            if(theta<xMin||theta>xMax)return;
+            const x=pad.l+pw*(theta-xMin)/xSpan;
+            // Use the exact curve value at this x for the marker. This keeps
+            // the ring on the rendered curve even when the CHSH table stores
+            // the equivalent orthogonal outcome in a separate probability.
+            let value=values[outcome];
+            const curveAlice=name.includes("a'")
+              ? (outcome[0]==='+'?'D':'A')
+              : (outcome[0]==='+'?'H':'V');
+            const curve=curveByAlice[curveAlice];
+            if(curve){
+              const curveValues=curve[state.mode==='rate'?'conditional':'joint'];
+              const target=bobPoint/2;
+              let i=0;
+              while(i+1<data.angles.length&&data.angles[i+1]<target)i++;
+              if(target<=data.angles[0])value=curveValues[0];
+              else if(target>=data.angles[data.angles.length-1])value=curveValues[curveValues.length-1];
+              else {
+                const t=(target-data.angles[i])/(data.angles[i+1]-data.angles[i]);
+                value=curveValues[i]*(1-t)+curveValues[i+1]*t;
+              }
+            }
+            const y=pad.t+ph*(1-value);
+            ctx.strokeStyle='#111';
+            ctx.lineWidth=1.2;
+            ctx.beginPath();
+            ctx.arc(x,y,4,0,Math.PI*2);
+            ctx.stroke();
+            const prefix=state.mode==='prob'?'P':'N';
+            const aliceBase=name.includes("a'")?'a′':'a';
+            const bobBase=name.includes("b'")?'b′':'b';
+            const basis=`${aliceBase}${outcome[0]==='-'?'−90°':''},${bobBase}${outcome[1]==='-'?'−90°':''}`;
+            ctx.font='bold 6px ui-monospace,monospace';
+            const labelWidth=ctx.measureText('('+basis+')').width+ctx.measureText(prefix).width;
+            const placed=placeLabel(x,y,labelWidth,16,index%2===0?'left':'right',index<2?-9:9);
+            drawSubscriptLabel(ctx,prefix,'('+basis+')',placed.x,placed.y);
+          });
+        });
+      }
+
+      function drawChshPlot(data){
+        const canvas=$('#chshPlot'),rect=canvas.getBoundingClientRect();
+        if(rect.width<10||rect.height<10)return;
+        const dpr=window.devicePixelRatio||1;
+        canvas.width=Math.round(rect.width*dpr);
+        canvas.height=Math.round(rect.height*dpr);
+        const ctx=canvas.getContext('2d');
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        const w=rect.width,h=rect.height,pad={l:55,r:22,t:50,b:58},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,xValues=data.chsh.b_relative,values=data.chsh.values;
+        if(!xValues?.length||!values?.length)return;
+        const xMin=Math.min(...xValues),xMax=Math.max(...xValues),xSpan=xMax-xMin||1,yMin=-3,yMax=3;
+        ctx.clearRect(0,0,w,h);
+        ctx.font='11px -apple-system,BlinkMacSystemFont,sans-serif';
+        ctx.textAlign='right';
+        ctx.textBaseline='middle';
+        for(let tick=-3;tick<=3;tick++){
+          const y=pad.t+ph*(1-(tick-yMin)/(yMax-yMin));
+          ctx.strokeStyle='#e5eae6';
+          ctx.lineWidth=1;
+          ctx.beginPath();
+          ctx.moveTo(pad.l,y);
+          ctx.lineTo(w-pad.r,y);
+          ctx.stroke();
+          ctx.fillStyle='#71807b';
+          ctx.fillText(tick.toFixed(0),pad.l-9,y);
+        }
+        ctx.save();
+        ctx.translate(15,pad.t+ph/2);
+        ctx.rotate(-Math.PI/2);
+        ctx.fillStyle='#596762';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText('S(b−a)',0,0);
+        ctx.restore();
+        ctx.strokeStyle='#aeb9b3';
+        ctx.beginPath();
+        ctx.moveTo(pad.l,pad.t);
+        ctx.lineTo(pad.l+pw,pad.t);
+        ctx.stroke();
+        const numTicks=8;
+        for(let i=0;i<=numTicks;i++){
+          const x=pad.l+pw*i/numTicks,b_rel=xMin+xSpan*i/numTicks,theta_rel=b_rel/2;
+          ctx.strokeStyle='#aeb9b3';
+          ctx.beginPath();
+          ctx.moveTo(x,pad.t);
+          ctx.lineTo(x,pad.t-4);
+          ctx.stroke();
+          ctx.textAlign='center';
+          ctx.textBaseline='bottom';
+          ctx.fillStyle='#71807b';
+          ctx.fillText((Number.isInteger(theta_rel)?theta_rel.toFixed(0):theta_rel.toFixed(1))+'°',x,pad.t-5);
+          ctx.beginPath();
+          ctx.moveTo(x,pad.t+ph);
+          ctx.lineTo(x,pad.t+ph+4);
+          ctx.stroke();
+          ctx.textAlign='center';
+          ctx.textBaseline='top';
+          ctx.fillStyle='#71807b';
+          ctx.fillText((Number.isInteger(b_rel)?b_rel.toFixed(0):b_rel.toFixed(1))+'°',x,pad.t+ph+8);
+        }
+        ctx.fillStyle='#596762';
+        renderFormattedText(ctx,'HWP Angle Difference θ_b − θ_a',pad.l+pw/2,10,'center','top');
+        renderFormattedText(ctx,'Polarization Angle Difference b − a · Δ=(b′−b)='+(data.chsh.curve_bp_minus_b??data.chsh.bob_offset??0).toFixed(1)+'°',pad.l+pw/2,h-18,'center','top');
+        for(const bound of [-2,2]){
+          const y=pad.t+ph*(1-(bound-yMin)/(yMax-yMin));
+          ctx.setLineDash([5,4]);
+          ctx.strokeStyle='#d62728';
+          ctx.beginPath();
+          ctx.moveTo(pad.l,y);
+          ctx.lineTo(w-pad.r,y);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.fillStyle='#d62728';
+        ctx.textAlign='right';
+        ctx.textBaseline='bottom';
+        ctx.fillText('S=±2',w-pad.r,pad.t+ph*(1-(2-yMin)/(yMax-yMin))-4);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(pad.l,pad.t,pw,ph);
+        ctx.clip();
+        ctx.beginPath();
+        ctx.strokeStyle='#1769aa';
+        ctx.lineWidth=2.5;
+        values.forEach((val,i)=>{
+          const x=pad.l+pw*(xValues[i]-xMin)/xSpan,y=pad.t+ph*(1-(val-yMin)/(yMax-yMin));
+          i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+        });
+        ctx.stroke();
+        ctx.restore();
+
+        const maxS=data.chsh.curve_smax,maxRel=data.chsh.curve_smax_b-data.chsh.a,maxThetaRel=maxRel/2;
+        const mx=pad.l+pw*(maxRel-xMin)/xSpan,my=pad.t+ph*(1-(maxS-yMin)/(yMax-yMin));
+        if(mx>=pad.l&&mx<=pad.l+pw){
+          ctx.save();
+          ctx.setLineDash([3,3]);
+          ctx.strokeStyle='#d62728';
+          ctx.lineWidth=1.2;
+          ctx.beginPath();
+          ctx.moveTo(mx,pad.t);
+          ctx.lineTo(mx,pad.t+ph);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(pad.l,my);
+          ctx.lineTo(mx,my);
+          ctx.stroke();
+          ctx.restore();
+
+          ctx.fillStyle='#d62728';
+          ctx.strokeStyle='#fff';
+          ctx.lineWidth=2;
+          ctx.beginPath();
+          ctx.arc(mx,my,5,0,Math.PI*2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle='#d62728';
+          ctx.font='bold 11px -apple-system,BlinkMacSystemFont,sans-serif';
+          ctx.textAlign='center';
+          ctx.textBaseline='top';
+          ctx.fillText(`(b−a)=${maxRel.toFixed(1)}°`,mx,pad.t+ph+22);
+
+          ctx.textAlign='left';
+          ctx.textBaseline='bottom';
+          ctx.fillText(`Smax=${maxS.toFixed(2)}`,Math.min(mx+8,w-pad.r-4),Math.max(pad.t+12,my-8));
+        }
+
+        const curRel=(data.chsh.current_b??state.b??data.chsh.scan_smax_b)-data.chsh.a;
+        const curS=data.chsh.current_s!==undefined?data.chsh.current_s:(data.chsh.settings_current?.s??0);
+        const cx_pt=pad.l+pw*(curRel-xMin)/xSpan,cy_pt=pad.t+ph*(1-(curS-yMin)/(yMax-yMin));
+        if(cx_pt>=pad.l&&cx_pt<=pad.l+pw){
+          ctx.save();
+          ctx.strokeStyle='#1769aa';
+          ctx.lineWidth=2.5;
+          ctx.beginPath();
+          ctx.arc(cx_pt,cy_pt,6,0,Math.PI*2);
+          ctx.stroke();
+
+          ctx.font='bold 11px -apple-system,BlinkMacSystemFont,sans-serif';
+          ctx.fillStyle='#1769aa';
+          ctx.textAlign='center';
+          const textY=cy_pt<pad.t+25?cy_pt+16:cy_pt-10;
+          ctx.textBaseline=cy_pt<pad.t+25?'top':'bottom';
+          ctx.fillText(`S = ${curS.toFixed(2)}`,cx_pt,textY);
+          ctx.restore();
+        }
+      }
+
+      function legend(el,curves,phase=false){
+        $(el).innerHTML=curves.map(curve=>{
+          const color=colors[curve.alice]||colors.D;
+          return `<span class="key"><i class="swatch" style="background:${color}"></i>${phase?'Alice '+curve.alice+' · Bob '+curve.bob:'Alice '+curve.alice}</span>`;
+        }).join('');
+      }
+
+      function drawPlotFixed(canvasId,xValues,curves,valueKey,options={}){
+        const canvas=$('#'+canvasId),rect=canvas.getBoundingClientRect();
+        if(rect.width<10||rect.height<10)return;
+        const dpr=window.devicePixelRatio||1;
+        canvas.width=Math.round(rect.width*dpr);
+        canvas.height=Math.round(rect.height*dpr);
+        const ctx=canvas.getContext('2d');
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        const w=rect.width,h=rect.height,pad={l:60,r:18,t:46,b:68},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,xMin=Math.min(...xValues),xMax=Math.max(...xValues),xSpan=xMax-xMin||1,yMax=1;
+        ctx.clearRect(0,0,w,h);
+        ctx.font='11px -apple-system,BlinkMacSystemFont,sans-serif';
+        ctx.textAlign='center';
+        ctx.textBaseline='top';
+        ctx.strokeStyle='#e5eae6';
+        ctx.fillStyle='#71807b';
+        for(let i=0;i<=5;i++){
+          const value=i/5,y=pad.t+ph*(1-value);
+          ctx.beginPath();
+          ctx.moveTo(pad.l,y);
+          ctx.lineTo(w-pad.r,y);
+          ctx.stroke();
+          ctx.textAlign='right';
+          ctx.textBaseline='middle';
+          ctx.fillText((value*100).toFixed(0)+'%',pad.l-9,y);
+          ctx.textAlign='center';
+          ctx.textBaseline='top';
+        }
+        const ticks=options.phase?6:8;
+        for(let i=0;i<=ticks;i++){
+          const value=xMin+xSpan*i/ticks,x=pad.l+pw*i/ticks;
+          ctx.strokeStyle='#aeb9b3';
+          ctx.beginPath();
+          ctx.moveTo(x,pad.t+ph);
+          ctx.lineTo(x,pad.t+ph+4);
+          ctx.stroke();
+          ctx.fillStyle='#71807b';
+          ctx.fillText((Number.isInteger(value)?value.toFixed(0):value.toFixed(1))+'°',x,pad.t+ph+8);
+          if(options.topScale)ctx.fillText((Number.isInteger(value*options.topScale)?(value*options.topScale).toFixed(0):(value*options.topScale).toFixed(1))+'°',x,pad.t-20);
+        }
+        if(options.topScale){
+          ctx.fillStyle='#596762';
+          renderFormattedText(ctx,options.topLabel||'Bob polarization angle b (b = 2θ_b)',pad.l+pw/2,10,'center','top');
+        }
+        ctx.save();
+        ctx.translate(15,pad.t+ph/2);
+        ctx.rotate(-Math.PI/2);
+        ctx.fillStyle='#596762';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText(options.yLabel||'Conditional coincidence rate',0,0);
+        ctx.restore();
+        ctx.fillStyle='#596762';
+        renderFormattedText(ctx,options.bottomLabel||'Bob HWP rotation θ_b',pad.l+pw/2,h-16,'center','top');
+        if(options.guides){
+          const guideColors={'H':'#1769aa','D':'#159447','A':'#c99500','V':'#d62728'};
+          [[-45,'V'],[-22.5,'A'],[0,'H'],[22.5,'D'],[45,'V']].forEach(([value,label])=>{
+            if(value<xMin||value>xMax)return;
+            const x=pad.l+pw*(value-xMin)/xSpan;
+            const color=guideColors[label]||'#71807b';
+            ctx.save();
+            ctx.setLineDash([3,4]);
+            ctx.strokeStyle=color;
+            ctx.beginPath();
+            ctx.moveTo(x,pad.t);
+            ctx.lineTo(x,pad.t+ph);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle=color;
+            ctx.font='bold 11px -apple-system,BlinkMacSystemFont,sans-serif';
+            ctx.textAlign='center';
+            ctx.textBaseline='top';
+            ctx.fillText(label,x,pad.t+ph+23);
+            ctx.restore();
+          });
+        }
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(pad.l,pad.t,pw,ph);
+        ctx.clip();
+        curves.forEach(curve=>{
+          const values=curve[valueKey];
+          if(!values?.length)return;
+          ctx.beginPath();
+          ctx.strokeStyle=colors[curve.alice]||colors.D;
+          ctx.lineWidth=2.5;
+          values.forEach((value,i)=>{
+            const x=pad.l+pw*(xValues[i]-xMin)/xSpan,y=pad.t+ph*(1-Math.max(0,Math.min(yMax,value)));
+            i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+          });
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+
+      function render(data){
+        renderSummary(data);
+        renderChshSettings();
+        renderChshTable(data);
+        renderChshCalculation(data);
+        renderMeasurementMarkerToggle();
+        const key=state.mode==='prob'?'joint':'conditional',yLabel=state.mode==='prob'?'Joint probability per pair P(Alice, Bob)':'Conditional coincidence rate P(Bob | Alice)';
+        drawPlotFixed('plot',data.angles,data.curves,key,{guides:true,yLabel,topScale:2,topLabel:'Bob polarization angle b (b = 2θ_b)',bottomLabel:'Bob HWP rotation θ_b'});
+        drawMeasurementMarkers(data);
+        legend('#legend',data.curves);
+        drawChshPlot(data);
+        drawPolarizationSphere(data);
+      }
+
+      function preset(name){
+        if(name==='phi+'){
+          state.inputAmplitudes=[c(1/Math.sqrt(2)),c(),c(),c(1/Math.sqrt(2))];
+          state.phaseTarget = 3;
+        }else if(name==='phi-'){
+          state.inputAmplitudes=[c(1/Math.sqrt(2)),c(),c(),c(-1/Math.sqrt(2))];
+          state.phaseTarget = 3;
+        }else if(name==='psi+'){
+          state.inputAmplitudes=[c(),c(1/Math.sqrt(2)),c(1/Math.sqrt(2)),c()];
+          state.phaseTarget = 2;
+        }else if(name==='psi-'){
+          state.inputAmplitudes=[c(),c(1/Math.sqrt(2)),c(-1/Math.sqrt(2)),c()];
+          state.phaseTarget = 2;
+        }
+        state.inputAmplitudes=normalize(state.inputAmplitudes);
+        state.b=22.5;
+        state.bp=67.5;
+        state.offset=45;
+        renderComplex();
+        schedule();
+      }
+
+      $('#stateBasisButtons').addEventListener('click',event=>{
+        const button=event.target.closest('button[data-state-basis]');
+        if(!button||button.dataset.stateBasis===state.basis)return;
+        state.basis=button.dataset.stateBasis;
+        state.dispBasis=state.basis;
+        $$('#stateBasisButtons button').forEach(item=>item.classList.toggle('active',item===button));
+        $$('#dispBasisButtons button').forEach(item=>item.classList.toggle('active',item.dataset.dispBasis===state.dispBasis));
+        state.phaseTarget=Math.min(state.phaseTarget,3);
+        renderComplex();
+        schedule();
+      });
+
+      $('#dispBasisButtons').addEventListener('click',event=>{
+        const button=event.target.closest('button[data-disp-basis]');
+        if(!button||button.dataset.dispBasis===state.dispBasis)return;
+        state.dispBasis=button.dataset.dispBasis;
+        $$('#dispBasisButtons button').forEach(item=>item.classList.toggle('active',item===button));
+        if(latest)renderSummary(latest);
+      });
+
+      $('#complexInputs').addEventListener('input',event=>{
+        const input=event.target.closest('input[data-index]');
+        if(!input)return;
+        const idx=+input.dataset.index;
+        const cur=state.inputAmplitudes[idx];
+        const oldMag=abs(cur);
+        const newMag=+input.value;
+        const angle=oldMag>1e-6 ? Math.atan2(cur.im,cur.re) : 0;
+        state.inputAmplitudes[idx]=c(newMag*Math.cos(angle), newMag*Math.sin(angle));
+        state.inputAmplitudes=normalize(state.inputAmplitudes);
+        syncComplexValues();
+        schedule();
+      });
+
+      $('#complexInputs').addEventListener('click',event=>{
+        const label=event.target.closest('label[data-index]');
+        if(!label)return;
+        state.phaseTarget=+label.dataset.index;
+        syncComplexValues();
+        schedule();
+      });
+
+      $('#phase').addEventListener('input',event=>{
+        const target=state.inputAmplitudes[state.phaseTarget];
+        const magnitude=abs(target);
+        const phase=+event.target.value*Math.PI/180;
+        state.inputAmplitudes[state.phaseTarget]=c(magnitude*Math.cos(phase),magnitude*Math.sin(phase));
+        syncComplexValues();
+        schedule();
+      });
+
+      $('#aliceButtons').addEventListener('click',event=>{
+        const button=event.target.closest('button[data-basis]');
+        if(!button)return;
+        const basis=button.dataset.basis;
+        if(state.aliceBases.includes(basis)){
+          if(state.aliceBases.length===1)return;
+          state.aliceBases=state.aliceBases.filter(item=>item!==basis);
+        }else{
+          state.aliceBases.push(basis);
+        }
+        $$('#aliceButtons button').forEach(item=>item.classList.toggle('active',state.aliceBases.includes(item.dataset.basis)));
+        schedule();
+      });
+
+      [['thetaA','a'],['thetaAp','ap']].forEach(([id,key])=>$('#'+id).addEventListener('input',event=>{
+        state[key]=+event.target.value;
+        renderChshSettings();
+        previewChshSettings();
+        schedule();
+      }));
+
+      $('#thetaB').addEventListener('input',event=>{
+        state.b=+event.target.value;
+        state.bp=state.b+(state.offset!==undefined?state.offset:45);
+        renderChshSettings();
+        previewChshSettings();
+        schedule();
+      });
+
+      $('#thetaBp').addEventListener('input',event=>{
+        state.bp=+event.target.value;
+        state.offset=state.bp-state.b;
+        renderChshSettings();
+        previewChshSettings();
+        schedule();
+      });
+
+      $$('[data-chsh-mode]').forEach(button=>button.addEventListener('click',()=>{
+        state.chshMode=button.dataset.chshMode;
+        $$('[data-chsh-mode]').forEach(item=>item.classList.toggle('active',item===button));
+        if(latest){renderChshTable(latest);renderChshCalculation(latest)}
+      }));
+
+      $('#chshRows').addEventListener('change',event=>{
+        if(event.target.closest('.chsh-count')){
+          chshCountsOverride=collectChshCounts();
+          schedule();
+        }
+      });
+
+      $('#resetChshCounts').addEventListener('click',()=>{
+        chshCountsOverride=null;
+        skipChshCountsOnce=true;
+        schedule();
+      });
+
+      function renderMeasurementMarkerToggle(){
+        const button=$('#toggleMeasurementMarkers');
+        if(!button)return;
+        button.textContent=state.showMeasurementMarkers?'Hide 16 combinations':'Show 16 combinations';
+        button.setAttribute('aria-pressed',String(state.showMeasurementMarkers));
+      }
+
+      $('#toggleMeasurementMarkers').addEventListener('click',()=>{
+        state.showMeasurementMarkers=!state.showMeasurementMarkers;
+        renderMeasurementMarkerToggle();
+        if(latest)render(latest);
+      });
+
+      ['minAngle','maxAngle','stepAngle'].forEach(id=>$('#'+id).addEventListener('input',schedule));
+
+      $$('.mode button').forEach(button=>button.addEventListener('click',()=>{
+        $$('.mode button').forEach(item=>item.classList.toggle('active',item===button));
+        state.mode=button.dataset.mode;
+        if(latest)render(latest);
+      }));
+
+      $$('.preset-line button').forEach(button=>button.addEventListener('click',()=>preset(button.dataset.preset)));
+      window.addEventListener('resize',()=>{if(latest)render(latest)});
+
+      const subtitles = {
+        bell: "Choose the representation basis for the two-photon state, configure Alice's analyzer bases, and explore Bob's HWP coincidence curves alongside CHSH Bell inequality measurements.",
+        tomo: "Two-photon quantum state reconstruction, maximum likelihood estimation (MLE), density matrix Stokes tomography, and fidelity visualization."
+      };
+      const eyebrows = {
+        bell: "Entanglement & Bell Measurements · Two Photons",
+        tomo: "Quantum State Tomography · Two Photons"
+      };
+
+      $$('.header-tab').forEach(button=>{
+        button.addEventListener('click',()=>{
+          const target=button.dataset.tab;
+          $$('.header-tab').forEach(b=>b.classList.toggle('active',b===button));
+          $('#tabBell').classList.toggle('active',target==='bell');
+          $('#tabTomo').classList.toggle('active',target==='tomo');
+          if($('#pageSubtitle')) $('#pageSubtitle').textContent = subtitles[target] || '';
+          if($('#eyebrowText')) $('#eyebrowText').textContent = eyebrows[target] || '';
+          if(target==='bell'&&latest){
+            requestAnimationFrame(()=>render(latest));
+          }
+        });
+      });
+
+      renderComplex();
+      refresh();
+    })();
+  </script>
+</body>
+</html>
