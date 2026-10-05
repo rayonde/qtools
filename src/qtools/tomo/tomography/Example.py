@@ -2,9 +2,9 @@ from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
 try:
-    from qtools.tomo import tomography as qKLib
+    from qtools.tomo import tomography as tomo 
 except ImportError:
-    import QuantumTomography as qKLib
+    import QuantumTomography as tomo
 
 """
 Copyright 2020 University of Illinois Board of Trustees.
@@ -16,7 +16,7 @@ Licensed under the terms of an MIT license
 https://quantumtomo.web.illinois.edu/Doc/"""
 
 # Step 1. Initialize Tomography Object
-t = qKLib.Tomography()
+t = tomo.Tomography()
 
 # Step 2. Set up Configurations
 t.import_conf("ExampleFiles/conf.toml")
@@ -29,17 +29,17 @@ t.import_data("ExampleFiles/1_qubit_example.json")
 # Step 4. Optional Methods
 # The library also include useful functions you may use included in TomoFunctions.py.
 # See https://quantumtomo.web.illinois.edu/Doc/ for a full reference guide of all the functions.
-qKLib.printLastOutput(t)
+tomo.printLastOutput(t)
 
 expected_state = np.array([1,1.j])
 expected_state = np.outer(expected_state, expected_state.conj())
-print("Fidelity: " + str(qKLib.fidelity(rho, expected_state)))
-qKLib.makeRhoImages(rho, plt, True)
+print("Fidelity: " + str(tomo.fidelity(rho, expected_state)))
+tomo.makeRhoImages(rho, plt, True)
 plt.show()
 
 
 # Data import/export example
-t = qKLib.Tomography()
+t = tomo.Tomography()
 
 # Set up Configurations
 t.import_conf("ExampleFiles/conf.toml")
@@ -53,17 +53,17 @@ t.exportToEval("ExampleFiles/eval_exported.txt")
 # You can also export the configuration to the new format for later use
 t.export_to_conf_toml("ExampleFiles/conf_toml_exported.toml")
 
-t2 = qKLib.Tomography()
+t2 = tomo.Tomography()
 t2.importConf("ExampleFiles/conf_exported.txt")
 t2.importData("ExampleFiles/data_exported.txt")
 [rho, intens, fval] = t2.run_tomography()
 
-qKLib.printLastOutput(t2)
+tomo.printLastOutput(t2)
 
 expected_state = np.array([1,1.j])
 expected_state = np.outer(expected_state, expected_state.conj())
-print("Fidelity: " + str(qKLib.fidelity(rho, expected_state)))
-qKLib.makeRhoImages(rho, plt, True)
+print("Fidelity: " + str(tomo.fidelity(rho, expected_state)))
+tomo.makeRhoImages(rho, plt, True)
 plt.show()
 
 
@@ -79,8 +79,8 @@ expected_bell_state = np.array(
 [rho, intens, fval] = t.run_tomography()
 
 
-print("Fidelity: " + str(qKLib.fidelity(rho, expected_bell_state)))
-qKLib.makeRhoImages(rho, plt, True)
+print("Fidelity: " + str(tomo.fidelity(rho, expected_bell_state)))
+tomo.makeRhoImages(rho, plt, True)
 plt.show()
 
 
@@ -97,8 +97,8 @@ t.setConfSetting("do_drift_correction", True)
 [rho, intens, fval] = t.run_tomography()
 
 
-print("Fidelity: " + str(qKLib.fidelity(rho, expected_bell_state)))
-qKLib.makeRhoImages(rho, plt, True)
+print("Fidelity: " + str(tomo.fidelity(rho, expected_bell_state)))
+tomo.makeRhoImages(rho, plt, True)
 plt.show()
 
 # example with crosstalk and detector pair inefficiencies
@@ -117,8 +117,8 @@ expected_bell_state = np.array(
 
 print(f"Optimal CHSH bell measurement settings: {t.getBellSettings()}")
 
-print("Fidelity: " + str(qKLib.fidelity(rho, expected_bell_state)))
-qKLib.makeRhoImages(rho, plt, True)
+print("Fidelity: " + str(tomo.fidelity(rho, expected_bell_state)))
+tomo.makeRhoImages(rho, plt, True)
 plt.show()
 
 
@@ -130,7 +130,7 @@ plt.show()
 # If you still have a need to use the old input file formats, you can do so with the same import functions as before.
 # Note that this will be removed in future versions.
 
-# t = qKLib.Tomography()
+# t = tomo.Tomography()
 #
 ## Step 2. Set up Configurations
 ## import conf file
@@ -144,9 +144,9 @@ plt.show()
 ## importing the data file will automatically run the tomography
 # [rho, intensity, fval] = t.importData('ExampleFiles/data.txt')
 #
-# qKLib.makeRhoImages(rho, plt, True)
+# tomo.makeRhoImages(rho, plt, True)
 # plt.show()
 #
 # [rho,intensity,fval] = t.importEval('ExampleFiles/pythoneval.txt')
-# qKLib.makeRhoImages(rho, plt, True)
+# tomo.makeRhoImages(rho, plt, True)
 # plt.show()
