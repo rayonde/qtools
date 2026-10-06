@@ -149,17 +149,13 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._send_json(200, result)
                 return
 
-            # Route 3: Simulate tomography measurements from a theoretical Bell state
+            # Route 3: Load example dataset from ExampleFiles
             if path == "/api/tomography/simulate":
                 if tomo_interface is None:
                     raise RuntimeError("Tomography interface is not installed")
                 tomo_interface = importlib.reload(tomo_interface)
-                result = tomo_interface.simulate_counts_from_bell_state(
-                    amplitudes=payload.get("amplitudes", {}),
-                    state_basis=payload.get("state_basis", "linear"),
-                    total_pairs=int(payload.get("total_pairs", 1000)),
-                    noise_ratio=float(payload.get("noise_ratio", 0.0)),
-                )
+                file_key = payload.get("filename") or payload.get("preset_id") or "bell_state_example.json"
+                result = tomo_interface.load_example_data(file_key)
                 self._send_json(200, result)
                 return
 

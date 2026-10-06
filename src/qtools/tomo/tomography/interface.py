@@ -11,6 +11,7 @@ tutorial (refs/tutorial_for_tomography2019.pdf). Provides:
 from __future__ import annotations
 
 import json
+from math import comb
 from pathlib import Path
 from typing import Any
 
@@ -75,106 +76,46 @@ def list_presets() -> list[dict[str, Any]]:
     return result
 
 
-DEFAULT_BELL_DATA = {
-    "n_qubits": 2,
-    "n_detectors_per_qubit": 1,
-    "coincidence_window": [10],
-    "n_measurements_per_qubit": 6,
-    "measurement_states": {
-        "H": [1, 0],
-        "V": [0, 1],
-        "D": [1, 1],
-        "A": [1, -1],
-        "R": [1, "1j"],
-        "L": [1, "-1j"]
-    },
-    "data": [
-        {"basis": ["H", "H"], "integration_time": 1, "counts": [1200, 1200, 100]},
-        {"basis": ["H", "V"], "integration_time": 1, "counts": [1200, 1200, 0]},
-        {"basis": ["H", "D"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["H", "A"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["H", "R"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["H", "L"], "integration_time": 1, "counts": [1200, 1200, 50]},
+def list_example_files() -> list[str]:
+    """List all available raw files in the ExampleFiles directory."""
+    if not EXAMPLE_FILES_DIR.exists():
+        return []
+    return sorted([p.name for p in EXAMPLE_FILES_DIR.iterdir() if p.is_file()])
 
-        {"basis": ["V", "H"], "integration_time": 1, "counts": [1200, 1200, 0]},
-        {"basis": ["V", "V"], "integration_time": 1, "counts": [1200, 1200, 100]},
-        {"basis": ["V", "D"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["V", "A"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["V", "R"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["V", "L"], "integration_time": 1, "counts": [1200, 1200, 50]},
 
-        {"basis": ["D", "H"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["D", "V"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["D", "D"], "integration_time": 1, "counts": [1200, 1200, 100]},
-        {"basis": ["D", "A"], "integration_time": 1, "counts": [1200, 1200, 0]},
-        {"basis": ["D", "R"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["D", "L"], "integration_time": 1, "counts": [1200, 1200, 50]},
+def load_example_data(identifier: str = "bell_state_example.json") -> dict[str, Any]:
+    """Directly load dataset from ExampleFiles by filename or preset key."""
+    if identifier in PRESET_METADATA:
+        return load_preset(identifier)["data"]
 
-        {"basis": ["A", "H"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["A", "V"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["A", "D"], "integration_time": 1, "counts": [1200, 1200, 0]},
-        {"basis": ["A", "A"], "integration_time": 1, "counts": [1200, 1200, 100]},
-        {"basis": ["A", "R"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["A", "L"], "integration_time": 1, "counts": [1200, 1200, 50]},
+    filepath = EXAMPLE_FILES_DIR / identifier
+    if not filepath.exists():
+        raise FileNotFoundError(f"Example file '{identifier}' not found in {EXAMPLE_FILES_DIR}")
 
-        {"basis": ["R", "H"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["R", "V"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["R", "D"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["R", "A"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["R", "R"], "integration_time": 1, "counts": [1200, 1200, 0]},
-        {"basis": ["R", "L"], "integration_time": 1, "counts": [1200, 1200, 100]},
+    if filepath.suffix == ".json":
+        with open(filepath, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-        {"basis": ["L", "H"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["L", "V"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["L", "D"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["L", "A"], "integration_time": 1, "counts": [1200, 1200, 50]},
-        {"basis": ["L", "R"], "integration_time": 1, "counts": [1200, 1200, 100]},
-        {"basis": ["L", "L"], "integration_time": 1, "counts": [1200, 1200, 0]}
-    ]
-}
-
-DEFAULT_1_QUBIT_DATA = {
-    "n_qubits": 1,
-    "n_detectors_per_qubit": 1,
-    "coincidence_window": [0],
-    "n_measurements_per_qubit": 6,
-    "measurement_states": {
-        "H": [1, 0],
-        "V": [0, 1],
-        "D": [1, 1],
-        "A": [1, -1],
-        "R": [1, "1j"],
-        "L": [1, "-1j"]
-    },
-    "data": [
-        {"basis": ["H"], "integration_time": 1, "counts": [50]},
-        {"basis": ["V"], "integration_time": 1, "counts": [50]},
-        {"basis": ["D"], "integration_time": 1, "counts": [50]},
-        {"basis": ["A"], "integration_time": 1, "counts": [50]},
-        {"basis": ["R"], "integration_time": 1, "counts": [100]},
-        {"basis": ["L"], "integration_time": 1, "counts": [0]}
-    ]
-}
+    text = filepath.read_text(encoding="utf-8")
+    parsed = parse_tomo_file(text, identifier)
+    return parsed.get("data", parsed)
 
 
 def load_preset(preset_id: str) -> dict[str, Any]:
-    """Load configuration and measurement dataset for a given preset ID."""
+    """Load configuration and measurement dataset directly from ExampleFiles."""
     meta = PRESET_METADATA.get(preset_id, PRESET_METADATA["bell_state_example"])
     filepath = EXAMPLE_FILES_DIR / meta["file"]
 
-    data_dict = None
-    if filepath.exists():
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data_dict = json.load(f)
-        except Exception:
-            data_dict = None
+    if not filepath.exists():
+        raise FileNotFoundError(f"Preset file '{meta['file']}' not found in {EXAMPLE_FILES_DIR}")
 
-    if data_dict is None:
-        if meta["n_qubits"] == 1:
-            data_dict = json.loads(json.dumps(DEFAULT_1_QUBIT_DATA))
-        else:
-            data_dict = json.loads(json.dumps(DEFAULT_BELL_DATA))
+    if filepath.suffix == ".json":
+        with open(filepath, "r", encoding="utf-8") as f:
+            data_dict = json.load(f)
+    else:
+        text = filepath.read_text(encoding="utf-8")
+        parsed = parse_tomo_file(text, meta["file"])
+        data_dict = parsed.get("data", parsed)
 
     # Standard default configuration with drift and accidental corrections enabled
     conf_dict = {
@@ -183,6 +124,23 @@ def load_preset(preset_id: str) -> dict[str, Any]:
         "do_accidental_correction": (meta["n_qubits"] == 2),
         "method": "MLE",
     }
+
+    # Load default conf.toml from ExampleFiles if available
+    conf_toml_path = EXAMPLE_FILES_DIR / "conf.toml"
+    if conf_toml_path.exists():
+        try:
+            try:
+                import tomllib
+            except ImportError:
+                import tomli as tomllib
+            with open(conf_toml_path, "rb") as cf:
+                toml_conf = tomllib.load(cf)
+                conf_dict.update(toml_conf)
+        except Exception:
+            pass
+
+    if "coincidence_window" in data_dict:
+        conf_dict["window"] = data_dict["coincidence_window"]
 
     return {
         "preset_id": preset_id,
@@ -297,6 +255,14 @@ def parse_tomo_file(content: str, filename: str = "") -> dict[str, Any]:
         try:
             parsed = json.loads(text)
             if isinstance(parsed, dict) and "data" in parsed:
+                win = parsed.get("coincidence_window") or parsed.get("window")
+                if win is None and isinstance(parsed.get("config"), dict):
+                    win = parsed["config"].get("window") or parsed["config"].get("coincidence_window")
+                if win is not None:
+                    if not isinstance(win, list):
+                        win = [win]
+                    parsed["coincidence_window"] = win
+                    parsed.setdefault("config", {})["window"] = win
                 return {
                     "status": "success",
                     "format": "json",
@@ -316,6 +282,13 @@ def parse_tomo_file(content: str, filename: str = "") -> dict[str, Any]:
                 import tomli as tomllib
             conf = tomllib.loads(text)
             if isinstance(conf, dict) and len(conf) > 0:
+                win = conf.get("window") or conf.get("coincidence_window")
+                if win is None and "tomography" in conf and isinstance(conf["tomography"], dict):
+                    win = conf["tomography"].get("window") or conf["tomography"].get("coincidence_window")
+                if win is not None:
+                    if not isinstance(win, list):
+                        win = [win]
+                    conf["window"] = win
                 return {
                     "status": "success",
                     "format": "toml",
@@ -329,15 +302,26 @@ def parse_tomo_file(content: str, filename: str = "") -> dict[str, Any]:
     # Lines like: tomo_input = [...] or tomo_input=np.array(...)
     if "tomo_input" in text:
         tomo_input_str = ""
+        win_val = None
         for line in text.splitlines():
-            line = line.strip()
-            if line.startswith("tomo_input"):
-                parts = line.split("=", 1)
+            line_str = line.strip()
+            if line_str.startswith("tomo_input"):
+                parts = line_str.split("=", 1)
                 val_str = parts[1].strip().rstrip(";")
                 if val_str.startswith("np.array("):
                     val_str = val_str[len("np.array("):].rstrip(")")
                 tomo_input_str = val_str
-                break
+            elif "=" in line_str:
+                parts = [p.strip() for p in line_str.split("=", 1)]
+                if parts[0].lower() in ("window", "coincidence_window", "conf['window']", 'conf["window"]', "conf.window"):
+                    right_val = parts[1].rstrip(";").strip()
+                    try:
+                        if right_val.startswith("[") and right_val.endswith("]"):
+                            win_val = [float(x.strip()) for x in right_val[1:-1].split(",") if x.strip()]
+                        else:
+                            win_val = [float(right_val)]
+                    except Exception:
+                        pass
 
         if tomo_input_str:
             arr = parse_np_array(tomo_input_str)
@@ -401,7 +385,7 @@ def parse_tomo_file(content: str, filename: str = "") -> dict[str, Any]:
             dataset = {
                 "n_qubits": n_qubits,
                 "n_detectors_per_qubit": n_detectors,
-                "coincidence_window": [0] if n_detectors == 1 else [0, 0, 0, 0],
+                "coincidence_window": win_val if win_val is not None else ([0] if n_detectors == 1 else [0, 0, 0, 0]),
                 "n_measurements_per_qubit": len(data_rows),
                 "measurement_states": {
                     "H": [1, 0],
@@ -421,7 +405,8 @@ def parse_tomo_file(content: str, filename: str = "") -> dict[str, Any]:
                 "data": dataset,
                 "config": {
                     "do_drift_correction": False,
-                    "do_accidental_correction": False,
+                    "do_accidental_correction": bool(win_val is not None and win_val[0] > 0),
+                    "window": win_val if win_val is not None else ([0] if n_detectors == 1 else [0, 0, 0, 0]),
                     "get_bell_settings": (n_qubits == 2),
                     "method": "MLE",
                 },
@@ -461,7 +446,12 @@ def run_tomography(
         target_state = target_state or loaded["default_target"]
 
     if data is None:
-        raise ValueError("Tomography data must be provided either directly or via preset_id.")
+        # Load default bell_state_example directly from ExampleFiles
+        loaded = load_preset("bell_state_example")
+        data = loaded["data"]
+        config = config or loaded["config"]
+        target_state = target_state or loaded["default_target"]
+
     if config is None:
         config = {}
 
@@ -474,8 +464,26 @@ def run_tomography(
     t._import_conf(config)
     t._import_data(data)
 
-    # Check if total counts are zero (e.g. empty template or zeroed counts)
-    total_counts = sum(sum(row.get("counts", [])) for row in data.get("data", []))
+    # Check the counts actually used by tomography.  Summing all detector
+    # channels would treat nonzero singles in an otherwise empty template as
+    # observed coincidence data and produce a misleading reconstructed state.
+    coincidence_index = max(
+        0,
+        sum(comb(n_qubits, i) for i in range(n_qubits)) - 1,
+    )
+    total_counts = 0.0
+    for row in data.get("data", []):
+        counts = row.get("counts", [])
+        if counts and len(counts) > coincidence_index:
+            value = counts[coincidence_index]
+        elif counts:
+            value = counts[-1]
+        else:
+            value = 0.0
+        try:
+            total_counts += max(0.0, float(value))
+        except (TypeError, ValueError):
+            continue
     if total_counts <= 0:
         dim = 2**n_qubits
         rho = np.eye(dim, dtype=complex) / dim
@@ -519,12 +527,51 @@ def run_tomography(
 
     # Fidelity calculation
     fidelity_val: float | None = None
+    target_rho: np.ndarray | None = None
     if target_state is not None:
         try:
             target_rho = get_target_density_matrix(target_state, n_qubits)
             fidelity_val = float(np.real(tf.fidelity(rho, target_rho)))
         except Exception:
             fidelity_val = None
+
+    # Uncertainty calculation based on measurement stds / Poisson fallback and asymmetric credible intervals
+    try:
+        from qtools.tomo.tomography.TomoUncertainties import compute_state_uncertainties
+        unc = compute_state_uncertainties(
+            data_rows=data.get("data", []),
+            rho=rho,
+            target_state=target_rho,
+            point_estimates={
+                "fidelity": fidelity_val,
+                "purity": purity,
+                "concurrence": concurrence,
+                "entropy": von_neumann_entropy,
+            },
+            n_samples=80,
+            intensity=float(intens) if intens is not None else None,
+            n_qubits=n_qubits,
+            measurement_states=data.get("measurement_states"),
+        )
+    except Exception:
+        unc = {
+            "fidelity_std": None,
+            "fidelity_ci": None,
+            "fidelity_err_minus": None,
+            "fidelity_err_plus": None,
+            "purity_std": None,
+            "purity_ci": None,
+            "purity_err_minus": None,
+            "purity_err_plus": None,
+            "concurrence_std": None,
+            "concurrence_ci": None,
+            "concurrence_err_minus": None,
+            "concurrence_err_plus": None,
+            "entropy_std": None,
+            "entropy_ci": None,
+            "entropy_err_minus": None,
+            "entropy_err_plus": None,
+        }
 
     # Labels for basis representation
     if n_qubits == 1:
@@ -539,6 +586,11 @@ def run_tomography(
     im_matrix = [[round(float(rho[r, c].imag), 5) for c in range(dim)] for r in range(dim)]
 
     curves: list[dict[str, Any]] = []
+    curves_qwp: list[dict[str, Any]] = []
+    curves_qwp_scan: list[dict[str, Any]] = []
+    target_curves: list[dict[str, Any]] = []
+    target_curves_qwp: list[dict[str, Any]] = []
+    target_curves_qwp_scan: list[dict[str, Any]] = []
     angles: list[float] = []
     if n_qubits == 2:
         try:
@@ -546,7 +598,10 @@ def run_tomography(
             from qtools.tomo import bell
 
             rho_qobj = qt.Qobj(rho, dims=[[2, 2], [2, 2]])
+            target_qobj = qt.Qobj(target_rho, dims=[[2, 2], [2, 2]]) if target_rho is not None else None
             angles = np.linspace(-45.0, 45.0, 91).tolist()
+            qwp_45_dag = bell.qwp(45.0).dag()
+            h_ket = bell.h_state()
 
             alice_kets = {
                 "H": bell.h_state(),
@@ -572,24 +627,104 @@ def run_tomography(
                 if a_name not in alice_kets:
                     continue
                 a_ket = alice_kets[a_name]
-                joint_vals = []
-                cond_vals = []
-                counts_vals = []
+                joint_vals, cond_vals, counts_vals = [], [], []
+                joint_qwp, cond_qwp, counts_qwp = [], [], []
+                joint_scan, cond_scan, counts_scan = [], [], []
+
+                t_joint, t_cond, t_counts = [], [], []
+                t_joint_q, t_cond_q, t_counts_q = [], [], []
+                t_joint_scan, t_cond_scan, t_counts_scan = [], [], []
+
                 for ang in angles:
+                    # 1. Linear analyzer (Chart 1: Bob QWP fixed at phi_b = 0 deg, HWP theta_b scan)
                     bob_plus, _ = bell.hwp_analyzer_basis(float(ang))
                     j = bell.joint_probability(rho_qobj, a_ket, bob_plus)
                     c = bell.conditional_probability(rho_qobj, bob_plus, a_ket)
                     joint_vals.append(round(j, 6))
                     cond_vals.append(round(c, 6))
                     counts_vals.append(round(j * float(intens), 3))
+
+                    # 2. Circular analyzer (Bob QWP at phi_b = 45 deg, HWP scan)
+                    bob_qwp_hwp = qwp_45_dag * bell.hwp(float(ang)).dag() * h_ket
+                    jq = bell.joint_probability(rho_qobj, a_ket, bob_qwp_hwp)
+                    cq = bell.conditional_probability(rho_qobj, bob_qwp_hwp, a_ket)
+                    joint_qwp.append(round(jq, 6))
+                    cond_qwp.append(round(cq, 6))
+                    counts_qwp.append(round(jq * float(intens), 3))
+
+                    # 3. QWP angle scan (Chart 2: Bob HWP fixed at theta_b = 0 deg, QWP phi_b scan)
+                    bob_qwp_s = bell.qwp(float(ang)).dag() * h_ket
+                    js = bell.joint_probability(rho_qobj, a_ket, bob_qwp_s)
+                    cs = bell.conditional_probability(rho_qobj, bob_qwp_s, a_ket)
+                    joint_scan.append(round(js, 6))
+                    cond_scan.append(round(cs, 6))
+                    counts_scan.append(round(js * float(intens), 3))
+
+                    # Target state curves if available
+                    if target_qobj is not None:
+                        tj = bell.joint_probability(target_qobj, a_ket, bob_plus)
+                        tc = bell.conditional_probability(target_qobj, bob_plus, a_ket)
+                        t_joint.append(round(tj, 6))
+                        t_cond.append(round(tc, 6))
+                        t_counts.append(round(tj * float(intens), 3))
+
+                        tjq = bell.joint_probability(target_qobj, a_ket, bob_qwp_hwp)
+                        tcq = bell.conditional_probability(target_qobj, bob_qwp_hwp, a_ket)
+                        t_joint_q.append(round(tjq, 6))
+                        t_cond_q.append(round(tcq, 6))
+                        t_counts_q.append(round(tjq * float(intens), 3))
+
+                        tjs = bell.joint_probability(target_qobj, a_ket, bob_qwp_s)
+                        tcs = bell.conditional_probability(target_qobj, bob_qwp_s, a_ket)
+                        t_joint_scan.append(round(tjs, 6))
+                        t_cond_scan.append(round(tcs, 6))
+                        t_counts_scan.append(round(tjs * float(intens), 3))
+
                 curves.append({
                     "alice": a_name,
                     "joint": joint_vals,
                     "conditional": cond_vals,
                     "counts": counts_vals,
                 })
+                curves_qwp.append({
+                    "alice": a_name,
+                    "joint": joint_qwp,
+                    "conditional": cond_qwp,
+                    "counts": counts_qwp,
+                })
+                curves_qwp_scan.append({
+                    "alice": a_name,
+                    "joint": joint_scan,
+                    "conditional": cond_scan,
+                    "counts": counts_scan,
+                })
+
+                if target_qobj is not None:
+                    target_curves.append({
+                        "alice": a_name,
+                        "joint": t_joint,
+                        "conditional": t_cond,
+                        "counts": t_counts,
+                    })
+                    target_curves_qwp.append({
+                        "alice": a_name,
+                        "joint": t_joint_q,
+                        "conditional": t_cond_q,
+                        "counts": t_counts_q,
+                    })
+                    target_curves_qwp_scan.append({
+                        "alice": a_name,
+                        "joint": t_joint_scan,
+                        "conditional": t_cond_scan,
+                        "counts": t_counts_scan,
+                    })
         except Exception:
             curves = []
+            curves_qwp = []
+            curves_qwp_scan = []
+            target_curves = []
+            target_curves_qwp = []
+            target_curves_qwp_scan = []
             angles = []
 
     return {
@@ -599,11 +734,27 @@ def run_tomography(
         "fval": round(float(fval), 5),
         "intensity": round(float(intens), 3),
         "purity": round(purity, 5),
+        "purity_std": unc.get("purity_std"),
+        "purity_ci": unc.get("purity_ci"),
+        "purity_err_minus": unc.get("purity_err_minus"),
+        "purity_err_plus": unc.get("purity_err_plus"),
         "linear_entropy": round(lin_entropy, 5),
         "entropy": round(von_neumann_entropy, 5),
+        "entropy_std": unc.get("entropy_std"),
+        "entropy_ci": unc.get("entropy_ci"),
+        "entropy_err_minus": unc.get("entropy_err_minus"),
+        "entropy_err_plus": unc.get("entropy_err_plus"),
         "concurrence": round(concurrence, 5) if concurrence is not None else None,
+        "concurrence_std": unc.get("concurrence_std"),
+        "concurrence_ci": unc.get("concurrence_ci"),
+        "concurrence_err_minus": unc.get("concurrence_err_minus"),
+        "concurrence_err_plus": unc.get("concurrence_err_plus"),
         "tangle": round(tangle, 5) if tangle is not None else None,
         "fidelity": round(fidelity_val, 5) if fidelity_val is not None else None,
+        "fidelity_std": unc.get("fidelity_std"),
+        "fidelity_ci": unc.get("fidelity_ci"),
+        "fidelity_err_minus": unc.get("fidelity_err_minus"),
+        "fidelity_err_plus": unc.get("fidelity_err_plus"),
         "target_state": str(target_state) if target_state else None,
         "density_matrix": {
             "dim": dim,
@@ -613,82 +764,16 @@ def run_tomography(
         },
         "bell_settings": bell_settings,
         "curves": curves,
+        "curves_qwp": curves_qwp,
+        "curves_qwp_scan": curves_qwp_scan,
+        "target_curves": target_curves,
+        "target_curves_qwp": target_curves_qwp,
+        "target_curves_qwp_scan": target_curves_qwp_scan,
         "angles": angles,
         "html": {
             "matrix_html": td.matrixToHTML(rho),
         },
     }
-
-
-def simulate_counts_from_bell_state(
-    amplitudes: dict[str, dict[str, float]],
-    state_basis: str = "linear",
-    basis_count: int = 36,
-) -> dict[str, Any]:
-    """Generate a standard Kwiat QST dataset from a theoretical Bell state.
-
-    Supports 16 minimal basis settings or 36 canonical basis settings.
-    """
-    from qtools.tomo import bell
-
-    # Reconstruct state vector in HV basis
-    phi = bell.state_from_amplitudes(amplitudes, basis=state_basis)
-    rho_ideal = bell.density_matrix(phi).full()
-
-    single_projectors = {
-        "H": np.array([1.0, 0.0], dtype=complex),
-        "V": np.array([0.0, 1.0], dtype=complex),
-        "D": np.array([1.0, 1.0], dtype=complex) / np.sqrt(2),
-        "A": np.array([1.0, -1.0], dtype=complex) / np.sqrt(2),
-        "R": np.array([1.0, 1.0j], dtype=complex) / np.sqrt(2),
-        "L": np.array([1.0, -1.0j], dtype=complex) / np.sqrt(2),
-    }
-
-    if basis_count == 16:
-        basis_keys = ["H", "V", "D", "R"]
-    else:
-        basis_keys = ["H", "V", "D", "A", "R", "L"]
-    data_rows = []
-
-    for a in basis_keys:
-        for b in basis_keys:
-            proj_a = single_projectors[a]
-            proj_b = single_projectors[b]
-            proj_2q = np.kron(proj_a, proj_b)
-            # Probability P = ⟨proj|rho|proj⟩
-            prob = float(np.real(np.vdot(proj_2q, rho_ideal @ proj_2q)))
-            expected_counts = prob * (total_pairs / 4.0)
-
-            if noise_ratio > 0:
-                noise = np.random.normal(0, np.sqrt(expected_counts + 1) * noise_ratio)
-                counts = max(0, int(round(expected_counts + noise)))
-            else:
-                counts = int(round(expected_counts))
-
-            # [singles_A, singles_B, coincidences] for 1-detector model
-            data_rows.append({
-                "basis": [a, b],
-                "integration_time": 1,
-                "counts": [0, 0, counts],
-            })
-
-    dataset = {
-        "n_qubits": 2,
-        "n_detectors_per_qubit": 1,
-        "coincidence_window": [0],
-        "n_measurements_per_qubit": 6,
-        "measurement_states": {
-            "H": [1, 0],
-            "V": [0, 1],
-            "D": [1, 1],
-            "A": [1, -1],
-            "R": [1, "1j"],
-            "L": [1, "-1j"],
-        },
-        "data": data_rows,
-    }
-
-    return dataset
 
 
 def get_template(

@@ -7,7 +7,7 @@
   <style>
     :root{color-scheme:light;--ink:#182322;--muted:#65736f;--line:#d7dfda;--paper:#f4f6f2;--white:#fff;--blue:#1769aa;--red:#d62728;--green:#159447;--yellow:#c99500}
     *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif}
-    .app{max-width:1440px;margin:auto;padding:24px 28px 32px}.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:18px;gap:16px}.eyebrow{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--green);text-transform:uppercase}.top h1{font-size:24px;line-height:1.2;margin:5px 0;font-weight:650}.subtitle{color:var(--muted);max-width:720px}.status{font:12px ui-monospace,monospace;color:var(--muted);white-space:nowrap;padding-top:8px}
+    .app{max-width:min(1880px,98vw);margin:auto;padding:24px 28px 32px;width:100%}.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:18px;gap:16px}.eyebrow{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--green);text-transform:uppercase}.top h1{font-size:24px;line-height:1.2;margin:5px 0;font-weight:650}.subtitle{color:var(--muted);max-width:720px}.status{font:12px ui-monospace,monospace;color:var(--muted);white-space:nowrap;padding-top:8px}
     .layout{display:grid;grid-template-columns:375px minmax(0,1fr);gap:24px;padding-top:20px}.controls{border-right:1px solid var(--line);padding-right:22px}.section{padding:0 0 19px;margin:0 0 18px;border-bottom:1px solid var(--line)}.section:last-child{border:0}.section h2{font-size:13px;margin:0 0 12px;font-weight:700}.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}.section-head h2{font-size:13px;margin:0;font-weight:700;white-space:nowrap;display:inline-flex;align-items:baseline;gap:4px}.section-head .quiet{color:var(--muted);font-size:12px;white-space:nowrap}.quiet{color:var(--muted);font-size:12px}.row{display:grid;grid-template-columns:68px 1fr 52px;align-items:center;gap:8px;margin:9px 0}.row label{font:12px ui-monospace,monospace;color:#45514e;white-space:nowrap}.row output{font:12px ui-monospace,monospace;text-align:right;color:var(--muted);white-space:nowrap}input[type=range]{width:100%;accent-color:var(--green)}input[type=number]{width:68px;padding:5px;border:1px solid var(--line);border-radius:4px;font:12px ui-monospace,monospace;background:var(--white)}
     .dirac-ket{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-weight:600;color:var(--ink);display:inline-flex;align-items:baseline;letter-spacing:-0.5px}
     .complex{display:grid;grid-template-columns:36px 1fr 48px;align-items:center;gap:8px;margin:7px 0}.complex label{font:12px ui-monospace,monospace;cursor:pointer;white-space:nowrap}.complex label.phase-target{font-weight:700;color:var(--green)}.complex input[type=range]{width:100%}.complex output{font:12px ui-monospace,monospace;text-align:right;color:var(--muted);white-space:nowrap}.preset-line{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.segmented,.basis-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.preset-line button,.segmented button,.basis-grid button,.mode button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:4px;padding:6px 9px;font-size:12px;cursor:pointer;text-align:center;transition:background 0.15s,color 0.15s,border-color 0.15s}.preset-line button:hover{border-color:var(--ink);background:#eef2ef}.preset-line button.active{background:var(--ink)!important;border-color:var(--ink)!important;color:#fff!important;font-weight:600}.segmented button.active,.mode button.active{border-color:var(--green);color:var(--green);background:#e7f0ec}.basis-grid button{background:var(--white);min-width:38px}.basis-grid button.active{background:var(--ink);border-color:var(--ink);color:white}.basis-definition{margin-top:9px;padding:8px 10px;background:#edf3ef;border-left:3px solid var(--green);color:#34413d;font-size:12px}.basis-definition:empty{display:none}.main{min-width:0}
@@ -161,7 +161,7 @@
     </div>
   </div>
   <div id="tabTomo" class="tab-pane">
-    <div class="layout" style="grid-template-columns:360px minmax(0,1fr);">
+    <div class="layout" style="grid-template-columns:320px minmax(0,1fr);gap:24px;">
       <aside class="controls">
         <!-- Card 1: Target State (Top) -->
         <section class="section">
@@ -252,9 +252,9 @@
               <input type="checkbox" id="tomoAccidentals" checked> Accidental Correction
             </label>
             <div id="tomoWindowRow" class="row" style="margin:2px 0 0 20px;display:grid;">
-              <label style="font-size:11px;">Window (ns)</label>
-              <input type="number" id="tomoWindowNs" value="10" min="0" step="1" style="width:72px;">
-              <output></output>
+              <label style="font-size:11px;" id="tomoWindowLabel">windows (ns)</label>
+              <input type="number" id="tomoWindowNs" value="10" min="0" step="any" style="width:72px;">
+              <output id="tomoWindowBadge" style="font-size:10px;color:var(--muted);white-space:nowrap;"></output>
             </div>
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
               <input type="checkbox" id="tomoBellSettings" checked> Optimal Bell Inequality Angles
@@ -296,7 +296,7 @@
             <div id="tomoLoadedFileNotice" style="display:none;font-size:11px;color:var(--green);font-weight:600;font-family:ui-monospace,monospace;"></div>
           </div>
 
-          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:5px;background:var(--white);">
+          <div style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:5px;background:var(--white);">
             <table class="tomo-data-table" id="tomoDataTable">
               <thead id="tomoTableHead"></thead>
               <tbody id="tomoTableBody"></tbody>
@@ -307,24 +307,57 @@
             <span id="tomoStatusNotice" style="color:var(--green);font-weight:600;">Data loaded</span>
           </div>
 
-          <!-- Chart: Fitted Coincidence Curves & Measured Basis Points (Chart 1) -->
+          <!-- Chart 1: Bob QWP fix (phi_b = 0°) -->
           <div id="tomoPlotSection" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;">
             <div class="chart-head" style="margin-bottom:8px;">
               <div class="chart-head-row">
                 <div>
-                  <h2 style="font-size:14px;margin:0 0 2px;color:var(--ink);">Fitted Coincidence Curves & Measured Basis Points</h2>
-                  <div style="font-size:11px;color:var(--muted);">Theoretical MLE fit curves vs measured analyzer basis points with error bars (±σ)</div>
+                  <h2 style="font-size:14px;margin:0 0 2px;color:var(--ink);">Fitted Coincidence Curves & Measured Basis Points · Bob QWP fix (φ_b = 0°)</h2>
+                  <div style="font-size:11px;color:var(--muted);">Bob QWP fixed at φ_b = 0° (linear basis scan H/V/D/A) · Theoretical MLE fit curves vs measured basis points with error bars (±σ)</div>
                 </div>
-                <div class="mode" id="tomoPlotMode">
-                  <button class="active" data-mode="counts">Coincidence Counts</button>
-                  <button data-mode="rate">Normalized Rate</button>
-                  <button data-mode="prob">Probability</button>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+                  <div class="mode tomo-curve-mode" id="tomoCurveMode">
+                    <button class="active" data-curve-mode="mle" title="Show theoretical MLE reconstructed fit curves">MLE Fit</button>
+                    <button data-curve-mode="target" title="Show theoretical benchmark curves from target state">Target State</button>
+                    <button data-curve-mode="off" title="Turn off curves, show measured data points only">Curves Off</button>
+                  </div>
+                  <div class="mode" id="tomoPlotMode">
+                    <button class="active" data-mode="counts">Coincidence Counts</button>
+                    <button data-mode="rate">Normalized Rate</button>
+                    <button data-mode="prob">Probability</button>
+                  </div>
                 </div>
               </div>
               <div class="legend" id="tomoPlotLegend" style="margin-top:6px;"></div>
             </div>
             <div class="chart-wrap" style="height:320px;position:relative;">
-              <canvas id="tomoPlot" aria-label="Tomography fitted coincidence curves vs Bob analyzer angle"></canvas>
+              <canvas id="tomoPlot" aria-label="Tomography fitted coincidence curves vs Bob analyzer HWP angle with Bob QWP fixed at phi_b = 0"></canvas>
+            </div>
+          </div>
+
+          <!-- Chart 2: Bob HWP fix (theta_b = 0°) -->
+          <div id="tomoPlotQwpSection" style="margin-top:20px;border-top:1px solid var(--line);padding-top:14px;">
+            <div class="chart-head" style="margin-bottom:8px;">
+              <div class="chart-head-row">
+                <div>
+                  <h2 id="tomoPlotQwpTitle" style="font-size:14px;margin:0 0 2px;color:var(--ink);">Fitted Coincidence Curves & Measured Basis Points · Bob HWP fix (θ_b = 0°)</h2>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+                  <div class="mode tomo-curve-mode" id="tomoCurveModeQwp">
+                    <button class="active" data-curve-mode="mle" title="Show theoretical MLE reconstructed fit curves">MLE Fit</button>
+                    <button data-curve-mode="target" title="Show theoretical benchmark curves from target state">Target State</button>
+                    <button data-curve-mode="off" title="Turn off curves, show measured data points only">Curves Off</button>
+                  </div>
+                  <div class="mode" id="tomoPlotQwpMode">
+                    <button class="active" data-mode="counts">Coincidence Counts</button>
+                    <button data-mode="rate">Normalized Rate</button>
+                    <button data-mode="prob">Probability</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="chart-wrap" style="height:320px;position:relative;">
+              <canvas id="tomoPlotQwp" aria-label="Tomography fitted coincidence curves vs Bob analyzer with QWP scanned for circular basis"></canvas>
             </div>
           </div>
         </section>
@@ -339,17 +372,17 @@
           <div class="metric">
             <div class="metric-head"><div class="label">Purity Tr(ρ²)</div></div>
             <strong id="mPurity" style="font-size:20px;">—</strong>
-            <div class="small">1.0 = pure state</div>
+            <div class="small" id="mPuritySub">1.0 = pure state</div>
           </div>
           <div class="metric">
-            <div class="metric-head"><div class="label">Concurrence / Tangle</div></div>
+            <div class="metric-head"><div class="label">Concurrence C</div></div>
             <strong id="mEntanglement" style="font-size:20px;">—</strong>
             <div class="small" id="mEntanglementSub">C ∈ [0, 1]</div>
           </div>
           <div class="metric">
             <div class="metric-head"><div class="label">Von Neumann Entropy</div></div>
             <strong id="mEntropy" style="font-size:20px;">—</strong>
-            <div class="small">S = -Tr(ρ ln ρ)</div>
+            <div class="small" id="mEntropySub">S = -Tr(ρ ln ρ)</div>
           </div>
           <div class="metric">
             <div class="metric-head"><div class="label">MLE Fit (fval)</div></div>
@@ -362,22 +395,62 @@
           <div class="chart-head-row">
             <div>
               <h2 style="font-size:14px;margin:2px 0 0;color:var(--ink);">Quantum State Reconstruction</h2>
-              <div class="eyebrow" style="color:var(--muted);margin-top:2px;">Reconstructed Density Matrix ρ & Properties</div>
+              <div class="eyebrow" style="color:var(--muted);margin-top:2px;">Reconstructed Density Matrix ρ · 3D Stereoscopic Histogram & 2D Planar Heatmap</div>
             </div>
-            <div class="segmented" id="tomoMatrixPart" style="display:inline-flex;gap:4px;margin-top:0;">
-              <button type="button" class="active" data-part="both">Real & Imag</button>
-              <button type="button" data-part="real">Real Only</button>
-              <button type="button" data-part="imag">Imag Only</button>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <div class="segmented" id="tomoViewMode" style="display:inline-flex;gap:3px;margin:0;">
+                <button type="button" class="active" data-view="both">3D + 2D</button>
+                <button type="button" data-view="3d">3D Histogram</button>
+                <button type="button" data-view="2d">2D Heatmap</button>
+              </div>
+              <div class="segmented" id="tomoMatrixPart" style="display:inline-flex;gap:3px;margin:0;">
+                <button type="button" class="active" data-part="both">Real & Imag</button>
+                <button type="button" data-part="real">Real Only</button>
+                <button type="button" data-part="imag">Imag Only</button>
+              </div>
+              <button type="button" id="btnReset3dView" class="btn btn-sm" style="font-size:11px;padding:3px 8px;" title="Reset 3D perspective to default angle">↺ Reset 3D</button>
             </div>
           </div>
 
-          <div id="tomoMatrixContainer" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">
+          <!-- 3D Stereoscopic Bar Histogram Section -->
+          <div id="tomo3dContainer" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">
+            <div id="tomo3dRealBox" style="background:var(--white);border:1px solid var(--line);border-radius:6px;padding:12px;position:relative;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <h3 style="font-size:12px;margin:0;font-family:ui-monospace,monospace;color:var(--ink);display:flex;align-items:center;gap:6px;">
+                  <span>Re(ρ) 3D State Histogram</span>
+                  <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(21,148,71,0.12);color:var(--green);font-weight:600;">Real Part</span>
+                </h3>
+                <span class="small" style="font-size:10px;color:var(--muted);">Drag to rotate · Scroll to zoom</span>
+              </div>
+              <div style="position:relative;width:100%;height:320px;border-radius:4px;overflow:hidden;background:linear-gradient(180deg, #fbfcfc 0%, #f4f7f6 100%);border:1px solid rgba(0,0,0,0.06);">
+                <canvas id="tomo3dReal" style="width:100%;height:100%;display:block;cursor:grab;"></canvas>
+                <div id="tomo3dRealTooltip" style="position:absolute;display:none;pointer-events:none;background:rgba(15,23,42,0.92);color:#fff;font-family:ui-monospace,monospace;font-size:11px;padding:4px 8px;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;white-space:nowrap;"></div>
+              </div>
+            </div>
+
+            <div id="tomo3dImagBox" style="background:var(--white);border:1px solid var(--line);border-radius:6px;padding:12px;position:relative;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <h3 style="font-size:12px;margin:0;font-family:ui-monospace,monospace;color:var(--ink);display:flex;align-items:center;gap:6px;">
+                  <span>Im(ρ) 3D State Histogram</span>
+                  <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(142,36,170,0.12);color:#8e24aa;font-weight:600;">Imag Part</span>
+                </h3>
+                <span class="small" style="font-size:10px;color:var(--muted);">Drag to rotate · Scroll to zoom</span>
+              </div>
+              <div style="position:relative;width:100%;height:320px;border-radius:4px;overflow:hidden;background:linear-gradient(180deg, #fbfcfc 0%, #f4f7f6 100%);border:1px solid rgba(0,0,0,0.06);">
+                <canvas id="tomo3dImag" style="width:100%;height:100%;display:block;cursor:grab;"></canvas>
+                <div id="tomo3dImagTooltip" style="position:absolute;display:none;pointer-events:none;background:rgba(15,23,42,0.92);color:#fff;font-family:ui-monospace,monospace;font-size:11px;padding:4px 8px;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10;white-space:nowrap;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2D Planar Heatmap Tables -->
+          <div id="tomoMatrixContainer" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
             <div id="tomoRealBox" style="background:var(--white);border:1px solid var(--line);border-radius:6px;padding:12px;">
-              <h3 style="font-size:12px;margin:0 0 8px;font-family:ui-monospace,monospace;color:var(--muted)">Re(ρ)</h3>
+              <h3 style="font-size:12px;margin:0 0 8px;font-family:ui-monospace,monospace;color:var(--muted)">Re(ρ) 2D Planar Heatmap</h3>
               <div id="tomoRealHeatmap" style="overflow-x:auto;"></div>
             </div>
             <div id="tomoImagBox" style="background:var(--white);border:1px solid var(--line);border-radius:6px;padding:12px;">
-              <h3 style="font-size:12px;margin:0 0 8px;font-family:ui-monospace,monospace;color:var(--muted)">Im(ρ)</h3>
+              <h3 style="font-size:12px;margin:0 0 8px;font-family:ui-monospace,monospace;color:var(--muted)">Im(ρ) 2D Planar Heatmap</h3>
               <div id="tomoImagHeatmap" style="overflow-x:auto;"></div>
             </div>
           </div>
@@ -395,7 +468,7 @@
   <script>
     (()=>{
       const $=s=>document.querySelector(s); const $$=s=>[...document.querySelectorAll(s)];
-      const colors={H:'#1769aa',V:'#d62728',D:'#159447',A:'#c99500',R:'#8e24aa',L:'#00897b'};
+      const colors={H:'#1769aa',V:'#d62728',D:'#159447',A:'#c99500',R:'#8e24aa',L:'#607d8b'};
       const c=(re=0,im=0)=>({re,im});
       const add=(a,b)=>c(a.re+b.re,a.im+b.im);
       const mul=(a,b)=>c(a.re*b.re-a.im*b.im,a.re*b.im+a.im*b.re);
@@ -556,12 +629,7 @@
       }
 
       let chshCountsOverride=null;
-      let skipChshCountsOnce=false;
       function collectChshCounts(){
-        if(skipChshCountsOnce){
-          skipChshCountsOnce=false;
-          return null;
-        }
         const counts={};
         $$('.chsh-count').forEach(input=>{
           const setting=input.dataset.setting;
@@ -585,14 +653,12 @@
         refreshController=new AbortController();
         try{
           const request=payload();
-          const counts=collectChshCounts();
-          if(counts)request.chsh_counts=counts;
+          if(chshCountsOverride)request.chsh_counts=chshCountsOverride;
           const response=await fetch('/api/calculate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request),signal:refreshController.signal});
           const body=await response.json();
           if(!response.ok)throw new Error(body.detail||'Calculation failed');
           if(serial!==requestSerial)return;
           latest=body;
-          // Keep the manual-count override only while the user is editing it.
           render(body);
         }catch(error){
           if(error.name==='AbortError')return;
@@ -669,8 +735,21 @@
         if(old){
           preview.chsh.current_b=state.b;
           preview.chsh.current_bp=state.bp;
-          preview.chsh.current_s=old.s;
           preview.chsh.curve_bp_minus_b=state.bp-state.b;
+          const curRel=state.b-state.a;
+          const xVals=preview.chsh.b_relative, yVals=preview.chsh.values;
+          if(xVals&&yVals&&xVals.length){
+            let i=0;
+            while(i+1<xVals.length&&xVals[i+1]<curRel)i++;
+            if(curRel<=xVals[0])preview.chsh.current_s=yVals[0];
+            else if(curRel>=xVals[xVals.length-1])preview.chsh.current_s=yVals[yVals.length-1];
+            else{
+              const t=(curRel-xVals[i])/(xVals[i+1]-xVals[i]);
+              preview.chsh.current_s=yVals[i]*(1-t)+yVals[i+1]*t;
+            }
+          }else{
+            preview.chsh.current_s=old.s;
+          }
         }
         drawChshPlot(preview);
         drawPolarizationSphere(preview);
@@ -1268,6 +1347,7 @@
       }
 
       function preset(name){
+        chshCountsOverride=null;
         if(name==='phi+'){
           state.inputAmplitudes=[c(1/Math.sqrt(2)),c(),c(),c(1/Math.sqrt(2))];
           state.phaseTarget = 3;
@@ -1292,6 +1372,7 @@
       $('#stateBasisButtons').addEventListener('click',event=>{
         const button=event.target.closest('button[data-state-basis]');
         if(!button||button.dataset.stateBasis===state.basis)return;
+        chshCountsOverride=null;
         state.basis=button.dataset.stateBasis;
         state.dispBasis=state.basis;
         $$('#stateBasisButtons button').forEach(item=>item.classList.toggle('active',item===button));
@@ -1312,6 +1393,7 @@
       $('#complexInputs').addEventListener('input',event=>{
         const input=event.target.closest('input[data-index]');
         if(!input)return;
+        chshCountsOverride=null;
         const idx=+input.dataset.index;
         const cur=state.inputAmplitudes[idx];
         const oldMag=abs(cur);
@@ -1332,6 +1414,7 @@
       });
 
       $('#phase').addEventListener('input',event=>{
+        chshCountsOverride=null;
         const target=state.inputAmplitudes[state.phaseTarget];
         const magnitude=abs(target);
         const phase=+event.target.value*Math.PI/180;
@@ -1355,6 +1438,7 @@
       });
 
       [['thetaA','a'],['thetaAp','ap']].forEach(([id,key])=>$('#'+id).addEventListener('input',event=>{
+        chshCountsOverride=null;
         state[key]=+event.target.value;
         renderChshSettings();
         previewChshSettings();
@@ -1362,6 +1446,7 @@
       }));
 
       $('#thetaB').addEventListener('input',event=>{
+        chshCountsOverride=null;
         state.b=+event.target.value;
         state.bp=state.b+(state.offset!==undefined?state.offset:45);
         renderChshSettings();
@@ -1370,6 +1455,7 @@
       });
 
       $('#thetaBp').addEventListener('input',event=>{
+        chshCountsOverride=null;
         state.bp=+event.target.value;
         state.offset=state.bp-state.b;
         renderChshSettings();
@@ -1383,16 +1469,15 @@
         if(latest){renderChshTable(latest);renderChshCalculation(latest)}
       }));
 
-      $('#chshRows').addEventListener('change',event=>{
+      ['input','change'].forEach(evt=>$('#chshRows').addEventListener(evt,event=>{
         if(event.target.closest('.chsh-count')){
           chshCountsOverride=collectChshCounts();
           schedule();
         }
-      });
+      }));
 
       $('#resetChshCounts').addEventListener('click',()=>{
         chshCountsOverride=null;
-        skipChshCountsOnce=true;
         schedule();
       });
 
@@ -1701,14 +1786,11 @@
               <th style="width:30px;">#</th>
               <th style="width:42px;padding:4px 1px;text-align:center;">Alice</th>
               <th style="width:42px;padding:4px 1px;text-align:center;">Bob</th>
-              <th>Raw Coincidence</th>
-              <th style="width:46px;" title="Coincidence Error ±σ">± std</th>
-              <th title="Accidental counts: (S_A * S_B / T) * Δt">Accidental</th>
-              <th title="Accidental-subtracted Net Pairs">Pair</th>
-              <th>Singles A</th>
-              <th style="width:46px;" title="Singles A Error ±σ">± std</th>
-              <th>Singles B</th>
-              <th style="width:46px;" title="Singles B Error ±σ">± std</th>
+              <th title="Raw Coincidence Counts ± Standard Deviation">Raw Coinc (±σ)</th>
+              <th title="Accidental counts: (S_A * S_B / T) * Δt with propagated uncertainty">Accidental (±σ)</th>
+              <th title="Accidental-subtracted Net Pairs with propagated uncertainty">Pair (±σ)</th>
+              <th title="Singles A Counts ± Standard Deviation">Singles A (±σ)</th>
+              <th title="Singles B Counts ± Standard Deviation">Singles B (±σ)</th>
               <th style="width:48px;">Time (s)</th>
               <th style="width:30px;">Del</th>
             </tr>`;
@@ -1769,21 +1851,24 @@
 
               const nAcc = (sA * sB / timeVal) * deltaT;
               const nPair = Math.max(0, Math.round((coinc - nAcc) * 10) / 10);
+              const nAccVar = Math.pow(deltaT / timeVal, 2) * (Math.pow(sB * sAStd, 2) + Math.pow(sA * sBStd, 2));
+              const nAccStd = Math.sqrt(nAccVar);
+              const nPairStd = Math.sqrt(Math.pow(coincStd, 2) + nAccVar);
+
               const nAccStr = nAcc < 10 ? nAcc.toFixed(2) : nAcc.toFixed(1);
+              const nAccStdStr = nAccStd < 10 ? nAccStd.toFixed(2) : nAccStd.toFixed(1);
               const nPairStr = Number.isInteger(nPair) ? nPair.toFixed(0) : nPair.toFixed(1);
+              const nPairStdStr = nPairStd < 10 ? nPairStd.toFixed(2) : nPairStd.toFixed(1);
 
               rowsHtml += `<tr>
                 <td style="color:var(--muted);">${idx + 1}</td>
                 <td style="padding:2px 1px;text-align:center;">${basisSelectA}</td>
                 <td style="padding:2px 1px;text-align:center;">${basisSelectB}</td>
-                <td><input type="number" min="0" data-row="${idx}" data-count-idx="2" value="${coinc}" style="font-weight:700;color:var(--ink);width:60px;"></td>
-                <td><input type="number" min="0" step="0.1" data-row="${idx}" data-std-idx="0" value="${coincStd}" style="width:42px;font-size:10px;color:var(--muted);" title="Coincidence Std"></td>
-                <td style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);text-align:center;" data-acc-cell="${idx}">${nAccStr}</td>
-                <td style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--green);text-align:center;" data-pair-cell="${idx}">${nPairStr}</td>
-                <td><input type="number" min="0" data-row="${idx}" data-count-idx="0" value="${sA}" style="width:58px;"></td>
-                <td><input type="number" min="0" step="0.1" data-row="${idx}" data-std-idx="1" value="${sAStd}" style="width:42px;font-size:10px;color:var(--muted);" title="Singles A Std"></td>
-                <td><input type="number" min="0" data-row="${idx}" data-count-idx="1" value="${sB}" style="width:58px;"></td>
-                <td><input type="number" min="0" step="0.1" data-row="${idx}" data-std-idx="2" value="${sBStd}" style="width:42px;font-size:10px;color:var(--muted);" title="Singles B Std"></td>
+                <td style="white-space:nowrap;"><div style="display:inline-flex;align-items:center;justify-content:center;gap:3px;"><input type="number" min="0" data-row="${idx}" data-count-idx="2" value="${coinc}" style="font-weight:700;color:var(--ink);width:58px;"><span style="color:var(--muted);font-size:10px;">±</span><input type="number" min="0" step="0.1" data-row="${idx}" data-std-idx="0" value="${coincStd}" style="width:40px;font-size:10px;color:var(--muted);" title="Coincidence Std"></div></td>
+                <td style="font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);text-align:center;white-space:nowrap;" data-acc-cell="${idx}">${nAccStr} <span style="font-size:10px;color:var(--muted);">± ${nAccStdStr}</span></td>
+                <td style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--green);text-align:center;white-space:nowrap;" data-pair-cell="${idx}">${nPairStr} <span style="font-size:10px;font-weight:400;color:var(--muted);">± ${nPairStdStr}</span></td>
+                <td style="white-space:nowrap;"><div style="display:inline-flex;align-items:center;justify-content:center;gap:3px;"><input type="number" min="0" data-row="${idx}" data-count-idx="0" value="${sA}" style="width:58px;"><span style="color:var(--muted);font-size:10px;">±</span><input type="number" min="0" step="0.1" data-row="${idx}" data-std-idx="1" value="${sAStd}" style="width:40px;font-size:10px;color:var(--muted);" title="Singles A Std"></div></td>
+                <td style="white-space:nowrap;"><div style="display:inline-flex;align-items:center;justify-content:center;gap:3px;"><input type="number" min="0" data-row="${idx}" data-count-idx="1" value="${sB}" style="width:58px;"><span style="color:var(--muted);font-size:10px;">±</span><input type="number" min="0" step="0.1" data-row="${idx}" data-std-idx="2" value="${sBStd}" style="width:40px;font-size:10px;color:var(--muted);" title="Singles B Std"></div></td>
                 <td><input type="number" min="0.01" step="0.1" data-row="${idx}" data-time="1" value="${time}" style="width:42px;"></td>
                 <td><button type="button" class="tomo-del-btn" data-del-row="${idx}">×</button></td>
               </tr>`;
@@ -1821,15 +1906,26 @@
           const sB = counts[1] || 0;
           const coinc = counts[2] !== undefined ? counts[2] : (counts[0] || 0);
 
+          const stds = row.stds || [Math.sqrt(coinc), Math.sqrt(sA), Math.sqrt(sB)];
+          const coincStd = stds[0] !== undefined ? Number(stds[0]) : Math.sqrt(coinc);
+          const sAStd = stds[1] !== undefined ? Number(stds[1]) : Math.sqrt(sA);
+          const sBStd = stds[2] !== undefined ? Number(stds[2]) : Math.sqrt(sB);
+
           const nAcc = (sA * sB / timeVal) * deltaT;
           const nPair = Math.max(0, Math.round((coinc - nAcc) * 10) / 10);
+          const nAccVar = Math.pow(deltaT / timeVal, 2) * (Math.pow(sB * sAStd, 2) + Math.pow(sA * sBStd, 2));
+          const nAccStd = Math.sqrt(nAccVar);
+          const nPairStd = Math.sqrt(Math.pow(coincStd, 2) + nAccVar);
+
           const nAccStr = nAcc < 10 ? nAcc.toFixed(2) : nAcc.toFixed(1);
+          const nAccStdStr = nAccStd < 10 ? nAccStd.toFixed(2) : nAccStd.toFixed(1);
           const nPairStr = Number.isInteger(nPair) ? nPair.toFixed(0) : nPair.toFixed(1);
+          const nPairStdStr = nPairStd < 10 ? nPairStd.toFixed(2) : nPairStd.toFixed(1);
 
           const accCell = document.querySelector(`[data-acc-cell="${rowIdx}"]`);
           const pairCell = document.querySelector(`[data-pair-cell="${rowIdx}"]`);
-          if (accCell) accCell.textContent = nAccStr;
-          if (pairCell) pairCell.textContent = nPairStr;
+          if (accCell) accCell.innerHTML = `${nAccStr} <span style="font-size:10px;color:var(--muted);">± ${nAccStdStr}</span>`;
+          if (pairCell) pairCell.innerHTML = `${nPairStr} <span style="font-size:10px;font-weight:400;color:var(--muted);">± ${nPairStdStr}</span>`;
         }
 
         // Live table event delegation
@@ -1863,6 +1959,7 @@
               const sIdx = Number(target.dataset.stdIdx);
               if (!row.stds) row.stds = [0, 0, 0];
               row.stds[sIdx] = Number(target.value) || 0;
+              updateRowAccidentals(rowIdx);
             } else if (target.dataset.time !== undefined) {
               row.integration_time = Number(target.value) || 1;
               updateRowAccidentals(rowIdx);
@@ -1922,6 +2019,10 @@
         if (btnExport) {
           btnExport.addEventListener('click', () => {
             if (!tomoState.data) return;
+            const curWin = Number($('#tomoWindowNs')?.value) || 10;
+            tomoState.data.coincidence_window = tomoState.n_detectors === 2
+              ? [curWin, curWin, curWin, curWin]
+              : [curWin];
             const jsonStr = JSON.stringify(tomoState.data, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -1941,9 +2042,20 @@
             const tpl = await res.json();
             tomoState.data = tpl;
             tomoState.template = type;
+
+            if (tpl.coincidence_window !== undefined) {
+              const tplWin = Array.isArray(tpl.coincidence_window) ? tpl.coincidence_window[0] : tpl.coincidence_window;
+              if (tplWin !== null && !isNaN(Number(tplWin))) {
+                const winInput = $('#tomoWindowNs');
+                if (winInput) winInput.value = Number(tplWin);
+                if ($('#tomoWindowBadge')) $('#tomoWindowBadge').textContent = 'template';
+              }
+            }
+
             renderTable();
+            const curWinNs = Number($('#tomoWindowNs')?.value) || 10;
             if ($('#tomoStatusNotice')) {
-              $('#tomoStatusNotice').textContent = `Template '${type}' loaded (${tpl.data.length} settings)`;
+              $('#tomoStatusNotice').textContent = `Template '${type}' loaded (${tpl.data.length} settings, windows: ${curWinNs} ns)`;
               $('#tomoStatusNotice').style.color = 'var(--green)';
             }
           } catch (e) {
@@ -1979,9 +2091,24 @@
               if ($('#tomoBellSettings')) $('#tomoBellSettings').checked = !!preset.config.get_bell_settings;
             }
 
+            // Sync window from preset
+            let presetWin = null;
+            if (preset.data && preset.data.coincidence_window !== undefined) {
+              presetWin = Array.isArray(preset.data.coincidence_window) ? preset.data.coincidence_window[0] : preset.data.coincidence_window;
+            } else if (preset.config && preset.config.window !== undefined) {
+              presetWin = Array.isArray(preset.config.window) ? preset.config.window[0] : preset.config.window;
+            }
+            if (presetWin !== null && !isNaN(Number(presetWin))) {
+              const winNum = Number(presetWin);
+              const winInput = $('#tomoWindowNs');
+              if (winInput) winInput.value = winNum;
+              if ($('#tomoWindowBadge')) $('#tomoWindowBadge').textContent = 'preset';
+            }
+
             renderTable();
+            const curWinNs = Number($('#tomoWindowNs')?.value) || 10;
             if ($('#tomoStatusNotice')) {
-              $('#tomoStatusNotice').textContent = `Preset '${id}' loaded`;
+              $('#tomoStatusNotice').textContent = `Preset '${id}' loaded (${preset.data.data.length} settings, windows: ${curWinNs} ns)`;
               $('#tomoStatusNotice').style.color = 'var(--green)';
             }
             await runTomo();
@@ -2011,6 +2138,7 @@
           try {
             const text = await file.text();
             let resData = null;
+            let fileConfig = null;
 
             // Direct JSON check
             if (file.name.toLowerCase().endsWith('.json') || text.trim().startsWith('{')) {
@@ -2018,6 +2146,13 @@
                 const parsed = JSON.parse(text);
                 if (parsed.data && Array.isArray(parsed.data)) {
                   resData = parsed;
+                  if (parsed.config) {
+                    fileConfig = parsed.config;
+                    if (parsed.config.do_drift_correction !== undefined && $('#tomoDrift'))
+                      $('#tomoDrift').checked = !!parsed.config.do_drift_correction;
+                    if (parsed.config.do_accidental_correction !== undefined && $('#tomoAccidentals'))
+                      $('#tomoAccidentals').checked = !!parsed.config.do_accidental_correction;
+                  }
                 }
               } catch (e) {}
             }
@@ -2036,6 +2171,7 @@
               const parsedRes = await res.json();
               resData = parsedRes.data;
               if (parsedRes.config) {
+                fileConfig = parsedRes.config;
                 if (parsedRes.config.do_drift_correction !== undefined && $('#tomoDrift'))
                   $('#tomoDrift').checked = !!parsedRes.config.do_drift_correction;
                 if (parsedRes.config.do_accidental_correction !== undefined && $('#tomoAccidentals'))
@@ -2048,17 +2184,41 @@
               tomoState.n_qubits = resData.n_qubits || 2;
               tomoState.n_detectors = resData.n_detectors_per_qubit || 1;
 
+              // Extract window (ns) from file data or config if present
+              let extractedWindow = null;
+              if (resData.coincidence_window !== undefined) {
+                extractedWindow = Array.isArray(resData.coincidence_window) ? resData.coincidence_window[0] : resData.coincidence_window;
+              } else if (resData.window !== undefined) {
+                extractedWindow = Array.isArray(resData.window) ? resData.window[0] : resData.window;
+              } else if (fileConfig && fileConfig.window !== undefined) {
+                extractedWindow = Array.isArray(fileConfig.window) ? fileConfig.window[0] : fileConfig.window;
+              } else if (fileConfig && fileConfig.coincidence_window !== undefined) {
+                extractedWindow = Array.isArray(fileConfig.coincidence_window) ? fileConfig.coincidence_window[0] : fileConfig.coincidence_window;
+              }
+
+              if (extractedWindow !== null && !isNaN(Number(extractedWindow))) {
+                const winNum = Number(extractedWindow);
+                const winInput = $('#tomoWindowNs');
+                if (winInput) winInput.value = winNum;
+                if ($('#tomoWindowBadge')) $('#tomoWindowBadge').textContent = 'from file';
+                if (winNum > 0 && $('#tomoAccidentals') && !$('#tomoAccidentals').checked) {
+                  $('#tomoAccidentals').checked = true;
+                  if ($('#tomoWindowRow')) $('#tomoWindowRow').style.display = 'grid';
+                }
+              }
+
               $$('#tomoQubitsSwitch button').forEach(b => b.classList.toggle('active', Number(b.dataset.qubits) === tomoState.n_qubits));
               $$('#tomoDetectorsSwitch button').forEach(b => b.classList.toggle('active', Number(b.dataset.detectors) === tomoState.n_detectors));
               updateBasisButtons();
               renderTable();
 
+              const curWinNs = Number($('#tomoWindowNs')?.value) || 10;
               if (notice) {
-                notice.textContent = `✓ Loaded: ${file.name} (${resData.data.length} settings)`;
+                notice.textContent = `✓ Loaded: ${file.name} (${resData.data.length} settings · windows: ${curWinNs} ns)`;
                 notice.style.color = 'var(--green)';
               }
               if ($('#tomoStatusNotice')) {
-                $('#tomoStatusNotice').textContent = `File '${file.name}' loaded (${resData.data.length} settings)`;
+                $('#tomoStatusNotice').textContent = `File '${file.name}' loaded (${resData.data.length} settings, windows: ${curWinNs} ns)`;
                 $('#tomoStatusNotice').style.color = 'var(--green)';
               }
               await runTomo();
@@ -2148,19 +2308,29 @@
         }
 
         let tomoPlotMode = 'counts';
+        let tomoCurveMode = 'mle';
 
         function renderTomoPlotLegend() {
           const el = $('#tomoPlotLegend');
           if (!el) return;
-          const curves = tomoState.latestResult?.curves || [];
+          const curves = (tomoCurveMode === 'target' ? tomoState.latestResult?.target_curves : tomoState.latestResult?.curves) || [];
           const bases = curves.length ? curves.map(c => c.alice) : ['H', 'V', 'D', 'A'];
-          el.innerHTML = bases.map(b => {
+          const intens = (tomoState.latestResult?.intensity !== undefined && tomoState.latestResult?.intensity > 0) ? tomoState.latestResult.intensity : 200;
+          const curveLabel = tomoCurveMode === 'off' ? '(data only)' : (tomoCurveMode === 'target' ? '(target curve & data)' : '(fit curve & data)');
+          let html = bases.map(b => {
             const col = colors[b] || '#159447';
             return `<span class="key" style="margin-right:16px;font-size:11px;display:inline-flex;align-items:center;gap:6px;">
               <i class="swatch" style="background:${col};width:10px;height:10px;display:inline-block;border-radius:2px;"></i>
-              <strong>Alice = ${b}</strong> <span style="color:var(--muted);font-size:10px;">(fit curve & data)</span>
+              <strong>Alice = ${b}</strong> <span style="color:var(--muted);font-size:10px;">${curveLabel}</span>
             </span>`;
           }).join('');
+          if (tomoPlotMode === 'counts' && intens > 0) {
+            html += `<span class="key" style="margin-right:16px;font-size:11px;display:inline-flex;align-items:center;gap:6px;">
+              <span style="display:inline-block;width:18px;height:0;border-top:2px dashed #111;margin-bottom:1px;"></span>
+              <strong style="color:#111;">Intensity Scaling</strong> <span style="color:var(--muted);font-size:10px;">(drift I₀ = ${intens < 10 ? intens.toFixed(2) : intens.toFixed(1)})</span>
+            </span>`;
+          }
+          el.innerHTML = html;
         }
 
         function drawTomoPlot() {
@@ -2188,12 +2358,17 @@
 
           const xMin = -45, xMax = 45, xSpan = 90;
 
-          let curves = tomoState.latestResult?.curves || [];
+          let curves = [];
+          if (tomoCurveMode === 'mle') {
+            curves = tomoState.latestResult?.curves || [];
+          } else if (tomoCurveMode === 'target') {
+            curves = tomoState.latestResult?.target_curves || [];
+          }
           let angles = tomoState.latestResult?.angles || [];
           const intens = (tomoState.latestResult?.intensity !== undefined && tomoState.latestResult?.intensity > 0) ? tomoState.latestResult.intensity : 200;
 
-          // Default fallback curves for Bell state |Phi+> if MLE result curves not yet populated
-          if (!curves.length) {
+          // Default fallback curves for Bell state |Phi+> if curves not yet populated and not in 'off' mode
+          if (!curves.length && tomoCurveMode !== 'off') {
             angles = [];
             for (let deg = -45; deg <= 45; deg += 1) angles.push(deg);
             curves = [
@@ -2262,25 +2437,52 @@
             });
           }
 
+          // Precalculate orthogonal basis sums for Alice pair normalization in 'rate' mode
+          const alicePairNorm = {};
+          ['H', 'V', 'D', 'A', 'R', 'L'].forEach(aName => {
+            const bCounts = {};
+            (pointsByAlice[aName] || []).forEach(p => {
+              const cVal = useAcc ? p.pairCount : p.rawCount;
+              bCounts[p.bob] = cVal;
+            });
+            let basisSums = [];
+            if (bCounts['H'] !== undefined && bCounts['V'] !== undefined) basisSums.push(bCounts['H'] + bCounts['V']);
+            if (bCounts['D'] !== undefined && bCounts['A'] !== undefined) basisSums.push(bCounts['D'] + bCounts['A']);
+            if (bCounts['R'] !== undefined && bCounts['L'] !== undefined) basisSums.push(bCounts['R'] + bCounts['L']);
+            if (basisSums.length > 0) {
+              alicePairNorm[aName] = basisSums.reduce((a, b) => a + b, 0) / basisSums.length;
+            } else {
+              alicePairNorm[aName] = (intens > 0) ? intens * 0.5 : 100;
+            }
+            if (alicePairNorm[aName] <= 0) alicePairNorm[aName] = 100;
+          });
+
           // Determine Y scale
           let yMax = 1;
           if (tomoPlotMode === 'counts') {
             let maxVal = 10;
-            curves.forEach(c => {
-              if (c.counts) maxVal = Math.max(maxVal, ...c.counts);
-            });
+            if (tomoCurveMode !== 'off') {
+              curves.forEach(c => {
+                if (c.counts) maxVal = Math.max(maxVal, ...c.counts);
+              });
+            }
             Object.values(pointsByAlice).forEach(pts => {
               pts.forEach(p => {
                 const countVal = useAcc ? p.pairCount : p.rawCount;
                 maxVal = Math.max(maxVal, countVal + p.std);
               });
             });
+            if (intens > 0) {
+              maxVal = Math.max(maxVal, intens);
+            }
             yMax = Math.ceil(maxVal * 1.15 / 10) * 10 || 100;
           } else if (tomoPlotMode === 'prob') {
             let maxVal = 0.5;
-            curves.forEach(c => {
-              if (c.joint) maxVal = Math.max(maxVal, ...c.joint);
-            });
+            if (tomoCurveMode !== 'off') {
+              curves.forEach(c => {
+                if (c.joint) maxVal = Math.max(maxVal, ...c.joint);
+              });
+            }
             Object.values(pointsByAlice).forEach(pts => {
               pts.forEach(p => {
                 const countVal = useAcc ? p.pairCount : p.rawCount;
@@ -2346,7 +2548,7 @@
           // Axis titles
           ctx.fillStyle = '#596762';
           renderFormattedText(ctx, 'Bob polarization angle b (b = 2θ_b)', pad.l + pw / 2, 8, 'center', 'top');
-          renderFormattedText(ctx, 'Bob HWP rotation θ_b', pad.l + pw / 2, h - 16, 'center', 'top');
+          renderFormattedText(ctx, 'Bob analyzer HWP angle θ_b (Bob QWP fixed at φ_b = 0°)', pad.l + pw / 2, h - 16, 'center', 'top');
 
           ctx.save();
           ctx.translate(15, pad.t + ph / 2);
@@ -2387,8 +2589,8 @@
           ctx.rect(pad.l, pad.t, pw, ph);
           ctx.clip();
 
-          // 1. Draw smooth fitted curves for each Alice basis
-          if (curves.length && angles.length) {
+          // 1. Draw smooth fitted curves for each Alice basis (if not disabled)
+          if (tomoCurveMode !== 'off' && curves.length && angles.length) {
             curves.forEach(curve => {
               const aName = curve.alice;
               const cColor = colors[aName] || '#159447';
@@ -2427,8 +2629,8 @@
                 yVal = intens > 0 ? countVal / intens : 0;
                 yErr = intens > 0 ? p.std / intens : 0;
               } else {
-                // Rate: normalize by singles A (or intens * 0.5 if sA is 0)
-                const norm = p.sA > 0 ? p.sA : (intens > 0 ? intens * 0.5 : 100);
+                // Rate: conditional probability P(Bob | Alice) normalized by Alice coincidence pair sum
+                const norm = alicePairNorm[aName] || (intens > 0 ? intens * 0.5 : 100);
                 yVal = countVal / norm;
                 yErr = p.std / norm;
               }
@@ -2463,34 +2665,463 @@
             });
           });
 
+          // 3. Draw black dashed line showing drift correction intensity scaling (counts mode only)
+          if (tomoPlotMode === 'counts' && intens > 0) {
+            const yLine = pad.t + ph * (1 - Math.max(0, Math.min(yMax, intens)) / yMax);
+            ctx.save();
+            ctx.setLineDash([5, 4]);
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(pad.l, yLine);
+            ctx.lineTo(pad.l + pw, yLine);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+            ctx.font = 'bold 10px ui-monospace,monospace';
+            ctx.fillStyle = '#111111';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(`Intensity Scaling I₀ = ${intens < 10 ? intens.toFixed(2) : intens.toFixed(1)}`, pad.l + pw - 4, yLine - 3);
+            ctx.restore();
+          }
+
           ctx.restore();
           renderTomoPlotLegend();
+          if (window.drawTomoPlotQwp) {
+            window.drawTomoPlotQwp();
+          }
+        }
+
+        function renderTomoPlotQwpLegend() {}
+
+        function drawTomoPlotQwp() {
+          const section = $('#tomoPlotQwpSection');
+          if (tomoState.n_qubits !== 2) {
+            if (section) section.style.display = 'none';
+            return;
+          }
+          if (section) section.style.display = 'block';
+
+          const canvas = $('#tomoPlotQwp');
+          if (!canvas) return;
+          const rect = canvas.getBoundingClientRect();
+          if (rect.width < 10 || rect.height < 10) return;
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.round(rect.width * dpr);
+          canvas.height = Math.round(rect.height * dpr);
+          const ctx = canvas.getContext('2d');
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+          const w = rect.width, h = rect.height;
+          const pad = { l: 64, r: 24, t: 46, b: 64 };
+          const pw = w - pad.l - pad.r;
+          const ph = h - pad.t - pad.b;
+
+          const xMin = -45, xMax = 45, xSpan = 90;
+
+          let curves = [];
+          if (tomoCurveMode === 'mle') {
+            curves = tomoState.latestResult?.curves_qwp_scan || [];
+          } else if (tomoCurveMode === 'target') {
+            curves = tomoState.latestResult?.target_curves_qwp_scan || tomoState.latestResult?.curves_qwp_scan || [];
+          }
+          let angles = tomoState.latestResult?.angles || [];
+          const intens = (tomoState.latestResult?.intensity !== undefined && tomoState.latestResult?.intensity > 0) ? tomoState.latestResult.intensity : 200;
+
+          // Default fallback curves for Bell state |Phi+> if result curves not yet populated and not in 'off' mode
+          if (!curves.length && tomoCurveMode !== 'off') {
+            angles = [];
+            for (let deg = -45; deg <= 45; deg += 1) angles.push(deg);
+            curves = [
+              {
+                alice: 'R',
+                counts: angles.map(th => intens * 0.25 * (1 - Math.sin(2 * th * Math.PI / 180))),
+                joint: angles.map(th => 0.25 * (1 - Math.sin(2 * th * Math.PI / 180))),
+                conditional: angles.map(th => 0.5 * (1 - Math.sin(2 * th * Math.PI / 180))),
+              },
+              {
+                alice: 'L',
+                counts: angles.map(th => intens * 0.25 * (1 + Math.sin(2 * th * Math.PI / 180))),
+                joint: angles.map(th => 0.25 * (1 + Math.sin(2 * th * Math.PI / 180))),
+                conditional: angles.map(th => 0.5 * (1 + Math.sin(2 * th * Math.PI / 180))),
+              },
+              {
+                alice: 'H',
+                counts: angles.map(th => intens * 0.125 * (3 + Math.cos(4 * th * Math.PI / 180))),
+                joint: angles.map(th => 0.125 * (3 + Math.cos(4 * th * Math.PI / 180))),
+                conditional: angles.map(th => 0.25 * (3 + Math.cos(4 * th * Math.PI / 180))),
+              },
+              {
+                alice: 'V',
+                counts: angles.map(th => intens * 0.0625 * (1 - Math.cos(4 * th * Math.PI / 180))),
+                joint: angles.map(th => 0.0625 * (1 - Math.cos(4 * th * Math.PI / 180))),
+                conditional: angles.map(th => 0.125 * (1 - Math.cos(4 * th * Math.PI / 180))),
+              },
+              {
+                alice: 'D',
+                counts: angles.map(() => intens * 0.25),
+                joint: angles.map(() => 0.25),
+                conditional: angles.map(() => 0.5),
+              },
+              {
+                alice: 'A',
+                counts: angles.map(() => intens * 0.25),
+                joint: angles.map(() => 0.25),
+                conditional: angles.map(() => 0.5),
+              },
+            ];
+          }
+
+          // Points mapping for Bob analyzer: fixed HWP theta_b = 0°, scanning QWP angle phi_b
+          // phi_b = -45° measures L; phi_b = 0° measures H; phi_b = +45° measures R
+          const bobAngleMapQwp = { 'L': [-45], 'H': [0], 'R': [45] };
+
+          const pointsByAlice = { 'H': [], 'V': [], 'D': [], 'A': [], 'R': [], 'L': [] };
+
+          const winNs = Number($('#tomoWindowNs')?.value) || 10;
+          const deltaT = winNs * 1e-9;
+          const useAcc = $('#tomoAccidentals')?.checked;
+
+          if (tomoState.data?.data) {
+            tomoState.data.data.forEach((row, idx) => {
+              const bA = (row.basis && row.basis[0]) || 'H';
+              const bB = (row.basis && row.basis[1]) || 'H';
+              if (!pointsByAlice[bA] || !bobAngleMapQwp[bB]) return;
+
+              const counts = row.counts || [0, 0, 0];
+              const sA = counts[0] || 0;
+              const sB = counts[1] || 0;
+              const rawC = counts[2] !== undefined ? counts[2] : (counts[0] || 0);
+              const time = Math.max(0.001, Number(row.integration_time) || 1);
+              const nAcc = (sA * sB / time) * deltaT;
+              const pairC = Math.max(0, rawC - nAcc);
+              const std = (row.stds && row.stds[0] !== undefined) ? Number(row.stds[0]) : Math.sqrt(rawC);
+
+              bobAngleMapQwp[bB].forEach(theta => {
+                pointsByAlice[bA].push({
+                  theta,
+                  rawCount: rawC,
+                  pairCount: pairC,
+                  std: std,
+                  sA: sA,
+                  sB: sB,
+                  bob: bB,
+                  rowIdx: idx
+                });
+              });
+            });
+          }
+
+          // Determine Y scale
+          let yMax = 1;
+          if (tomoPlotMode === 'counts') {
+            let maxVal = 10;
+            if (tomoCurveMode !== 'off') {
+              curves.forEach(c => {
+                if (c.counts) maxVal = Math.max(maxVal, ...c.counts);
+              });
+            }
+            Object.values(pointsByAlice).forEach(pts => {
+              pts.forEach(p => {
+                const countVal = useAcc ? p.pairCount : p.rawCount;
+                maxVal = Math.max(maxVal, countVal + p.std);
+              });
+            });
+            yMax = Math.ceil(maxVal * 1.15 / 10) * 10 || 100;
+          } else if (tomoPlotMode === 'prob') {
+            let maxVal = 0.5;
+            if (tomoCurveMode !== 'off') {
+              curves.forEach(c => {
+                if (c.joint) maxVal = Math.max(maxVal, ...c.joint);
+              });
+            }
+            Object.values(pointsByAlice).forEach(pts => {
+              pts.forEach(p => {
+                const countVal = useAcc ? p.pairCount : p.rawCount;
+                const val = intens > 0 ? (countVal + p.std) / intens : 0;
+                maxVal = Math.max(maxVal, val);
+              });
+            });
+            yMax = Math.min(1.0, Math.max(0.5, Math.ceil(maxVal * 10) / 10));
+          } else {
+            yMax = 1.0;
+          }
+
+          ctx.clearRect(0, 0, w, h);
+          ctx.font = '11px -apple-system,BlinkMacSystemFont,sans-serif';
+          ctx.strokeStyle = '#e5eae6';
+          ctx.fillStyle = '#71807b';
+
+          // Y-axis grid & labels
+          const yTicks = 5;
+          for (let i = 0; i <= yTicks; i++) {
+            const frac = i / yTicks;
+            const yVal = frac * yMax;
+            const y = pad.t + ph * (1 - frac);
+            ctx.beginPath();
+            ctx.moveTo(pad.l, y);
+            ctx.lineTo(w - pad.r, y);
+            ctx.stroke();
+
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            let label = '';
+            if (tomoPlotMode === 'counts') {
+              label = Math.round(yVal).toLocaleString();
+            } else if (tomoPlotMode === 'prob') {
+              label = (yVal * 100).toFixed(0) + '%';
+            } else {
+              label = (frac * 100).toFixed(0) + '%';
+            }
+            ctx.fillText(label, pad.l - 8, y);
+          }
+
+          // X-axis ticks
+          const xTicks = 8;
+          for (let i = 0; i <= xTicks; i++) {
+            const thetaVal = xMin + xSpan * (i / xTicks);
+            const x = pad.l + pw * (i / xTicks);
+            ctx.strokeStyle = '#aeb9b3';
+            ctx.beginPath();
+            ctx.moveTo(x, pad.t + ph);
+            ctx.lineTo(x, pad.t + ph + 4);
+            ctx.stroke();
+
+            ctx.fillStyle = '#71807b';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(thetaVal.toFixed(1).replace('.0','') + '°', x, pad.t + ph + 7);
+
+            const bVal = thetaVal * 2;
+            ctx.fillText(bVal.toFixed(0) + '°', x, pad.t - 18);
+          }
+
+          // Axis titles
+          ctx.fillStyle = '#596762';
+          renderFormattedText(ctx, 'Bob QWP optical axis angle 2φ_b', pad.l + pw / 2, 8, 'center', 'top');
+          renderFormattedText(ctx, 'Bob analyzer QWP angle φ_b (Bob HWP fixed at θ_b = 0°)', pad.l + pw / 2, h - 16, 'center', 'top');
+
+          ctx.save();
+          ctx.translate(15, pad.t + ph / 2);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillStyle = '#596762';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const yAxisTitle = tomoPlotMode === 'counts'
+            ? (useAcc ? 'Pair coincidence counts (accidental corrected)' : 'Raw coincidence counts per setting')
+            : (tomoPlotMode === 'prob' ? 'Joint probability per pair P(Alice, Bob)' : 'Conditional coincidence rate P(Bob | Alice)');
+          ctx.fillText(yAxisTitle, 0, 0);
+          ctx.restore();
+
+          // Standard Bob basis guides: L at -45°, H at 0°, R at +45°
+          const guideColors = { 'H': '#1769aa', 'D': '#159447', 'A': '#c99500', 'V': '#d62728', 'R': '#8e24aa', 'L': '#607d8b' };
+          const guides = [[-45, 'L'], [0, 'H'], [45, 'R']];
+
+          guides.forEach(([val, lbl]) => {
+            const x = pad.l + pw * (val - xMin) / xSpan;
+            const color = guideColors[lbl] || '#71807b';
+            ctx.save();
+            ctx.setLineDash([3, 4]);
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x, pad.t);
+            ctx.lineTo(x, pad.t + ph);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = color;
+            ctx.font = 'bold 11px -apple-system,BlinkMacSystemFont,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(lbl, x, pad.t + ph + 22);
+            ctx.restore();
+          });
+
+          // Clip plot canvas
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(pad.l, pad.t, pw, ph);
+          ctx.clip();
+
+          // 1. Draw smooth fitted curves for each Alice basis (if not disabled)
+          if (tomoCurveMode !== 'off' && curves.length && angles.length) {
+            curves.forEach(curve => {
+              const aName = curve.alice;
+              const cColor = colors[aName] || '#159447';
+              let curveVals = [];
+              if (tomoPlotMode === 'counts') curveVals = curve.counts;
+              else if (tomoPlotMode === 'prob') curveVals = curve.joint;
+              else curveVals = curve.conditional;
+
+              if (!curveVals || !curveVals.length) return;
+
+              ctx.beginPath();
+              ctx.strokeStyle = cColor;
+              ctx.lineWidth = 2.4;
+              curveVals.forEach((val, i) => {
+                const x = pad.l + pw * (angles[i] - xMin) / xSpan;
+                const y = pad.t + ph * (1 - Math.max(0, Math.min(yMax, val)) / yMax);
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+              });
+              ctx.stroke();
+            });
+          }
+
+          // Precalculate orthogonal basis sums for Alice pair normalization in 'rate' mode across all dataset measurements
+          const alicePairNormQwp = {};
+          const aliceOrder = ['H', 'V', 'D', 'A', 'R', 'L'];
+          aliceOrder.forEach(aName => {
+            const bCounts = {};
+            if (tomoState.data?.data) {
+              tomoState.data.data.forEach(row => {
+                const bA = (row.basis && row.basis[0]) || 'H';
+                const bB = (row.basis && row.basis[1]) || 'H';
+                if (bA === aName) {
+                  const counts = row.counts || [0, 0, 0];
+                  const sA = counts[0] || 0, sB = counts[1] || 0, rawC = counts[2] !== undefined ? counts[2] : (counts[0] || 0);
+                  const time = Math.max(0.001, Number(row.integration_time) || 1);
+                  const nAcc = (sA * sB / time) * deltaT;
+                  bCounts[bB] = useAcc ? Math.max(0, rawC - nAcc) : rawC;
+                }
+              });
+            }
+            let basisSums = [];
+            if (bCounts['H'] !== undefined && bCounts['V'] !== undefined) basisSums.push(bCounts['H'] + bCounts['V']);
+            if (bCounts['D'] !== undefined && bCounts['A'] !== undefined) basisSums.push(bCounts['D'] + bCounts['A']);
+            if (bCounts['R'] !== undefined && bCounts['L'] !== undefined) basisSums.push(bCounts['R'] + bCounts['L']);
+            if (basisSums.length > 0) {
+              alicePairNormQwp[aName] = basisSums.reduce((a, b) => a + b, 0) / basisSums.length;
+            } else {
+              alicePairNormQwp[aName] = (intens > 0) ? intens * 0.5 : 100;
+            }
+            if (alicePairNormQwp[aName] <= 0) alicePairNormQwp[aName] = 100;
+          });
+
+          // 2. Draw measured data points with error bars (±σ)
+          aliceOrder.forEach(aName => {
+            const pts = pointsByAlice[aName] || [];
+            const cColor = colors[aName] || '#159447';
+
+            pts.forEach(p => {
+              const countVal = useAcc ? p.pairCount : p.rawCount;
+              let yVal = 0, yErr = 0;
+              if (tomoPlotMode === 'counts') {
+                yVal = countVal;
+                yErr = p.std;
+              } else if (tomoPlotMode === 'prob') {
+                yVal = intens > 0 ? countVal / intens : 0;
+                yErr = intens > 0 ? p.std / intens : 0;
+              } else {
+                // Rate: conditional probability P(Bob | Alice) normalized by Alice coincidence pair sum
+                const norm = alicePairNormQwp[aName] || (intens > 0 ? intens * 0.5 : 100);
+                yVal = countVal / norm;
+                yErr = p.std / norm;
+              }
+
+              const x = pad.l + pw * (p.theta - xMin) / xSpan;
+              const y = pad.t + ph * (1 - Math.max(0, Math.min(yMax, yVal)) / yMax);
+              const yTop = pad.t + ph * (1 - Math.max(0, Math.min(yMax, yVal + yErr)) / yMax);
+              const yBottom = pad.t + ph * (1 - Math.max(0, Math.min(yMax, yVal - yErr)) / yMax);
+
+              // Error bar whisker
+              ctx.beginPath();
+              ctx.strokeStyle = cColor;
+              ctx.lineWidth = 1.6;
+              ctx.moveTo(x, yTop);
+              ctx.lineTo(x, yBottom);
+              ctx.moveTo(x - 3.5, yTop);
+              ctx.lineTo(x + 3.5, yTop);
+              ctx.moveTo(x - 3.5, yBottom);
+              ctx.lineTo(x + 3.5, yBottom);
+              ctx.stroke();
+
+              // Point circle marker
+              ctx.beginPath();
+              ctx.arc(x, y, 4.5, 0, 2 * Math.PI);
+              ctx.fillStyle = cColor;
+              ctx.fill();
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            });
+          });
+
+          ctx.restore();
+        }
+        window.drawTomoPlotQwp = drawTomoPlotQwp;
+
+        function fmtUnc(val, std, errMinus, errPlus, ci, digits = 4) {
+          if (val === null || val === undefined || isNaN(val)) return '—';
+          const valStr = val.toFixed(digits);
+
+          // If asymmetric percentile errors are provided
+          if (errMinus !== undefined && errMinus !== null && errPlus !== undefined && errPlus !== null) {
+            const mStr = errMinus.toFixed(digits);
+            const pStr = errPlus.toFixed(digits);
+            const ciTip = ci && ci.length === 2
+              ? `68.3% Credible Interval: [${ci[0].toFixed(digits)}, ${ci[1].toFixed(digits)}]`
+              : '';
+
+            // If completely symmetric, display ±
+            if (Math.abs(errMinus - errPlus) < 0.0001 && errMinus > 0) {
+              return `<span title="${ciTip}">${valStr} ± ${mStr}</span>`;
+            }
+
+            // Standard scientific stacked asymmetric super/subscript
+            return `<span style="display:inline-flex;align-items:center;" title="${ciTip}">
+              <span>${valStr}</span>
+              <span style="display:inline-flex;flex-direction:column;font-size:10px;line-height:1.05;margin-left:4px;vertical-align:middle;font-weight:600;">
+                <span style="color:#2e7d32;">+${pStr}</span>
+                <span style="color:#c62828;">-${mStr}</span>
+              </span>
+            </span>`;
+          }
+
+          // Fallback to symmetric std
+          if (std !== null && std !== undefined && !isNaN(std) && std > 0) {
+            return `${valStr} ± ${std.toFixed(digits)}`;
+          }
+          return valStr;
         }
 
         function renderTomoResults(res) {
-          if ($('#mFidelity')) $('#mFidelity').textContent = res.fidelity !== null ? res.fidelity.toFixed(4) : '—';
+          if ($('#mFidelity')) $('#mFidelity').innerHTML = fmtUnc(res.fidelity, res.fidelity_std, res.fidelity_err_minus, res.fidelity_err_plus, res.fidelity_ci, 4);
           if ($('#mFidelityTarget')) {
-            const tName = tomoState.targetIsBell ? 'Bell |ψ⟩' : (res.target_state ? `vs ${res.target_state}` : 'vs target');
+            let tName = tomoState.targetIsBell ? 'Bell |ψ⟩' : (res.target_state ? `vs ${res.target_state}` : 'vs target');
+            if (res.fidelity_ci && res.fidelity_ci.length === 2) {
+              tName += ` · CI [${res.fidelity_ci[0].toFixed(3)}, ${res.fidelity_ci[1].toFixed(3)}]`;
+            }
             $('#mFidelityTarget').textContent = tName;
           }
-          if ($('#mPurity')) $('#mPurity').textContent = res.purity !== null ? res.purity.toFixed(4) : '—';
+          if ($('#mPurity')) $('#mPurity').innerHTML = fmtUnc(res.purity, res.purity_std, res.purity_err_minus, res.purity_err_plus, res.purity_ci, 4);
+          if ($('#mPuritySub')) {
+            const ciStr = res.purity_ci ? ` · CI [${res.purity_ci[0].toFixed(3)}, ${res.purity_ci[1].toFixed(3)}]` : '';
+            $('#mPuritySub').textContent = `1.0 = pure state${ciStr}`;
+          }
 
           if ($('#mEntanglement')) {
             if (res.concurrence !== null) {
-              $('#mEntanglement').textContent = `${res.concurrence.toFixed(4)} / ${res.tangle.toFixed(4)}`;
-              $('#mEntanglementSub').textContent = 'C / Tangle';
+              $('#mEntanglement').innerHTML = fmtUnc(res.concurrence, res.concurrence_std, res.concurrence_err_minus, res.concurrence_err_plus, res.concurrence_ci, 4);
+              const ciStr = res.concurrence_ci ? ` · CI [${res.concurrence_ci[0].toFixed(3)}, ${res.concurrence_ci[1].toFixed(3)}]` : '';
+              $('#mEntanglementSub').textContent = `C ∈ [0, 1]${ciStr}`;
             } else {
               $('#mEntanglement').textContent = 'N/A';
               $('#mEntanglementSub').textContent = 'Single Qubit';
             }
           }
 
-          if ($('#mEntropy')) $('#mEntropy').textContent = res.entropy !== null ? res.entropy.toFixed(4) : '—';
+          if ($('#mEntropy')) $('#mEntropy').innerHTML = fmtUnc(res.entropy, res.entropy_std, res.entropy_err_minus, res.entropy_err_plus, res.entropy_ci, 4);
+          if ($('#mEntropySub')) {
+            const ciStr = res.entropy_ci ? ` · CI [${res.entropy_ci[0].toFixed(3)}, ${res.entropy_ci[1].toFixed(3)}]` : '';
+            $('#mEntropySub').textContent = `S = -Tr(ρ ln ρ)${ciStr}`;
+          }
           if ($('#mFval')) $('#mFval').textContent = res.fval !== null ? res.fval.toFixed(3) : '—';
           if ($('#mFvalSub')) $('#mFvalSub').textContent = `fval (N=${res.n_measurements})`;
 
+          tomoLastMatrix = res.density_matrix;
           renderMatrixTable($('#tomoRealHeatmap'), res.density_matrix.labels, res.density_matrix.real);
           renderMatrixTable($('#tomoImagHeatmap'), res.density_matrix.labels, res.density_matrix.imag);
+          draw3dHistograms();
 
           const bellSec = $('#tomoBellSettingsSection');
           const bellWrap = $('#tomoBellTableWrap');
@@ -2507,6 +3138,391 @@
               bellSec.style.display = 'none';
             }
           }
+        }
+
+        let tomoLastMatrix = null;
+        let tomo3dState = {
+          yaw: -38,
+          pitch: 28,
+          zoom: 1.0,
+          dragging: false,
+          activeCanvas: null,
+          lastX: 0,
+          lastY: 0,
+          hovered: null,
+        };
+
+        function draw3dDensityMatrix(canvasId, tooltipId, labels, mat, isImag) {
+          const canvas = $('#' + canvasId);
+          const tooltip = $('#' + tooltipId);
+          if (!canvas || !labels || !mat) return;
+          const rect = canvas.getBoundingClientRect();
+          if (rect.width < 10 || rect.height < 10) return;
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.round(rect.width * dpr);
+          canvas.height = Math.round(rect.height * dpr);
+          const ctx = canvas.getContext('2d');
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+          const w = rect.width;
+          const h = rect.height;
+          ctx.clearRect(0, 0, w, h);
+
+          const N = labels.length;
+          const cx = w / 2;
+          const cy = h / 2 + 15;
+
+          const yawRad = (tomo3dState.yaw * Math.PI) / 180;
+          const pitchRad = (tomo3dState.pitch * Math.PI) / 180;
+          const cosY = Math.cos(yawRad), sinY = Math.sin(yawRad);
+          const cosP = Math.cos(pitchRad), sinP = Math.sin(pitchRad);
+
+          // S is cell dimension in screen space
+          const S = (Math.min(w * 0.62, h * 0.62) * tomo3dState.zoom) / N;
+          const H = S * N * 0.58;
+          const bw = S * 0.72;
+          const hbw = bw / 2;
+
+          function project(x, y, z) {
+            const x1 = x * cosY - y * sinY;
+            const y1 = x * sinY + y * cosY;
+            const z1 = z;
+            const x2 = x1;
+            const y2 = y1 * sinP - z1 * cosP;
+            const depth = y1 * cosP + z1 * sinP;
+            return { x: cx + x2, y: cy + y2, depth: depth };
+          }
+
+          // 1. Ground Plane Floor
+          const halfGrid = (N * S) / 2;
+          const gc0 = project(-halfGrid, -halfGrid, 0);
+          const gc1 = project(halfGrid, -halfGrid, 0);
+          const gc2 = project(halfGrid, halfGrid, 0);
+          const gc3 = project(-halfGrid, halfGrid, 0);
+
+          ctx.beginPath();
+          ctx.moveTo(gc0.x, gc0.y);
+          ctx.lineTo(gc1.x, gc1.y);
+          ctx.lineTo(gc2.x, gc2.y);
+          ctx.lineTo(gc3.x, gc3.y);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(241, 245, 249, 0.75)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(203, 213, 225, 0.85)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // Ground interior grid lines
+          ctx.strokeStyle = 'rgba(203, 213, 225, 0.5)';
+          ctx.lineWidth = 0.8;
+          for (let i = 0; i <= N; i++) {
+            const p1 = project(-halfGrid + i * S, -halfGrid, 0);
+            const p2 = project(-halfGrid + i * S, halfGrid, 0);
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+
+            const q1 = project(-halfGrid, -halfGrid + i * S, 0);
+            const q2 = project(halfGrid, -halfGrid + i * S, 0);
+            ctx.beginPath();
+            ctx.moveTo(q1.x, q1.y);
+            ctx.lineTo(q2.x, q2.y);
+            ctx.stroke();
+          }
+
+          // 2. Axis Labels on Ground
+          ctx.font = 'bold 10px ui-monospace, monospace';
+          ctx.fillStyle = '#475569';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+
+          for (let i = 0; i < N; i++) {
+            const xCoord = -halfGrid + (i + 0.5) * S;
+            const lpRow = project(xCoord, halfGrid + S * 0.32, 0);
+            ctx.fillText(labels[i], lpRow.x, lpRow.y);
+
+            const lpCol = project(-halfGrid - S * 0.32, xCoord, 0);
+            ctx.fillText(labels[i], lpCol.x, lpCol.y);
+          }
+
+          // 3. Vertical Ruler (Z Axis) at corner (-halfGrid, -halfGrid)
+          const zZeroPt = project(-halfGrid, -halfGrid, 0);
+          const zMaxPt = project(-halfGrid, -halfGrid, H);
+
+          ctx.strokeStyle = '#94a3b8';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(zZeroPt.x, zZeroPt.y);
+          ctx.lineTo(zMaxPt.x, zMaxPt.y);
+          ctx.stroke();
+
+          ctx.font = '9px ui-monospace, monospace';
+          ctx.fillStyle = '#64748b';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          [
+            { z: 0, text: '0.0' },
+            { z: H * 0.5, text: '0.5' },
+            { z: H, text: '1.0' },
+          ].forEach(t => {
+            const pt = project(-halfGrid, -halfGrid, t.z);
+            ctx.beginPath();
+            ctx.moveTo(pt.x - 3, pt.y);
+            ctx.lineTo(pt.x, pt.y);
+            ctx.stroke();
+            ctx.fillText(t.text, pt.x - 5, pt.y);
+          });
+
+          // Check if negative values exist
+          let hasNegative = false;
+          for (let r = 0; r < N; r++) {
+            for (let c = 0; c < N; c++) {
+              if (mat[r][c] < -0.01) { hasNegative = true; break; }
+            }
+          }
+          if (hasNegative) {
+            const zNegPt = project(-halfGrid, -halfGrid, -H * 0.5);
+            ctx.beginPath();
+            ctx.moveTo(zZeroPt.x, zZeroPt.y);
+            ctx.lineTo(zNegPt.x, zNegPt.y);
+            ctx.stroke();
+            ctx.fillText('-0.5', zNegPt.x - 5, zNegPt.y);
+          }
+
+          // 4. Construct 3D Bars & Faces
+          const faces = [];
+          const barCenters = [];
+
+          for (let r = 0; r < N; r++) {
+            for (let c = 0; c < N; c++) {
+              const val = mat[r][c];
+              const xc = -halfGrid + (r + 0.5) * S;
+              const yc = -halfGrid + (c + 0.5) * S;
+              const isHovered = (tomo3dState.hovered && tomo3dState.hovered.canvasId === canvasId && tomo3dState.hovered.r === r && tomo3dState.hovered.c === c);
+
+              if (Math.abs(val) < 0.005) {
+                const p0 = project(xc - hbw, yc - hbw, 0);
+                const p1 = project(xc + hbw, yc - hbw, 0);
+                const p2 = project(xc + hbw, yc + hbw, 0);
+                const p3 = project(xc - hbw, yc + hbw, 0);
+                const depth = (p0.depth + p1.depth + p2.depth + p3.depth) / 4;
+                faces.push({
+                  poly: [p0, p1, p2, p3],
+                  depth: depth,
+                  fill: isHovered ? 'rgba(203, 213, 225, 0.85)' : 'rgba(226, 232, 240, 0.45)',
+                  stroke: isHovered ? '#475569' : 'rgba(148, 163, 184, 0.45)',
+                  isHovered,
+                });
+                barCenters.push({ r, c, val, x: (p0.x + p2.x) / 2, y: (p0.y + p2.y) / 2 });
+                continue;
+              }
+
+              const zHeight = val * H;
+              const z0 = val > 0 ? 0 : zHeight;
+              const z1 = val > 0 ? zHeight : 0;
+
+              const b0 = project(xc - hbw, yc - hbw, z0);
+              const b1 = project(xc + hbw, yc - hbw, z0);
+              const b2 = project(xc + hbw, yc + hbw, z0);
+              const b3 = project(xc - hbw, yc + hbw, z0);
+
+              const t0 = project(xc - hbw, yc - hbw, z1);
+              const t1 = project(xc + hbw, yc - hbw, z1);
+              const t2 = project(xc + hbw, yc + hbw, z1);
+              const t3 = project(xc - hbw, yc + hbw, z1);
+
+              const topCenter = {
+                x: (t0.x + t1.x + t2.x + t3.x) / 4,
+                y: (t0.y + t1.y + t2.y + t3.y) / 4,
+                r, c, val,
+              };
+              barCenters.push(topCenter);
+
+              let colorTop, colorFront, colorSide, strokeColor;
+              if (!isImag) {
+                if (val >= 0) {
+                  colorTop   = isHovered ? '#6ee7b7' : '#10b981';
+                  colorFront = isHovered ? '#34d399' : '#059669';
+                  colorSide  = isHovered ? '#059669' : '#047857';
+                  strokeColor = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
+                } else {
+                  colorTop   = isHovered ? '#fca5a5' : '#ef4444';
+                  colorFront = isHovered ? '#f87171' : '#dc2626';
+                  colorSide  = isHovered ? '#dc2626' : '#b91c1c';
+                  strokeColor = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
+                }
+              } else {
+                if (val >= 0) {
+                  colorTop   = isHovered ? '#c4b5fd' : '#8b5cf6';
+                  colorFront = isHovered ? '#a78bfa' : '#7c3aed';
+                  colorSide  = isHovered ? '#7c3aed' : '#6d28d9';
+                  strokeColor = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
+                } else {
+                  colorTop   = isHovered ? '#fcd34d' : '#f59e0b';
+                  colorFront = isHovered ? '#fbbf24' : '#d97706';
+                  colorSide  = isHovered ? '#d97706' : '#b45309';
+                  strokeColor = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.45)';
+                }
+              }
+
+              // Top face
+              faces.push({
+                poly: [t0, t1, t2, t3],
+                depth: (t0.depth + t1.depth + t2.depth + t3.depth) / 4,
+                fill: colorTop,
+                stroke: strokeColor,
+                isHovered,
+              });
+
+              // Side 0 (X min)
+              faces.push({
+                poly: [b0, b3, t3, t0],
+                depth: (b0.depth + b3.depth + t3.depth + t0.depth) / 4,
+                fill: colorSide,
+                stroke: strokeColor,
+                isHovered,
+              });
+
+              // Side 1 (X max)
+              faces.push({
+                poly: [b1, b2, t2, t1],
+                depth: (b1.depth + b2.depth + t2.depth + t1.depth) / 4,
+                fill: colorFront,
+                stroke: strokeColor,
+                isHovered,
+              });
+
+              // Side 2 (Y min)
+              faces.push({
+                poly: [b0, b1, t1, t0],
+                depth: (b0.depth + b1.depth + t1.depth + t0.depth) / 4,
+                fill: colorFront,
+                stroke: strokeColor,
+                isHovered,
+              });
+
+              // Side 3 (Y max)
+              faces.push({
+                poly: [b3, b2, t2, t3],
+                depth: (b3.depth + b2.depth + t2.depth + t3.depth) / 4,
+                fill: colorSide,
+                stroke: strokeColor,
+                isHovered,
+              });
+            }
+          }
+
+          // 5. Painter's Sorting (Lowest depth / furthest to highest depth / nearest)
+          faces.sort((a, b) => a.depth - b.depth);
+
+          for (const f of faces) {
+            ctx.beginPath();
+            ctx.moveTo(f.poly[0].x, f.poly[0].y);
+            for (let i = 1; i < f.poly.length; i++) ctx.lineTo(f.poly[i].x, f.poly[i].y);
+            ctx.closePath();
+            ctx.fillStyle = f.fill;
+            ctx.fill();
+            ctx.strokeStyle = f.stroke || 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = f.isHovered ? 1.6 : 0.8;
+            ctx.stroke();
+          }
+
+          canvas._barCenters = barCenters;
+        }
+
+        function draw3dHistograms() {
+          if (!tomoLastMatrix) return;
+          draw3dDensityMatrix('tomo3dReal', 'tomo3dRealTooltip', tomoLastMatrix.labels, tomoLastMatrix.real, false);
+          draw3dDensityMatrix('tomo3dImag', 'tomo3dImagTooltip', tomoLastMatrix.labels, tomoLastMatrix.imag, true);
+        }
+
+        function setup3dCanvasInteraction(canvasId, tooltipId, isImag) {
+          const canvas = $('#' + canvasId);
+          const tooltip = $('#' + tooltipId);
+          if (!canvas) return;
+
+          canvas.addEventListener('mousedown', e => {
+            tomo3dState.dragging = true;
+            tomo3dState.activeCanvas = canvasId;
+            tomo3dState.lastX = e.clientX;
+            tomo3dState.lastY = e.clientY;
+            canvas.style.cursor = 'grabbing';
+            if (tooltip) tooltip.style.display = 'none';
+          });
+
+          window.addEventListener('mouseup', () => {
+            if (tomo3dState.dragging) {
+              tomo3dState.dragging = false;
+              if (canvas) canvas.style.cursor = 'grab';
+            }
+          });
+
+          canvas.addEventListener('mousemove', e => {
+            if (tomo3dState.dragging) {
+              const dx = e.clientX - tomo3dState.lastX;
+              const dy = e.clientY - tomo3dState.lastY;
+              tomo3dState.lastX = e.clientX;
+              tomo3dState.lastY = e.clientY;
+              tomo3dState.yaw += dx * 0.55;
+              tomo3dState.pitch = Math.max(-82, Math.min(82, tomo3dState.pitch + dy * 0.55));
+              draw3dHistograms();
+              return;
+            }
+
+            // Hover detection
+            if (!canvas._barCenters || !tomoLastMatrix) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            let closest = null;
+            let minDist = 26; // pixels
+
+            for (const b of canvas._barCenters) {
+              const dist = Math.hypot(b.x - mouseX, b.y - mouseY);
+              if (dist < minDist) {
+                minDist = dist;
+                closest = b;
+              }
+            }
+
+            if (closest) {
+              tomo3dState.hovered = { canvasId, r: closest.r, c: closest.c };
+              draw3dHistograms();
+              if (tooltip) {
+                const partLabel = isImag ? 'Im(ρ)' : 'Re(ρ)';
+                const labelR = tomoLastMatrix.labels[closest.r];
+                const labelC = tomoLastMatrix.labels[closest.c];
+                const sign = closest.val >= 0 ? '+' : '';
+                tooltip.innerHTML = `<div style="font-size:10px;color:#94a3b8;font-weight:600;margin-bottom:2px;">${partLabel}[${labelR}, ${labelC}]</div><div style="font-size:13px;font-weight:700;color:#fff;">${sign}${closest.val.toFixed(4)}</div>`;
+                tooltip.style.left = `${Math.min(rect.width - 130, Math.max(10, mouseX + 12))}px`;
+                tooltip.style.top = `${Math.min(rect.height - 50, Math.max(10, mouseY - 25))}px`;
+                tooltip.style.display = 'block';
+              }
+            } else {
+              if (tomo3dState.hovered && tomo3dState.hovered.canvasId === canvasId) {
+                tomo3dState.hovered = null;
+                draw3dHistograms();
+              }
+              if (tooltip) tooltip.style.display = 'none';
+            }
+          });
+
+          canvas.addEventListener('mouseleave', () => {
+            if (tomo3dState.hovered && tomo3dState.hovered.canvasId === canvasId) {
+              tomo3dState.hovered = null;
+              draw3dHistograms();
+            }
+            if (tooltip) tooltip.style.display = 'none';
+          });
+
+          canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const zoomDelta = e.deltaY > 0 ? -0.06 : 0.06;
+            tomo3dState.zoom = Math.max(0.65, Math.min(1.85, tomo3dState.zoom + zoomDelta));
+            draw3dHistograms();
+          }, { passive: false });
         }
 
         function renderMatrixTable(container, labels, mat) {
@@ -2597,59 +3613,147 @@
           });
         }
         $('#tomoWindowNs')?.addEventListener('input', () => {
-          if (tomoState.data?.data) {
-            tomoState.data.data.forEach((_, idx) => updateRowAccidentals(idx));
-            drawTomoPlot();
+          if ($('#tomoWindowBadge')) $('#tomoWindowBadge').textContent = '';
+          const winVal = Number($('#tomoWindowNs')?.value) || 0;
+          if (tomoState.data) {
+            tomoState.data.coincidence_window = tomoState.n_detectors === 2
+              ? [winVal, winVal, winVal, winVal]
+              : [winVal];
+            if (tomoState.data.data) {
+              tomoState.data.data.forEach((_, idx) => updateRowAccidentals(idx));
+              drawTomoPlot();
+            }
           }
         });
 
-        // Tomo plot mode buttons (Counts, Rate, Prob)
-        $$('#tomoPlotMode button').forEach(btn => {
-          btn.addEventListener('click', () => {
-            $$('#tomoPlotMode button').forEach(b => b.classList.toggle('active', b === btn));
-            tomoPlotMode = btn.dataset.mode;
-            drawTomoPlot();
+        // Tomo plot mode buttons (Counts, Rate, Prob) synchronized across both charts
+        function syncTomoPlotMode(newMode) {
+          tomoPlotMode = newMode;
+          $$('#tomoPlotMode button, #tomoPlotQwpMode button').forEach(b => {
+            b.classList.toggle('active', b.dataset.mode === newMode);
           });
+          drawTomoPlot();
+        }
+
+        $$('#tomoPlotMode button').forEach(btn => {
+          btn.addEventListener('click', () => syncTomoPlotMode(btn.dataset.mode));
+        });
+        $$('#tomoPlotQwpMode button').forEach(btn => {
+          btn.addEventListener('click', () => syncTomoPlotMode(btn.dataset.mode));
         });
 
-        // Matrix part toggle
+        // Tomo curve mode buttons (MLE Fit, Target State, Curves Off) synchronized across both charts
+        function syncTomoCurveMode(newMode) {
+          tomoCurveMode = newMode;
+          $$('#tomoCurveMode button, #tomoCurveModeQwp button').forEach(b => {
+            b.classList.toggle('active', b.dataset.curveMode === newMode);
+          });
+          drawTomoPlot();
+          if (window.drawTomoPlotQwp) window.drawTomoPlotQwp();
+        }
+
+        $$('#tomoCurveMode button').forEach(btn => {
+          btn.addEventListener('click', () => syncTomoCurveMode(btn.dataset.curveMode));
+        });
+        $$('#tomoCurveModeQwp button').forEach(btn => {
+          btn.addEventListener('click', () => syncTomoCurveMode(btn.dataset.curveMode));
+        });
+
+        // Matrix part toggle (controls both 3D Histograms and 2D Planar Heatmaps)
         $$('#tomoMatrixPart button').forEach(btn => {
           btn.addEventListener('click', () => {
             $$('#tomoMatrixPart button').forEach(b => b.classList.toggle('active', b === btn));
             const part = btn.dataset.part;
-            const realBox = $('#tomoRealBox');
-            const imagBox = $('#tomoImagBox');
-            const container = $('#tomoMatrixContainer');
+            const realBox2d = $('#tomoRealBox');
+            const imagBox2d = $('#tomoImagBox');
+            const realBox3d = $('#tomo3dRealBox');
+            const imagBox3d = $('#tomo3dImagBox');
+            const container2d = $('#tomoMatrixContainer');
+            const container3d = $('#tomo3dContainer');
+
             if (part === 'real') {
-              if (realBox) realBox.style.display = 'block';
-              if (imagBox) imagBox.style.display = 'none';
-              if (container) container.style.gridTemplateColumns = '1fr';
+              if (realBox2d) realBox2d.style.display = 'block';
+              if (imagBox2d) imagBox2d.style.display = 'none';
+              if (realBox3d) realBox3d.style.display = 'block';
+              if (imagBox3d) imagBox3d.style.display = 'none';
+              if (container2d) container2d.style.gridTemplateColumns = '1fr';
+              if (container3d) container3d.style.gridTemplateColumns = '1fr';
             } else if (part === 'imag') {
-              if (realBox) realBox.style.display = 'none';
-              if (imagBox) imagBox.style.display = 'block';
-              if (container) container.style.gridTemplateColumns = '1fr';
+              if (realBox2d) realBox2d.style.display = 'none';
+              if (imagBox2d) imagBox2d.style.display = 'block';
+              if (realBox3d) realBox3d.style.display = 'none';
+              if (imagBox3d) imagBox3d.style.display = 'block';
+              if (container2d) container2d.style.gridTemplateColumns = '1fr';
+              if (container3d) container3d.style.gridTemplateColumns = '1fr';
             } else {
-              if (realBox) realBox.style.display = 'block';
-              if (imagBox) imagBox.style.display = 'block';
-              if (container) container.style.gridTemplateColumns = '1fr 1fr';
+              if (realBox2d) realBox2d.style.display = 'block';
+              if (imagBox2d) imagBox2d.style.display = 'block';
+              if (realBox3d) realBox3d.style.display = 'block';
+              if (imagBox3d) imagBox3d.style.display = 'block';
+              if (container2d) container2d.style.gridTemplateColumns = '1fr 1fr';
+              if (container3d) container3d.style.gridTemplateColumns = '1fr 1fr';
             }
+            draw3dHistograms();
           });
         });
+
+        // View Mode switcher (3D + 2D, 3D Only, 2D Only)
+        $$('#tomoViewMode button').forEach(btn => {
+          btn.addEventListener('click', () => {
+            $$('#tomoViewMode button').forEach(b => b.classList.toggle('active', b === btn));
+            const mode = btn.dataset.view;
+            const container3d = $('#tomo3dContainer');
+            const container2d = $('#tomoMatrixContainer');
+            if (mode === '3d') {
+              if (container3d) container3d.style.display = 'grid';
+              if (container2d) container2d.style.display = 'none';
+            } else if (mode === '2d') {
+              if (container3d) container3d.style.display = 'none';
+              if (container2d) container2d.style.display = 'grid';
+            } else {
+              if (container3d) container3d.style.display = 'grid';
+              if (container2d) container2d.style.display = 'grid';
+            }
+            draw3dHistograms();
+          });
+        });
+
+        // Reset 3D View button
+        const btnReset3d = $('#btnReset3dView');
+        if (btnReset3d) {
+          btnReset3d.addEventListener('click', () => {
+            tomo3dState.yaw = -38;
+            tomo3dState.pitch = 28;
+            tomo3dState.zoom = 1.0;
+            draw3dHistograms();
+          });
+        }
+
+        // Setup 3D Canvas mouse and touch interactions
+        setup3dCanvasInteraction('tomo3dReal', 'tomo3dRealTooltip', false);
+        setup3dCanvasInteraction('tomo3dImag', 'tomo3dImagTooltip', true);
 
         // Run button
         const btnRun = $('#btnRunTomo');
         if (btnRun) btnRun.addEventListener('click', () => runTomo());
 
-        window.addEventListener('resize', () => drawTomoPlot());
+        window.addEventListener('resize', () => {
+          drawTomoPlot();
+          draw3dHistograms();
+        });
         window.drawTomoPlot = drawTomoPlot;
 
-        if (window.ResizeObserver && $('#tomoPlot')) {
+        if (window.ResizeObserver) {
           const ro = new ResizeObserver(() => {
             if ($('#tabTomo') && $('#tabTomo').classList.contains('active')) {
               drawTomoPlot();
+              draw3dHistograms();
             }
           });
-          ro.observe($('#tomoPlot'));
+          if ($('#tomoPlot')) ro.observe($('#tomoPlot'));
+          if ($('#tomoPlotQwp')) ro.observe($('#tomoPlotQwp'));
+          if ($('#tomo3dReal')) ro.observe($('#tomo3dReal'));
+          if ($('#tomo3dImag')) ro.observe($('#tomo3dImag'));
         }
 
         // Initialize basis buttons, table, and default Bell state dataset
