@@ -5,7 +5,7 @@ Powered by QuTiP.
 
 from __future__ import annotations
 
-from qtools.tomo import bell, tomography
+from qtools.tomo import bell, bosonic, tomography
 from qtools.tomo.bell import (
     a_state,
     basis_states,
@@ -56,6 +56,7 @@ from qtools.tomo.bell import (
 
 __all__ = [
     "bell",
+    "bosonic",
     "tomography",
     # Polarization & Jones
     "h_state",
