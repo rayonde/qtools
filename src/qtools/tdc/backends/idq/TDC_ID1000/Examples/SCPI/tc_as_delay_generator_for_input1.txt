@@ -1,0 +1,35 @@
+#################################################################
+#
+# This script configure the Time Controller to forward input 1
+# signal on output 1 with a configurable delay.
+#
+# Note that the Time Controller has an internal latency:
+#   - 400ns in high speed mode (DEVIce:RESOlution LOWRES) 
+#   - 800ns in high resolution mode (DEVIce:RESOlution HIRES) 
+#
+# The configurable delay is added the internal latency.
+#################################################################
+
+
+# Configure input 1
+INPUt1:ENAB ON
+INPUt1:COUP DC
+INPUt1:EDGE FALLING
+INPUt1:THRE -0.2V
+INPUt1:SELE UNSHAPED
+
+# adjust delay 1 (in picosecond)
+DELA1:VALUe 10000
+
+# configure combiner 1
+TSCO1:OPIN ONLYFIR
+TSCO1:OPOU ONLYFIR
+
+# configure output 1
+OUTPut1:ENAB ON
+OUTPut1:MODE NIM
+
+# configure internal routing (INPUt1 -> DELAy1 -> TSCO1 -> OUTPUt1)
+DELA1:LINK INPU1
+TSCOmbiner1:FIRst:LINK DELA1
+OUTPut1:LINK TSCO1

@@ -1,0 +1,77 @@
+#################################################################
+#
+# This script configure the Time Controller to acquire a
+# histogram in high-resolution sampling mode. 
+#
+# Please note that the START input channel doesn't support
+# high-resolution sampling on the ID900.
+# 
+#################################################################
+
+# configure device in high resolution mode
+DEVIce:RESolution HIRES
+
+# configure input 1 (will be used as histogram start)
+INPUt1:COUP DC
+INPUt1:EDGE RISING
+INPUt1:THRE -0.4V
+INPUt1:SELE UNSHAPED
+INPUt1:ENAB ON
+INPUt1:HIREs:ERROr:CLEAr
+
+# Configure Delay connected to INPU1
+DELA1:VALUe 0
+DELA1:LINK INPU1
+
+# configure input 1 (will be used as histogram stop)
+INPUt2:COUP DC
+INPUt2:EDGE RISING
+INPUt2:THRE -0.4V
+INPUt2:SELE UNSHAPED
+INPUt2:ENAB ON
+INPUt2:HIREs:ERROr:CLEAr
+
+# configure delay connected to input 2
+DELA2:VALUe 0
+DELA2:LINK INPU2
+
+# configure combiner 5 connected to input 1 (from DELA1)
+TSCO5:FIR:LINK DELA1;:TSCO5:OPIN ONLYFIR
+
+# configure combiner 6 connected to input 2 (from DELA2)
+TSCO6:FIR:LINK DELA2;:TSCO6:OPIN ONLYFIR
+
+# configure histogram 1
+HISTogram1:STOP:LINK TSCO6
+HISTogram1:REF:LINK TSCO5
+HISTogram1:BCOUnt 16384
+# set histogram bin width (13 for the ID900, 1 for the ID1000)
+# the lowest relevent bin width possible for the current resolution mode 
+# is given by the command DEVIce:RESolution:BWID?
+HISTogram1:BWIDth 13
+
+# configure RECord generator for an acquisition of exactly 1s (specified in ps)
+REC:ENAB ON;NUM 1;DUR 1000000000000;TRIG:LINK NONE
+
+# flush histogram in case there is some data in it
+HISTogram1:FLUSh
+
+# start the acquisition
+REC:PLAY
+
+# wait for the end of the acquisition before going further
+# when the RECord generator stage is not "PLAYing", the acquisition has reached its end
+REC:STAGe?
+
+# get histogram bins
+HISTogram1:DATA?
+
+# Check if there were sampling errors during the process
+INPUt1:HIREs:ERROr?
+INPUt2:HIREs:ERROr?
+
+# Verify the error code
+# 0         : no errors detected
+# 1         : recalibration required
+# 2, 3 or 4 : too many events, too fast
+# 5 or 6    : HW error, reboot the Time Controller

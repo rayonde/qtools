@@ -1,0 +1,80 @@
+#################################################################
+#
+# This script configure the Time Controller to internally  
+# generate 3 differents signals, synchronously started:
+#
+# 1) GEN1: 1MHz signal
+# 2) GEN2: 1MHz signal started 200ns after GEN1
+# 3) GEN1: 1MHz signal of only 1000 event, syncronized with GEN1
+#
+#################################################################
+
+
+# Configure generator 8 (trigger)
+##################################
+
+# disable generator while it's being configured
+GEN8:ENAB OFF
+
+# single short 4ns to  
+GEN8:PNUM 1;PWID 4000;PPER 8000
+
+# do not let any internal or external source trigger the generator
+GEN8:TRIG:LINK NONE
+
+# enable the now fully configured generator
+GEN8:ENAB ON
+
+
+# Configure generator 1
+#########################
+
+GEN1:ENAB OFF
+
+# 1 MHz signal started
+GEN1:PNUM INF;PWID 500000;PPER 1000000
+
+# start to generate signal when GEN8 is played
+GEN1:TRIG:DELA 0
+GEN1:TRIG:LINK GEN8
+
+# enable the generator now that its trigger is properly linked
+# GEN8 is not running, so there's no risk of receiving a premature trigger signal
+GEN1:ENAB ON
+
+# manually arm the trigger
+# generator is then ready to play its signal when triggered by GEN8
+GEN1:TRIG:ARM:MODE MANU
+GEN1:TRIG:ARM
+
+
+# Configure generator 2
+#########################
+
+# same configuration as generator 1, but start 200ns after being triggered
+
+GEN2:ENAB OFF
+GEN2:PNUM INF;PWID 500000;PPER 1000000
+GEN2:TRIG:DELA 200000
+GEN2:TRIG:LINK GEN8
+GEN2:ENAB ON
+GEN2:TRIG:ARM:MODE MANU
+GEN2:TRIG:ARM
+
+# Configure generator 3
+#########################
+
+# same configuration as generator 1, but only generate 1000 events
+
+GEN3:ENAB OFF
+GEN3:PNUM 1000;PWID 500000;PPER 1000000
+GEN3:TRIG:DELA 0
+GEN3:TRIG:LINK GEN8
+GEN3:ENAB ON
+GEN3:TRIG:ARM:MODE MANU
+GEN3:TRIG:ARM
+
+# Play GEN8 to trigger all 3 generators
+#########################################
+
+GEN8:PLAY

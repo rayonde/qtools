@@ -1,0 +1,45 @@
+#################################################################
+#
+# This script configure the Time Controller to output a train of 
+# of 10 pulses triggered 100ns after a signal on input 1.
+#
+# Note that the Time Controller has an internal delay:
+#   - 400ns in high speed mode (DEVIce:RESOlution LOWRES) 
+#   - 800ns in high resolution mode (DEVIce:RESOlution HIRES) 
+#
+# The delay the user configures is added this internal delay.
+#################################################################
+
+
+# configure input 1 (trigger)
+INPUt1:COUP DC
+INPUt1:EDGE FALLING
+INPUt1:THRE -0.4V
+INPUt1:SELE UNSHAPED
+INPUt1:ENAB ON
+
+# configure delay (trigger signal)
+DELA1:VALUe 100000
+
+# configure output 1
+OUTPut1:MODE NIM
+OUTPut1:ENAB ON
+
+# configure generator 1 (generated pulse when triggered by input 1 signal)
+GENerator1:ENAB ON
+GENerator1:PNUM 10
+GENerator1:PWID 4000
+GENerator1:PPER 10000
+# re-arm the trigger automatically right after the pulse has been played
+GENerator1:TRIG:ARM:MODE AUTO
+GENerator1:TRIG:DELA 0
+
+# configure trigger signal internal routing: INPU1 -> DELA1 -> GEN1
+DELAy1:LINK INPU1
+GENerator1:TRIG:LINK DELA1
+
+# configure output signal internal routing: GEN1 -> TSCO1 -> OUTP1
+TSCOmbiner1:FIRst:LINK GEN1
+OUTPut1:LINK TSCO1
+
+

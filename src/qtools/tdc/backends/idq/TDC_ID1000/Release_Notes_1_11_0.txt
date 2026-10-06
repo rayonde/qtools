@@ -1,0 +1,106 @@
+######################################################################
+## 
+## Time Controller Software Application Release 1.11.0 - 13.07.2023
+##
+##                  Release Notes
+##
+######################################################################
+
+
+New features:
+
+    * SYS - [ID1000] Support of the new HW boards version B1
+    * SYS - [ID1000] Support of input shaper (only on HW boards version B1 and above)
+    * SCPI - Deadtime configuration example
+    * GUI - Input shaper feature (only shown when available)
+
+
+Bugs correction:
+
+    * SYS - Start index are sometime wrong
+    * ESW - [ID1000] Improve high-resolution error resiliency
+    * SCPI - STAR:SELE? command returns a wrong answer
+    * SCPI - HIST#:REF:FILT and HIST#:STOP:FILT? commands return wrong answers
+    * GUI - Time Controller GUI doesn't save histogram when acquisition is manually stopped
+    * GUI - Time Controller GUI crash when histogram bin count is changed through SCPI commands during an acquisition
+    * GUI - Time Controller Configuration Editor crash with bad IP address format 
+
+
+Known bugs and limitations:
+
+    * SYS - [ID900] Erroneous lower frequency is displayed on counters if the count rate is higher than the maximum supported value (1 Gcps in HS mode, 25 Mcps in HR mode)
+    * SYS - [ID1000] Erroneous lower frequency is displayed on counters if the count rate is higher than the maximum supported value (1 Gcps per channel in HS mode, 300 Mcps total over all channels in HR mode)
+    * SYS - Sometimes, the Time Controller does not restart automatically after the update
+    * SYS - Timestamps file might be missing when saved in text format
+    * ESW - [ID1000] In high-resolution mode, bad threshold might leads to timestamp loss (might require power-cycle)
+    * ESW - [ID1000] High-resolution error auto-correction leads to timestamp loss on all channels
+    * GUI - Counter trace points at maximum value may not be visible
+
+
+######################################################################
+## Embedded Application software version signature:
+##
+##  type 'version' or go to web interface
+######################################################################
+
+========================================================
+ 
+ID1000 (c) Copyright 2021 by ID Quantique SA.
+ 
+Platform           : ID1000
+  Serial           : picoTDC1
+  Up-time          : 38 min
+ 
+Firmware version   : app 1.11.0
+  commit           : 244faa7cd51bf74e17732867dc73dae8adf902ba
+  job id           : 781816
+  SCPI server      : 1.11.0
+  Data Link Source : 1.8.0
+  Linux device tree version : achilles2 LinuxDT - rev 244faa7cd - 2023-07-13T14:27:11+00:00
+  Linux kernel version : Linux picoTDC1 5.4.21 #1 SMP Thu Jul 13 15:30:00 UTC 2023 armv7l GNU/Linux
+ 
+Uboot version : 1.7.0, 2022-05-06
+ 
+FPGA version  : user 1.11.0
+  unique id   : 0x0059e1860114ff06
+  build time  : 2023-07-12 20:13:08
+  build by    : git@cht2
+  commit      : 96DDCB63
+  job id      : 780464
+ 
+HW version    : elvis 2
+  SOM module  : turbo
+  NOR flash   : mt25qu512
+  board       : B1
+ 
+========================================================
+ 
+ID900 (c) Copyright 2021 by ID Quantique SA.
+ 
+Platform           : ID900
+  Serial           : ID900-1734005
+  Up-time          : 2 min
+ 
+Firmware version   : app 1.11.0
+  commit           : 244faa7cd51bf74e17732867dc73dae8adf902ba
+  job id           : 781816
+  SCPI server      : 1.11.0
+  Data Link Source : 1.8.0
+  Linux device tree version : achilles2 LinuxDT - rev 244faa7cd - 2023-07-13T14:27:11+00:00
+  Linux kernel version : Linux ID900-1734005 5.4.21 #1 SMP Thu Jul 13 15:30:00 UTC 2023 armv7l GNU/Linux
+ 
+Uboot version : 1.7.0, 2022-05-06
+ 
+FPGA version  : user 1.11.0
+  unique id   : 0x0054018248eb0812
+  build time  : 2023-07-12 20:12:09
+  build by    : git@park
+  commit      : 96DDCB63
+  job id      : 780463
+ 
+HW version    : elvis 1
+  SOM module  : lite
+  NOR flash   : undefined
+  board       : undefined
+ 
+========================================================

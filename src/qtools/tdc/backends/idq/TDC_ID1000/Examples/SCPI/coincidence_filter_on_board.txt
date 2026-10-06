@@ -1,0 +1,45 @@
+# Filters input 1 events occurring between 0 and 20ns after an input 2 event
+
+
+# link input 2 to TSCO6
+INPU2:ENAB ON
+DELA2:LINK INPU2
+TSCO6:FIR:LINK DELA2
+
+# do not filter input 2 events on TSCO6
+TSCO6:OPIN ONLYFIR
+TSCO6:OPOU ONLYFIR
+
+# link input 1 to TSCO5 
+INPU1:ENAB ON
+DELA1:LINK INPU1
+TSCO5:FIR:LINK DELA1
+
+# link input 2 to trigger both begining and end of the filtering window
+TSCO5:WIND:BEGI:LINK DELA2
+TSCO5:WIND:END:LINK DELA2
+
+# enable filtering window
+TSCO5:WIND:ENAB ON
+
+# let events through when the window is opened
+TSCO5:OPIN ONLYFIR
+
+# do not let event through when the window is closed
+TSCO5:OPOU MUTE
+
+# the window opens 0 ps after a rising edge event on input 2
+TSCO5:WIND:BEGI:EDGE RISING
+TSCO5:WIND:BEGI:DELAY 0
+
+# the window closes 20 ns after a rising edge event on input 2
+TSCO5:WIND:END:EDGE RISING
+TSCO5:WIND:END:DELAY 20000
+
+# link input 2 as reference signal of HIST2 and RAW2
+HIST2:REF:LINK TSCO6
+RAW2:REF:LINK TSCO6
+
+# link filtered input 1 as stop signal of HIST2 and RAW2
+HIST2:STOP:LINK TSCO5
+RAW2:STOP:LINK TSCO5

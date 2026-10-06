@@ -20,13 +20,22 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "configargparse>=1.7",
+    "h5py>=3.0",
+    "kochen",
     "matplotlib>=3.5.0",
     "numpy>=1.24.0",
+    "pyserial>=3.5",
     "qutip>=5.0.0",
+    "s15lib>=0.2.0",
     "scipy>=1.10.0",
     "tomli-w>=1.2.0",
     "tomli>=2.0.1; python_version < '3.11'",
+    "tqdm>=4.66",
 ]
+
+[project.scripts]
+tdc = "qtools.tdc.cli:main"
 
 [dependency-groups]
 dev = [
@@ -40,3 +49,6 @@ packages = ["src/qtools"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "hardware: tests that require real TDC hardware connected",
+]

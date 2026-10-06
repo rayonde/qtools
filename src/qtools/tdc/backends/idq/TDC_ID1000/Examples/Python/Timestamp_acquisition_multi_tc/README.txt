@@ -1,0 +1,1 @@
+Please refer to the section dedicated to this script in the User Manual for more details about how to use it.

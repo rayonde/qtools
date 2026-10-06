@@ -1,0 +1,161 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "title": "root",
+    "description": "Multiple TC acquisition script configuration file",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [ "high_resolution", "devices", "layout" ],
+    "properties": {
+        "high_resolution": {
+            "description": "Tells whether the acquisition is in high reslution (true) or high speed (fasle)",
+            "type": "boolean"
+        },
+        "devices": {
+            "description": "Time Controllers of the setup.",
+            "type": "object",
+            "patternProperties": {
+                "[^ \u3000\t\r\n]+": {
+                    "description": "Time Controller of the setup, used in the layout section.",
+                    "type": "object",
+                    "additionalProperties": false,
+				    "required": [ "ip" ],
+					"properties": {
+                      	"ip": {
+                          	"description": "Time Controller IP address",
+                          	"type": "string",
+                            "pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+                        },
+                        "timestamps": {
+                          	"description": "Timestamp acquisitions setup",
+                            "type": "object",
+                            "additionalProperties": false,
+						    "required": [ "format", "acquisitions"],                            "properties": {
+                                "dlt_host": {
+                                    "description": "IP address of the machine which hosts the DLT listening to this Time Controller timestamps",
+                                    "type": "string",
+                                    "pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$",
+                                    "default": "127.0.0.1"
+                                },
+                                "with_ref_index": { 
+                                    "type": "boolean",
+                                    "default": false
+                                },
+                                "format": { 
+                                    "type": "string",
+                                    "pattern": "^(bin|ascii)$"
+                                },
+                                "acquisitions": { "$ref": "#/$defs/acquisitions" }
+                            }
+                        },
+                        "histograms": {
+                          	"description": "Histogram acquisitions setup",
+                            "type": "object",
+                            "additionalProperties": false,
+						    "required": [ "format", "acquisitions", "bin_width" ],
+                            "properties": {
+                                "format": { 
+                                    "type": "string",
+                                    "pattern": "^(csv|pdf)$"
+                                },
+                                "acquisitions": { "$ref": "#/$defs/acquisitions" },
+                                "bin_width": { "bin_width": "integer" }
+                            }
+                        },
+                        "inputs": {
+                            "description": "Input 1-4 configuration (start input is reserved for synchronized acquisition between Time Controllers)",
+                            "type": "object",
+                            "additionalProperties": false,
+                            "patternProperties": {
+                                "^[1-4]$": {
+                                    "description": "Input # configuration (# being the object name).",
+                                    "type": "object",
+						            "additionalProperties": false,
+								    "required": [ "threshold", "edge" ],
+                                    "properties": {
+                                        "threshold": { "type": "number" },
+                                        "edge": {
+                                           "type": "string",
+                                           "pattern": "(?i)(falling|rising)"
+                                        },
+                                        "delay": {
+                                            "type": "integer",
+                                            "default": 0
+                                        },
+                                        "select": {
+                                            "type": "string",
+                                            "default": "unshaped",
+                                            "pattern": "(?i)(shaped|unshaped|output|loop)"
+                                        }
+                                    }
+                                } 
+                            }
+                        },
+                        "config": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        },
+        "layout": {
+            "description": "Setup layout",
+            "type": "object",
+            "additionalProperties": false,
+		    "required": [ "device", "wire_latency" ],
+            "properties": {
+                "device": {
+                    "description": "Name of the device, defined in the 'devices' section.",
+                    "type": "string"
+                },
+                "wire_latency": {
+                    "description": "Latency (in ps) of the wire which connect the device to its master.",
+                    "type": "integer"
+                },
+                "agents": {
+                    "description": "Devices connected to this device to synchronize the acquisition.",
+                    "type": "object",
+					"additionalProperties": false,
+                    "patternProperties": {
+                        "^[1-4]$": {
+                            "description": "Recursive definition of the agent device.",
+                            "$ref": "#/properties/layout"
+                        }
+                    }
+                }
+            }
+        }
+    },
+      
+    "if": {
+      "properties": { "high_resolution": { "const": true } }
+    },
+    "then": {
+      "properties": { "devices": { "patternProperties": { ".+": { "properties": { "histograms": { "properties": { "bin_width": { "minimum": 13, "multipleOf" : 13 } } } } } } } }
+    },
+    "else": {
+      "properties": { "devices": { "patternProperties": { ".+": { "properties": { "histograms": { "properties": { "bin_width": { "minimum": 100,  "multipleOf" : 100 } } } } } } } }
+    },
+    
+	"$defs": {
+    	"input_tuple": {
+         	"type": "array",
+          	"minItems": 2,
+          	"maxItems": 2,
+            "items": {
+                "description": "Input number, with 0 being the start input (acquisition begining)",
+              	"type": "integer", 
+                "minimum": 0,
+                "maximum": 4
+            }
+        },
+        "acquisitions": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+                "description": "List of acquistion start/stop pairs.",
+                "$ref": "#/$defs/input_tuple"
+            }
+         }
+    }
+}

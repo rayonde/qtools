@@ -1,0 +1,43 @@
+################################################################################
+#
+# This script configure a 199900ps dead-time on the Time Controller input 1 and 
+# check its effect with a 10MHz dummy signal. 
+# 
+################################################################################
+
+
+# Configure a 200ns dead-time on INPUt1 channel
+
+# Link DELA1 with INPU1 signal
+DELA1:VALU 0;LINK INPU1
+# Trigger a pulse with a 199900 period (dead-time) pulse on GEN5 when a signal is received on INPU1
+GEN5:ENAB ON;PNUM 1;PWID 4000;PPER 199900;TRIG:DELA 0;LINK DELA1;ARM:MODE AUTO
+# Link TSCO5 to GEN5 
+TSCO5:WIND:ENAB OFF;BEGI:DELA 0;EDGE RISI;LINK NONE;:TSCO5:WIND:END:DELA 0;EDGE RISI;LINK NONE;:TSCO5:FIR:LINK GEN5;:TSCO5:SEC:LINK NONE;:TSCO5:OPIN ONLYFIR;OPOU ONLYFIR;COUN:INTE 1000;MODE CYCL
+
+
+
+# Test dead-time with a dummy 10MHz signal on INPU1
+
+# Generate a 10MHz signal
+GEN1:ENAB ON;PNUM INF;PWID 40000;PPER 100000;TRIG:DELA 0;LINK DELA1;ARM:MODE MANU
+GEN1:PLAY
+# Link TSCO1 to GEN1
+TSCO1:WIND:ENAB OFF;BEGI:DELA 0;EDGE RISI;LINK NONE;:TSCO1:WIND:END:DELA 0;EDGE RISI;LINK NONE;:TSCO1:FIR:LINK GEN1;:TSCO1:SEC:LINK NONE;:TSCO1:OPIN ONLYFIR;OPOU ONLYFIR;COUN:INTE 1000;MODE CYCL
+# Output 10MHz signal on OUTPut1
+OUTP1:ENAB ON;LINK TSCO1;MODE TTL;PULS OFF
+# Internally link INPU1 to OUTP1
+INPU1:SELE OUTP;COUN:INTE 1000;MODE CYCL
+
+# Acquire an auto-correlation histogram
+HIST1:STOP:LINK TSCO5;FILT RISI;:HIST1:REF:LINK TSCO5;FILT RISI;:HIST1:ENAB:LINK REC;:HIST1:MIN 0;BWID 100;BCOU 16000
+HIST1:FLUSH
+REC:ENAB ON;NUM 1;DUR 1000000000000;TRIG:DELA 0;LINK NONE
+REC:PLAY
+
+# After waiting 1s, we should read a 10M counts on INPU1...
+INPU1:COUN?
+# ... and 5M counts on TSCO5 thanks to the dead-time
+TSCO5:COUN?
+# ... and see a pulse of 5M counts in the histogram around 200ns
+HIST1:DATA?
