@@ -33,6 +33,10 @@ display = phase.to_display(bits=8, rgb=False)
 slm.load(display)
 ```
 
+When calling `slm.load()` with a raw NumPy array, it must already be an
+integer-valued 8-bit grayscale/RGB image at the SLM resolution. Use an
+RGB-packed `DisplayMask` for data above 8 bits.
+
 ## Regional phase generation
 
 `create_canvas()` returns the root `PhaseRegion`; there is no separate Canvas

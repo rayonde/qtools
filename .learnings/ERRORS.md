@@ -2,6 +2,34 @@
 
 ---
 
+## [ERR-20261007-007] slm-lint-included-preserved-reference-scripts
+
+**Logged**: 2026-10-07T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The first SLM Ruff command recursively linted immutable historical scripts in `slm/refs/`.
+
+### Error
+```text
+Ruff reported legacy Python 2 syntax and style violations in slm/refs/lgphase and slm/refs/slmutils.
+```
+
+### Context
+- The rewrite explicitly preserves `slm/refs/` without modification.
+- `python3 -m ruff check slm --exclude slm/refs ../../tests/slm` passed afterwards.
+
+### Suggested Fix
+Always exclude `slm/refs/` from checks that apply to the rewritten package.
+
+### Metadata
+- Reproducible: yes
+- Related Files: `src/qtools/slm/refs/`
+
+---
+
 ## [ERR-20261007-002] safety-rejected-temp-cleanup
 
 **Logged**: 2026-10-07

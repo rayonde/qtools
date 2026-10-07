@@ -29,23 +29,34 @@ class DisplayMask:
         values = np.asarray(array)
         if self.rgb:
             if values.ndim != 3 or values.shape[-1] != 3:
-                raise ValueError("RGB DisplayMask data must have shape (height, width, 3).")
+                raise ValueError(
+                    "RGB DisplayMask data must have shape (height, width, 3)."
+                )
             self.array = np.ascontiguousarray(np.clip(values, 0, 255).astype(np.uint8))
         else:
             if values.ndim != 2:
-                raise ValueError("Grayscale DisplayMask data must have shape (height, width).")
+                raise ValueError(
+                    "Grayscale DisplayMask data must have shape (height, width)."
+                )
             dtype = np.uint8 if self.bits <= 8 else np.uint16
-            self.array = np.ascontiguousarray(np.clip(values, 0, (1 << self.bits) - 1).astype(dtype))
+            self.array = np.ascontiguousarray(
+                np.clip(values, 0, (1 << self.bits) - 1).astype(dtype)
+            )
 
     @classmethod
     def zeros(cls, resolution: tuple[int, int], *, bits: int = 8) -> "DisplayMask":
         """Create a zero-valued grayscale mask for ``(width, height)``."""
 
         width, height = resolution
-        return cls(np.zeros((height, width), dtype=np.uint8 if bits <= 8 else np.uint16), bits=bits)
+        return cls(
+            np.zeros((height, width), dtype=np.uint8 if bits <= 8 else np.uint16),
+            bits=bits,
+        )
 
     @classmethod
-    def from_phase(cls, phase: "PhaseMask", *, bits: int = 8, rgb: bool = False) -> "DisplayMask":
+    def from_phase(
+        cls, phase: "PhaseMask", *, bits: int = 8, rgb: bool = False
+    ) -> "DisplayMask":
         levels = phase.geometry.quantize_phase(phase.array, int(bits))
         mask = cls(levels, bits=bits, rgb=False)
         return mask.to_rgb() if rgb else mask
@@ -76,24 +87,47 @@ class DisplayMask:
             shift = self.bits - 8
             high = (self.array.astype(np.uint16) >> shift).astype(np.uint8)
             low = (self.array.astype(np.uint16) & ((1 << shift) - 1)).astype(np.uint8)
-        return DisplayMask(np.stack((high, low, np.zeros_like(high)), axis=-1), bits=self.bits, rgb=True)
+        return DisplayMask(
+            np.stack((high, low, np.zeros_like(high)), axis=-1),
+            bits=self.bits,
+            rgb=True,
+        )
 
     def to_grayscale(self) -> "DisplayMask":
         if not self.rgb:
             return self.copy()
-        return DisplayMask(self.array[:, :, 0], bits=self.bits)
+        if self.bits <= 8:
+            values = self.array[:, :, 0]
+        else:
+            shift = self.bits - 8
+            values = (self.array[:, :, 0].astype(np.uint16) << shift) | (
+                self.array[:, :, 1].astype(np.uint16) & ((1 << shift) - 1)
+            )
+        return DisplayMask(values, bits=self.bits)
 
     def flat(self, level: int = 0) -> "DisplayMask":
         return DisplayMask(np.full(self.shape, level), bits=self.bits)
 
     def random(self) -> "DisplayMask":
-        return DisplayMask(np.random.randint(0, self.max_level + 1, size=self.shape), bits=self.bits)
+        return DisplayMask(
+            np.random.randint(0, self.max_level + 1, size=self.shape), bits=self.bits
+        )
 
-    def crop(self, left: int = 0, right: int | None = None, top: int = 0, bottom: int | None = None, *, background: int = 0) -> "DisplayMask":
+    def crop(
+        self,
+        left: int = 0,
+        right: int | None = None,
+        top: int = 0,
+        bottom: int | None = None,
+        *,
+        background: int = 0,
+    ) -> "DisplayMask":
         right = self.shape[1] if right is None else right
         bottom = self.shape[0] if bottom is None else bottom
         result = np.full(self.shape, background, dtype=self.array.dtype)
-        result[top:bottom, left:right] = self.to_grayscale().array[top:bottom, left:right]
+        result[top:bottom, left:right] = self.to_grayscale().array[
+            top:bottom, left:right
+        ]
         return DisplayMask(result, bits=self.bits)
 
     def flip(self) -> "DisplayMask":

@@ -34,19 +34,35 @@ class SLMGeometry:
     def grid(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         if self._grid_cache is None:
             width, height = self.resolution
-            x = (np.arange(width) - (width - 1) / 2) * self.pitch_um[0] * 1e-6 / self.wavelength
-            y = (np.arange(height) - (height - 1) / 2) * self.pitch_um[1] * 1e-6 / self.wavelength
+            x = (
+                (np.arange(width) - (width - 1) / 2)
+                * self.pitch_um[0]
+                * 1e-6
+                / self.wavelength
+            )
+            y = (
+                (np.arange(height) - (height - 1) / 2)
+                * self.pitch_um[1]
+                * 1e-6
+                / self.wavelength
+            )
             self._grid_cache = np.meshgrid(x, y)
         return tuple(axis.copy() for axis in self._grid_cache)  # type: ignore[return-value]
 
-    def quantize_phase(self, phase: npt.NDArray[np.float64], bits: int) -> npt.NDArray[np.integer]:
+    def quantize_phase(
+        self, phase: npt.NDArray[np.float64], bits: int
+    ) -> npt.NDArray[np.integer]:
         """Map radians to device gray levels, including the active 8-bit LUT."""
 
         if not 1 <= int(bits) <= 16:
             raise ValueError("bits must be between 1 and 16.")
         max_level = (1 << int(bits)) - 1
         wrapped = np.mod(phase, 2 * np.pi)
-        phase_range = self.gray_range if self.gray_range is not None and bits == self.bitdepth else max_level
+        phase_range = (
+            self.gray_range
+            if self.gray_range is not None and bits == self.bitdepth
+            else max_level
+        )
         values = np.clip(np.rint(wrapped / (2 * np.pi) * phase_range), 0, max_level)
         if self.lut is not None and bits == 8:
             values = np.asarray(self.lut, dtype=np.uint16)[values.astype(np.uint8)]
@@ -105,12 +121,21 @@ class SLM:
     def load(self, display_mask: Any) -> None:
         self.backend.load(display_mask)
 
-    def load_phase(self, phase_mask: Any, *, bits: int | None = None, rgb: bool = False) -> None:
+    def load_phase(
+        self, phase_mask: Any, *, bits: int | None = None, rgb: bool = False
+    ) -> None:
         from qtools.slm.display.displaymask import DisplayMask
+        from qtools.slm.phase.phasemask import PhaseMask
 
         if isinstance(phase_mask, DisplayMask):
-            raise TypeError("load_phase() expects a PhaseMask; use load() for DisplayMask.")
-        mask = phase_mask.to_display(bits=self.geometry.bitdepth if bits is None else bits, rgb=rgb)
+            raise TypeError(
+                "load_phase() expects a PhaseMask; use load() for DisplayMask."
+            )
+        if not isinstance(phase_mask, PhaseMask):
+            raise TypeError("load_phase() expects a PhaseMask.")
+        mask = phase_mask.to_display(
+            bits=self.geometry.bitdepth if bits is None else bits, rgb=rgb
+        )
         self.load(mask)
 
     def clear(self) -> None:

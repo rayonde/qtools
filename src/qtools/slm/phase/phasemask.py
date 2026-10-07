@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, Sequence
 import numpy as np
 import numpy.typing as npt
 
-from qtools.slm.phase import basic, blaze as blaze_module, spiral as spiral_module, zernike as zernike_module
+from qtools.slm.phase import (
+    basic,
+    blaze as blaze_module,
+    spiral as spiral_module,
+    zernike as zernike_module,
+)
 
 if TYPE_CHECKING:
     from qtools.slm.slm import SLMGeometry
@@ -45,14 +50,22 @@ class PhaseMask:
     ):
         values = np.asarray(array, dtype=np.float64)
         if values.shape != geometry.shape:
-            raise ValueError(f"Phase shape {values.shape} does not match SLM shape {geometry.shape}.")
+            raise ValueError(
+                f"Phase shape {values.shape} does not match SLM shape {geometry.shape}."
+            )
         self.array = np.ascontiguousarray(values.copy())
         self.geometry = geometry
         self.region_bounds = region_bounds
 
     @classmethod
-    def zeros(cls, geometry: "SLMGeometry", *, region_bounds: Bounds | None = None) -> "PhaseMask":
-        return cls(np.zeros(geometry.shape, dtype=np.float64), geometry, region_bounds=region_bounds)
+    def zeros(
+        cls, geometry: "SLMGeometry", *, region_bounds: Bounds | None = None
+    ) -> "PhaseMask":
+        return cls(
+            np.zeros(geometry.shape, dtype=np.float64),
+            geometry,
+            region_bounds=region_bounds,
+        )
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -76,15 +89,29 @@ class PhaseMask:
     def save_phase(self, filename: str | Path) -> None:
         path = Path(filename)
         if path.suffix != ".npy":
-            path = path.with_suffix(path.suffix + ".npy") if path.suffix else path.with_suffix(".npy")
+            path = (
+                path.with_suffix(path.suffix + ".npy")
+                if path.suffix
+                else path.with_suffix(".npy")
+            )
         np.save(path, self.array)
 
     def __add__(self, other: "PhaseMask" | npt.ArrayLike | float) -> "PhaseMask":
         if isinstance(other, PhaseMask):
             self._check_compatible(other)
-            bounds = self.region_bounds if self.region_bounds == other.region_bounds else None
-            return PhaseMask(self.array + other.array, self.geometry, region_bounds=bounds)
-        return PhaseMask(self.array + np.asarray(other), self.geometry, region_bounds=self.region_bounds)
+            bounds = (
+                self.region_bounds
+                if self.region_bounds == other.region_bounds
+                else None
+            )
+            return PhaseMask(
+                self.array + other.array, self.geometry, region_bounds=bounds
+            )
+        return PhaseMask(
+            self.array + np.asarray(other),
+            self.geometry,
+            region_bounds=self.region_bounds,
+        )
 
     def __radd__(self, other: "PhaseMask" | npt.ArrayLike | float) -> "PhaseMask":
         return self.__add__(other)
@@ -92,11 +119,24 @@ class PhaseMask:
     def __sub__(self, other: "PhaseMask" | npt.ArrayLike | float) -> "PhaseMask":
         if isinstance(other, PhaseMask):
             self._check_compatible(other)
-            return PhaseMask(self.array - other.array, self.geometry, region_bounds=self.region_bounds)
-        return PhaseMask(self.array - np.asarray(other), self.geometry, region_bounds=self.region_bounds)
+            bounds = (
+                self.region_bounds
+                if self.region_bounds == other.region_bounds
+                else None
+            )
+            return PhaseMask(
+                self.array - other.array, self.geometry, region_bounds=bounds
+            )
+        return PhaseMask(
+            self.array - np.asarray(other),
+            self.geometry,
+            region_bounds=self.region_bounds,
+        )
 
     def __mul__(self, scalar: float) -> "PhaseMask":
-        return PhaseMask(self.array * float(scalar), self.geometry, region_bounds=self.region_bounds)
+        return PhaseMask(
+            self.array * float(scalar), self.geometry, region_bounds=self.region_bounds
+        )
 
     def __rmul__(self, scalar: float) -> "PhaseMask":
         return self.__mul__(scalar)
@@ -130,7 +170,9 @@ class PhaseMask:
 
         return self + self._active_region().binary(period)
 
-    def spiral(self, order: int = 1, center: tuple[float, float] | None = None) -> "PhaseMask":
+    def spiral(
+        self, order: int = 1, center: tuple[float, float] | None = None
+    ) -> "PhaseMask":
         """Add a spiral phase over this mask's active region."""
 
         return self + self._active_region().spiral(order, center)
@@ -158,7 +200,9 @@ class PhaseRegion(PhaseMask):
     def __init__(self, geometry: "SLMGeometry", bounds: Bounds | None = None):
         bounds = bounds or (0, geometry.resolution[0], 0, geometry.resolution[1])
         _validate_bounds(bounds, geometry.resolution)
-        super().__init__(np.zeros(geometry.shape, dtype=np.float64), geometry, region_bounds=bounds)
+        super().__init__(
+            np.zeros(geometry.shape, dtype=np.float64), geometry, region_bounds=bounds
+        )
         self.bounds = bounds
 
     @property
@@ -210,16 +254,24 @@ class PhaseRegion(PhaseMask):
             bounds = mask.region_bounds
             if bounds is not None:
                 if not _contains(self.bounds, bounds):
-                    raise ValueError(f"Mask region {bounds} is outside canvas region {self.bounds}.")
+                    raise ValueError(
+                        f"Mask region {bounds} is outside canvas region {self.bounds}."
+                    )
                 for previous in used:
                     if _intersection(previous, bounds):
-                        raise ValueError(f"Phase regions overlap: {previous} and {bounds}.")
+                        raise ValueError(
+                            f"Phase regions overlap: {previous} and {bounds}."
+                        )
                 used.append(bounds)
             result += mask.array
         return PhaseMask(result, self.geometry)
 
     def flat(self, phase: float = 0.0) -> PhaseMask:
-        return PhaseMask(basic.flat(self.geometry.shape, self.bounds, phase), self.geometry, region_bounds=self.bounds)
+        return PhaseMask(
+            basic.flat(self.geometry.shape, self.bounds, phase),
+            self.geometry,
+            region_bounds=self.bounds,
+        )
 
     def lens(
         self,
@@ -227,7 +279,14 @@ class PhaseRegion(PhaseMask):
         center: tuple[float, float] | None = None,
     ) -> PhaseMask:
         return PhaseMask(
-            basic.lens(self.geometry.shape, self.bounds, self.geometry.pitch_um, self.geometry.wavelength, f, center),
+            basic.lens(
+                self.geometry.shape,
+                self.bounds,
+                self.geometry.pitch_um,
+                self.geometry.wavelength,
+                f,
+                center,
+            ),
             self.geometry,
             region_bounds=self.bounds,
         )
@@ -241,7 +300,9 @@ class PhaseRegion(PhaseMask):
             region_bounds=self.bounds,
         )
 
-    def spiral(self, order: int = 1, center: tuple[float, float] | None = None) -> PhaseMask:
+    def spiral(
+        self, order: int = 1, center: tuple[float, float] | None = None
+    ) -> PhaseMask:
         return PhaseMask(
             spiral_module.spiral(self.geometry.shape, self.bounds, order, center),
             self.geometry,
@@ -269,7 +330,9 @@ class PhaseRegion(PhaseMask):
         center: tuple[float, float] | None = None,
     ) -> PhaseMask:
         return PhaseMask(
-            zernike_module.zernike(self.geometry.shape, self.bounds, index, radius, weight, center),
+            zernike_module.zernike(
+                self.geometry.shape, self.bounds, index, radius, weight, center
+            ),
             self.geometry,
             region_bounds=self.bounds,
         )

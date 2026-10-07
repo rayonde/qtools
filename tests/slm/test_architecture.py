@@ -73,6 +73,14 @@ def test_phase_conversion_and_rgb_packing(slm: SLM) -> None:
     assert np.all(rgb.array[:, :, 2] == 0)
 
 
+def test_rgb_packing_round_trips_high_bit_depth_gray_values() -> None:
+    values = np.array([[0, 1, 255, 256, 511, 512, 1023]], dtype=np.uint16)
+
+    packed = DisplayMask(values, bits=10).to_rgb()
+
+    assert np.array_equal(packed.to_grayscale().array, values)
+
+
 def test_holoeye_headless_loads_display_and_phase_masks(slm: SLM) -> None:
     phase = slm.create_canvas().lens(f=2.0)
     display = phase.to_display(bits=8)
@@ -86,6 +94,13 @@ def test_holoeye_headless_loads_display_and_phase_masks(slm: SLM) -> None:
         slm.load_phase(phase)
         slm.clear()
         assert np.all(slm.get_current_image() == 0)
+
+
+def test_load_rejects_raw_display_array_with_the_wrong_resolution(slm: SLM) -> None:
+    with slm:
+        with pytest.raises(ValueError, match="resolution"):
+            slm.load(np.zeros((3, 4), dtype=np.uint8))
+        assert slm.get_current_image().shape == (1080, 1920, 3)
 
 
 def test_holoeye_model_metadata_and_display_resolution(slm: SLM) -> None:
@@ -109,6 +124,13 @@ def test_lut_round_trip_and_calibrated_conversion(tmp_path) -> None:
     slm = SLM("holoeye", headless=True, lut=inverted)
     encoded = slm.create_canvas().flat(0).to_display(bits=8)
     assert np.all(encoded.array == 255)
+
+
+def test_cross_region_arithmetic_drops_misleading_region_metadata(slm: SLM) -> None:
+    canvas = slm.create_canvas()
+    left, right = canvas.partition(axis="x", ratios=(1, 1))
+
+    assert (left.flat(1.0) - right.flat(1.0)).region_bounds is None
 
 
 def test_simulated_backend_loads_slmsuite_only_when_selected() -> None:

@@ -4,6 +4,96 @@ Command failures and integration errors.
 
 ---
 
+## [ERR-20261007-009] exa-search-server-unavailable
+
+**Logged**: 2026-10-07T00:00:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: tooling
+
+### Summary
+The configured Exa search MCP server was unavailable while comparing large-file hosting services.
+
+### Error
+```
+[mcporter] Unknown MCP server 'exa'.
+```
+
+### Context
+The request was a general platform comparison. Official provider documentation can be queried directly as a fallback.
+
+### Suggested Fix
+Use direct official documentation URLs when the optional search connector is not configured.
+
+### Metadata
+- Reproducible: unknown
+- Related Files: none
+
+---
+
+## [ERR-20261007-008] camera-external-backend-registration
+
+**Logged**: 2026-10-07T00:00:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: backend
+
+### Summary
+The first backend registry implementation could not instantiate a backend class registered from an experiment script or plugin module.
+
+### Error
+```
+AttributeError: module 'test_camera' has no attribute 'DummyBackend'
+```
+
+### Context
+`register_backend()` stored only the class's module and name, then `get_backend()` imported the module again. Local or dynamically generated backend classes are not necessarily exposed as module attributes.
+
+### Suggested Fix
+Keep built-in backends as lazy module references, but retain externally registered class objects directly.
+
+### Metadata
+- Reproducible: yes
+- Related Files: camera/camera.py, camera/tests/test_camera.py
+
+### Resolution
+- **Resolved**: 2026-10-07T00:00:00+08:00
+- **Notes**: The registry now supports both lazy built-in entries and direct plugin classes.
+
+---
+
+## [ERR-20261007-007] camera-fake-exposure-expectation
+
+**Logged**: 2026-10-07T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The first fake-PySpin camera test expected the initial exposure value instead of the minimum exposure selected during backend initialization.
+
+### Error
+```
+Obtained: 0.0001
+Expected: 0.001
+```
+
+### Context
+The FLIR adapter intentionally sets `ExposureTime` to the hardware minimum before acquisition, matching the SLMSuite implementation and preventing a long power-on exposure from delaying the first frame.
+
+### Suggested Fix
+Assert the configured minimum exposure, then use `set_exposure()` when testing a requested exposure.
+
+### Metadata
+- Reproducible: yes
+- Related Files: camera/backends/flir.py, camera/tests/test_camera.py
+
+### Resolution
+- **Resolved**: 2026-10-07T00:00:00+08:00
+- **Notes**: Updated the fake camera assertion to 100 microseconds.
+
+---
+
 ## [ERR-20261007-006] external-download-approval-policy
 
 **Logged**: 2026-10-07T00:00:00+08:00

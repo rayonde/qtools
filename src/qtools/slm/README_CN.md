@@ -30,6 +30,10 @@ display = phase.to_display(bits=8, rgb=False)
 slm.load(display)
 ```
 
+直接向 `slm.load()` 传入 NumPy 数组时，它必须已经是与 SLM 分辨率一致的
+整数 8-bit 灰度/RGB 图像；高于 8-bit 的数据应先转换为 RGB 打包的
+`DisplayMask`。
+
 `monitor=None` 默认选择副屏；没有副屏时会回退到主屏。测试和无 GUI 环境
 可以使用 `headless=True`。
 

@@ -9,7 +9,7 @@ import numpy as np
 import numpy.typing as npt
 
 from qtools.slm.display.displaymask import DisplayMask
-from qtools.slm.display.interface import DisplayInterface
+from qtools.slm.display.interface import DisplayInterface, display_array
 from qtools.slm.utils import save_image, show_image
 
 
@@ -24,14 +24,7 @@ class HeadlessDisplay(DisplayInterface):
         return self._resolution
 
     def load(self, mask: DisplayMask | npt.ArrayLike) -> None:
-        if isinstance(mask, DisplayMask) and mask.bits > 8 and not mask.rgb:
-            raise ValueError("Display masks above 8 bits must be RGB-packed before display output.")
-        values = mask.array if isinstance(mask, DisplayMask) else np.asarray(mask)
-        if values.ndim == 2:
-            values = np.repeat(values[:, :, None], 3, axis=2)
-        if values.ndim != 3 or values.shape[-1] not in (3, 4):
-            raise ValueError("Display data must be grayscale or RGB.")
-        values = np.asarray(values[:, :, :3], dtype=np.uint8)
+        values = display_array(mask, self.resolution)
         self._previous = self._current.copy()
         self._current = values.copy()
 

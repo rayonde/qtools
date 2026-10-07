@@ -9,7 +9,7 @@ import numpy as np
 import numpy.typing as npt
 
 from qtools.slm.display.displaymask import DisplayMask
-from qtools.slm.display.interface import DisplayInterface
+from qtools.slm.display.interface import DisplayInterface, display_array
 from qtools.slm.monitor import MonitorBinding
 from qtools.slm.utils import save_image, show_image
 
@@ -23,7 +23,9 @@ class QtDisplay(DisplayInterface):
             from PySide6.QtGui import QColor, QImage, QPixmap
             from PySide6.QtWidgets import QApplication, QLabel
         except ImportError as exc:
-            raise ImportError("QtDisplay requires PySide6; use headless=True without Qt.") from exc
+            raise ImportError(
+                "QtDisplay requires PySide6; use headless=True without Qt."
+            ) from exc
 
         self._Qt = Qt
         self._QImage = QImage
@@ -61,19 +63,14 @@ class QtDisplay(DisplayInterface):
         return self._resolution
 
     def _array(self, mask: DisplayMask | npt.ArrayLike) -> npt.NDArray[np.uint8]:
-        if isinstance(mask, DisplayMask) and mask.bits > 8 and not mask.rgb:
-            raise ValueError("Display masks above 8 bits must be RGB-packed before display output.")
-        values = mask.array if isinstance(mask, DisplayMask) else np.asarray(mask)
-        if values.ndim == 2:
-            values = np.repeat(values[:, :, None], 3, axis=2)
-        if values.ndim != 3 or values.shape[-1] not in (3, 4):
-            raise ValueError("Display data must be grayscale or RGB.")
-        return np.ascontiguousarray(values[:, :, :3], dtype=np.uint8)
+        return display_array(mask, self.resolution)
 
     def load(self, mask: DisplayMask | npt.ArrayLike) -> None:
         values = self._array(mask)
         height, width = values.shape[:2]
-        image = self._QImage(values.data, width, height, 3 * width, self._QImage.Format.Format_RGB888)
+        image = self._QImage(
+            values.data, width, height, 3 * width, self._QImage.Format.Format_RGB888
+        )
         self._set_pixmap(self._QPixmap.fromImage(image.copy()))
 
     def _set_pixmap(self, pixmap) -> None:
@@ -82,7 +79,11 @@ class QtDisplay(DisplayInterface):
                 "fill": self._Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 "stretch": self._Qt.AspectRatioMode.IgnoreAspectRatio,
             }[self._rescaling]
-            pixmap = pixmap.scaled(self.label.size(), mode, self._Qt.TransformationMode.SmoothTransformation)
+            pixmap = pixmap.scaled(
+                self.label.size(),
+                mode,
+                self._Qt.TransformationMode.SmoothTransformation,
+            )
         self._previous = self._current
         self._current = pixmap
         self.label.setPixmap(pixmap)
@@ -107,8 +108,12 @@ class QtDisplay(DisplayInterface):
 
     def get_data(self) -> npt.NDArray[np.uint8]:
         if self._current is None:
-            return np.zeros((self._resolution[1], self._resolution[0], 3), dtype=np.uint8)
-        image = self._current.toImage().convertToFormat(self._QImage.Format.Format_RGB888)
+            return np.zeros(
+                (self._resolution[1], self._resolution[0], 3), dtype=np.uint8
+            )
+        image = self._current.toImage().convertToFormat(
+            self._QImage.Format.Format_RGB888
+        )
         width, height = image.width(), image.height()
         data = np.frombuffer(bytes(image.constBits()), dtype=np.uint8)
         return data.reshape(height, -1)[:, : 3 * width].reshape(height, width, 3).copy()
