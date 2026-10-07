@@ -1,0 +1,45 @@
+name: check-format
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: https://git.hzqlab.cn/github/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
+        with:
+          python-version: ${{ matrix.python-version }}
+          activate-environment: "true"
+          manifest-file: "https://git.hzqlab.cn/github/astral-sh-versions/raw/branch/main/v1/uv.ndjson"
+
+      # basedpyright needs editable install to pick up builds
+      - name: Install package and validate format + type-checking
+        run: |
+          uv pip install -e .
+          uvx pre-commit run --all-files
+
+      - name: Run package tests
+        run: |
+          uvx --with . pytest
+
+      # - name: Generate lockfile
+      #   run: |
+      #     ./scripts/generate-uv-lock.sh
+
+      # Maximum retention period is 90 days
+      # - name: Save lockfile as build artifact
+      #   uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+      #   with:
+      #     name: uv.lock.${{ matrix.python-version }}
+      #     path: uv.lock
+      #     compression-level: 9

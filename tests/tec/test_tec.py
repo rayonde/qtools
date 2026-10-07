@@ -220,6 +220,13 @@ def test_tec_channel_selection():
         TEC(is_mock=True, channel=3)
 
 
+def test_tec_channel_prefix_tracks_active_channel():
+    with TEC(is_mock=True) as tec:
+        assert tec.ch_prefix == "TC1:"
+        tec.channel = 2
+        assert tec.ch_prefix == "TC2:"
+
+
 def test_tec_extended_protocol_properties():
     with TEC(is_mock=True) as tec:
         # Resistance
@@ -347,5 +354,4 @@ def test_tec_batch_queries_section_3_6():
         # Fast Demand Data (mode 2: output voltage)
         v_status = tec.demand_data(mode=2)
         assert "voltage" in v_status["ch1"]
-
 

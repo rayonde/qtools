@@ -1,0 +1,72 @@
+[project]
+name = "slmutils"
+dynamic = ["version"]
+description = "Utilities for generating SLM display masks for Holoeye LETO-II and displaying on a mirrored screen"
+authors = [ {name = "Justin Peh", email = "pehyuxiang@gmail.com"} ]
+license = "LGPL-2.1-or-later"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "imageio[tifffile]>=2.37.3",
+    "pillow>=12.3.0",  # usually bundled with imageio
+    "numpy",
+    "slmsuite>=0.4.1",
+    "ipyutils>=1.0.0",
+    "spinnaker-python",
+    "pyside6-essentials",
+]
+
+[tool.uv]
+required-version = "==0.12.5"
+
+[[tool.uv.index]]
+name = "local"
+url = "https://git.hzqlab.cn/api/packages/justin/pypi/simple"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+explicit = true
+
+[tool.uv.sources]
+#ipyutils = { index = "pypi" }
+spinnaker-python = { index = "local" }
+
+[build-system]
+requires = ["hatchling", "versioningit"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "versioningit"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slmutils"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Choose from list of rules: <https://docs.astral.sh/ruff/rules/>
+select = [
+    "E", "W",  # PEP8 code styles
+    "I",       # isort
+    "F",       # pyflakes
+    "PL",      # pylint
+    "Q",       # flake8-quotes
+    "C90",     # code complexity
+]
+ignore = [
+    "PLR2004",  # magic constants
+    "PLW2901",  # override for-loop assignments
+    "PLR0913",  # large number of arguments
+    "PLR0915",  # large number of statements
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/slmutils/generate/slm.py" = [
+    "PLC0415",  # allow slmsuite to be lazy loaded
+]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "standard"

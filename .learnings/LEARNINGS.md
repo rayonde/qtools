@@ -6,6 +6,29 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## [LRN-20261007-001] correction
+
+**Logged**: 2026-10-07
+**Priority**: medium
+**Status**: pending
+**Area**: backend
+
+### Summary
+TEC CSV 日志需要同时记录设定温度和实际温度。
+
+### Details
+用户澄清了 CSV 数据格式为 `timestamp,tec.settemp,tec.temp`；第二列读取目标设定值，第三列读取实际测量值。
+
+### Suggested Action
+实现 TEC CLI 时，CSV 每行应按 `timestamp,tec.settemp,tec.temp` 写入；不要丢失设定温度或实际温度中的任一列。
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/qtools/tec/cli.py
+- Tags: tec, csv, setpoint
+
+---
+
 ## [LRN-20261006-001] correction
 
 **Logged**: 2026-10-06

@@ -2,6 +2,65 @@
 
 ---
 
+## [ERR-20261007-002] safety-rejected-temp-cleanup
+
+**Logged**: 2026-10-07
+**Priority**: low
+**Status**: pending
+**Area**: infra
+
+### Summary
+A verification command was rejected because it included recursive deletion of a temporary directory.
+
+### Error
+```text
+Rejected: rm -f style commands are not permitted. Use a safer approach
+```
+
+### Context
+- The command attempted to remove an explicitly named `/tmp/qtools-tec-channel` directory before recreating it.
+- No deletion occurred and no project files were affected.
+- Verification was rerun with `mktemp -d` and completed successfully.
+
+### Suggested Fix
+Use a fresh temporary directory for validation instead of cleanup commands.
+
+### Metadata
+- Reproducible: yes
+- Related Files: none
+
+---
+
+## [ERR-20261007-001] tec-test-existing-channel-attribute
+
+**Logged**: 2026-10-07
+**Priority**: medium
+**Status**: pending
+**Area**: tests
+
+### Summary
+Running the TEC test suite exposed an existing mismatch in the channel-selection test.
+
+### Error
+```text
+AttributeError: 'TEC' object has no attribute 'ch_prefix'
+tests/tec/test_tec.py::test_tec_channel_selection
+```
+
+### Context
+- Command: `python3 -m pytest tests/tec -q`
+- The failure is in the pre-existing controller test and is unrelated to the new CLI files.
+- `TECChannel` owns `ch_prefix`; `TEC` exposes `tc1`/`tc2` channel views but no `ch_prefix` attribute.
+
+### Suggested Fix
+Review whether the stale test should assert `tec2.tc2.ch_prefix` or whether a compatibility property belongs on `TEC`.
+
+### Metadata
+- Reproducible: yes
+- Related Files: `tests/tec/test_tec.py`, `src/qtools/tec/controller.py`
+
+---
+
 ## [ERR-20261006-002] commit-included-prestaged-changes
 
 **Logged**: 2026-10-06

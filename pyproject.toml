@@ -22,9 +22,11 @@ classifiers = [
 dependencies = [
     "configargparse>=1.7",
     "h5py>=3.0",
+    "imageio[tifffile]>=2.37.3",
     "kochen",
     "matplotlib>=3.5.0",
     "numpy>=1.24.0",
+    "pillow>=12.3.0",
     "pyserial>=3.5",
     "qutip>=5.0.0",
     "s15lib>=0.2.0",
@@ -34,8 +36,14 @@ dependencies = [
     "tqdm>=4.66",
 ]
 
+[project.optional-dependencies]
+slm-display = ["pyside6-essentials"]
+slm-rpc = ["ipyutils>=1.0.0"]
+slm-simulated = ["slmsuite>=0.4.1"]
+
 [project.scripts]
 tdc = "qtools.tdc.cli:main"
+tec = "qtools.tec.cli:main"
 
 [dependency-groups]
 dev = [

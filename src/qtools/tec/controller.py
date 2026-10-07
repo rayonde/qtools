@@ -440,6 +440,8 @@ class TEC:
             is_mock: If True, uses in-memory mock transport for testing.
             transport: Custom transport instance.
         """
+        if channel not in (1, 2):
+            raise ValueError(f"Invalid channel {channel}; must be 1 or 2.")
         self._channel = channel
         self.logfile = logfile if logfile else None
         self.baudrate = baudrate
@@ -479,6 +481,11 @@ class TEC:
         if ch not in (1, 2):
             raise ValueError(f"Invalid channel {ch}; must be 1 or 2.")
         self._channel = ch
+
+    @property
+    def ch_prefix(self) -> str:
+        """Protocol prefix for the active channel (``TC1:`` or ``TC2:``)."""
+        return f"TC{self._channel}:"
 
     @property
     def tc1(self) -> TECChannel:
