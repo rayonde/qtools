@@ -37,14 +37,23 @@ PySpin 安装。因此 PySpin 必须延迟导入，真实硬件依赖在运行�
 ```text
 camera/
 ├── __init__.py       # 公共导出
+├── base.py            # 跨厂商 backend contract
 ├── camera.py         # 面向实验脚本的高层 Camera facade
-├── flir.py           # PySpin/Spinnaker FLIR backend
+├── backends/
+│   ├── __init__.py
+│   └── flir.py        # PySpin/Spinnaker FLIR backend
+├── flir.py            # 兼容导入 shim
 ├── exceptions.py     # 依赖、发现、采集和关闭错误
-└── tests/            # fake PySpin 驱动的单元测试
+└── tests/             # fake PySpin 驱动的单元测试
 ```
 
 `qtools.camera.FLIR` 是硬件 backend；`qtools.camera.Camera` 是默认面向用户的薄封装。
 两者都支持上下文管理器。高层类持有 backend，不在模块导入时访问 SDK。
+
+所有具体厂商 backend 都放在 `camera/backends/` 下。公共 `CameraBackend` 只约束发现、
+初始化、身份信息、图像采集和关闭；`register_backend()` 同时支持内置 backend 的延迟
+模块加载和外部插件 class 的直接注册。因而新增 Basler、Allied Vision 或 GenICam/GenTL
+实现时，只需增加 `camera/backends/basler.py` 等文件并注册名称，不修改 facade 或实验脚本。
 
 ### PySpin 生命周期
 
