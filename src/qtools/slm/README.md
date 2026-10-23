@@ -55,6 +55,56 @@ with SLM("holoeye", headless=True) as slm:
     slm.load_phase(combined)
 ```
 
+## Perfect-vortex phase
+
+Use `perfect_spiral()` for the common axicon-plus-spiral phase used to generate
+a perfect vortex beam. `radial_frequency` is in cycles per pixel.
+
+```python
+with SLM("holoeye", headless=True) as slm:
+    phase = slm.create_canvas().perfect_spiral(
+        order=1,
+        radial_frequency=0.02,
+    )
+    slm.load_phase(phase)
+```
+
+## Pseudo-knife-edge beam-center scan
+
+`pseudo_knife_edge()` creates a seeded random-phase region and moves its edge
+across the selected SLM rectangle. Measure one scalar optical signal at each
+edge position (for example, the sum of a camera ROI), then fit the x and y
+responses with cumulative Gaussians to obtain the beam center and one-sigma
+widths. This measures the selected-channel intensity; it does not find the
+bright-pixel centroid directly from the camera image.
+
+```python
+from qtools.slm import pseudo_knife_edge
+
+phase = pseudo_knife_edge(
+    shape=(1080, 1920),
+    bounds=(200, 1720, 100, 980),
+    axis="x",
+    edge=960,
+    seed=0,
+)
+```
+
+The complete SLM + camera workflow is available as:
+
+```bash
+python -m qtools.slm.scripts.find_position \
+    --scan-bounds 200 1720 100 980 \
+    --roi 0 640 0 480 \
+    --step 10 \
+    --plot beam_center_scan.png
+```
+
+The script displays the x/y masks, captures the camera ROI through
+`qtools.camera.Camera`, restores the base phase, and reports the fitted center.
+For a power meter or a simulated setup, call `scan_beam_center()` directly
+with custom `display_phase` and `measure` callbacks.
+
 ## Backends and optional dependencies
 
 Available backends are `holoeye` and `simulated`. The Holoeye backend uses a

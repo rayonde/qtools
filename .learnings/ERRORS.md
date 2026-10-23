@@ -2,6 +2,93 @@
 
 ---
 
+## [ERR-20261007-003] notebook-ast-check-jupyter-magic
+
+**Logged**: 2026-10-07
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The generic Python AST checker rejected the Jupyter magic `%matplotlib inline` in the notebook import cell.
+
+### Error
+```text
+SyntaxError: invalid syntax
+```
+
+### Context
+- Operation: parse every notebook code cell with `ast.parse()`.
+- The notebook intentionally uses `%matplotlib inline`, which is valid in a Jupyter kernel but not in Python source syntax.
+- `nbformat` validation and full `nbclient` execution both passed after this check.
+
+### Suggested Fix
+Use nbclient execution for notebook validation, or strip recognized IPython magics before applying a Python-only AST check.
+
+### Metadata
+- Reproducible: yes
+- Related Files: `examples/simulated_slm.ipynb`
+
+---
+
+## [ERR-20261007-002] spec-self-review-string-mismatch
+
+**Logged**: 2026-10-07
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+A design self-review assertion searched for an English phrase that was written in Chinese in the specification.
+
+### Error
+```text
+AssertionError
+```
+
+### Context
+- Operation: self-review of `docs/superpowers/specs/2026-10-07-phase-superposition-design.md`.
+- The specification contains `全局 L2`, while the check expected `global L2`.
+- No specification content was lost or invalidated.
+
+### Suggested Fix
+Use semantic or language-independent checks for multilingual design documents.
+
+### Metadata
+- Reproducible: yes
+- Related Files: `docs/superpowers/specs/2026-10-07-phase-superposition-design.md`
+
+---
+
+## [ERR-20261007-001] notebook-plot-output-check
+
+**Logged**: 2026-10-07
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+Headless notebook execution completed successfully, but a plot-output assertion did not find display data because the notebook had not explicitly enabled the inline Matplotlib backend.
+
+### Error
+```text
+AssertionError: 9
+```
+
+### Context
+- Operation: execute `examples/simulated_slm.ipynb` with `nbclient` and `MPLBACKEND=Agg`, then assert that plot cells emitted `display_data`.
+- The SLM phase generation and simulated backend loading cells succeeded.
+- In the Agg backend, `plt.show()` emitted a non-interactive canvas warning without a captured notebook image output.
+
+### Suggested Fix
+Enable `%matplotlib inline` in notebook examples that are expected to produce captured plot outputs during headless execution.
+
+### Metadata
+- Reproducible: yes
+- Related Files: `examples/simulated_slm.ipynb`
+
+---
+
 ## [ERR-20261007-007] slm-lint-included-preserved-reference-scripts
 
 **Logged**: 2026-10-07T00:00:00+08:00

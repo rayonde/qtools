@@ -6,6 +6,75 @@ Corrections, insights, and knowledge gaps captured during development.
 
 ---
 
+## [LRN-20261008-001] correction
+
+**Logged**: 2026-10-08
+**Priority**: medium
+**Status**: pending
+**Area**: docs
+
+### Summary
+The repository contains two `simulated_slm.ipynb` files, and the package-local copy remained stale after the root example was updated.
+
+### Details
+The root `examples/simulated_slm.ipynb` contained the LG radial-envelope demonstration, while `src/qtools/slm/examples/simulated_slm.ipynb` still used constant coefficients. The user was viewing the stale package-local copy.
+
+### Suggested Action
+Keep duplicate example locations synchronized when both are present, or consolidate them in a future cleanup after confirming the intended project layout.
+
+### Metadata
+- Source: user_feedback
+- Related Files: `examples/simulated_slm.ipynb`, `src/qtools/slm/examples/simulated_slm.ipynb`
+- Tags: slm, examples, laguerre-gaussian
+
+---
+
+## [LRN-20261007-003] correction
+
+**Logged**: 2026-10-07
+**Priority**: medium
+**Status**: pending
+**Area**: backend
+
+### Summary
+Superposition amplitudes represent relative weights and the complete complex field must be normalized before converting it into a phase mask.
+
+### Details
+The implementation should form the weighted complex field from the existing `PhaseMask` arrays, normalize its global L2 norm, and then take `np.angle()`. The normalization is not visible in a phase-only mask for nonzero fields, but it preserves the intended normalized superposition semantics and should reject a zero-norm field.
+
+### Suggested Action
+Normalize inside `superposition()` before constructing the returned `PhaseMask`; do not add amplitude storage to `PhaseMask`.
+
+### Metadata
+- Source: user_feedback
+- Related Files: `src/qtools/slm/phase/superposition.py`, `docs/superpowers/specs/2026-10-07-phase-superposition-design.md`
+- Tags: slm, phase, superposition, normalization
+
+---
+
+## [LRN-20261007-002] correction
+
+**Logged**: 2026-10-07
+**Priority**: medium
+**Status**: pending
+**Area**: backend
+
+### Summary
+Phase superposition must accept existing `PhaseMask` objects and return a `PhaseMask`; the intermediate complex field is NumPy data only.
+
+### Details
+The public form is `superposition(spiral_1, spiral_2, coefficients=(amplitude_0, amplitude_1 * exp(1j * delta)))`. The implementation should read `mask.array`, compute the complex field and `np.angle(field)`, then wrap the result back into the shared geometry as a `PhaseMask`.
+
+### Suggested Action
+Keep amplitudes and relative phase inside the required `coefficients` sequence; do not add separate amplitude, sign, or relative-phase arguments.
+
+### Metadata
+- Source: user_feedback
+- Related Files: `src/qtools/slm/phase/superposition.py`, `docs/superpowers/specs/2026-10-07-phase-superposition-design.md`
+- Tags: slm, phase, superposition, phasemask
+
+---
+
 ## [LRN-20261007-001] correction
 
 **Logged**: 2026-10-07

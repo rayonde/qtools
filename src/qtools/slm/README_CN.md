@@ -54,6 +54,55 @@ with SLM("holoeye", headless=True) as slm:
     slm.load_phase(combined)
 ```
 
+## 完美涡旋光相位
+
+`perfect_spiral()` 生成常用的“轴锥径向相位 + 方位涡旋相位”，用于制备完美
+涡旋光。`radial_frequency` 的单位是 cycles/pixel。
+
+```python
+with SLM("holoeye", headless=True) as slm:
+    phase = slm.create_canvas().perfect_spiral(
+        order=1,
+        radial_frequency=0.02,
+    )
+    slm.load_phase(phase)
+```
+
+## 伪刀口测量与光束中心
+
+`pseudo_knife_edge()` 在指定区域内生成固定随机相位纹理，并用 `edge` 移动
+随机相位与平坦相位的边界。对每个边界位置测量一次探测器的标量信号（例如
+相机 ROI 的像素和），再分别对 x、y 扫描结果拟合累计高斯曲线，即可得到光束
+中心和 `1σ` 宽度。它测量的是选定光学通道的总强度，不是直接从相机图像寻找
+亮斑质心。
+
+```python
+from qtools.slm import pseudo_knife_edge
+
+phase = pseudo_knife_edge(
+    shape=(1080, 1920),
+    bounds=(200, 1720, 100, 980),
+    axis="x",
+    edge=960,
+    seed=0,
+)
+```
+
+完整的 SLM + 相机流程可运行：
+
+```bash
+python -m qtools.slm.scripts.find_position \
+    --scan-bounds 200 1720 100 980 \
+    --roi 0 640 0 480 \
+    --step 10 \
+    --plot beam_center_scan.png
+```
+
+脚本会依次显示 x、y 方向的相位图，通过 `qtools.camera.Camera` 采集相机
+ROI 强度，最后恢复基础相位并输出中心坐标；没有相机时也可以直接调用
+`scan_beam_center()`，传入自己的 `display_phase` 和 `measure` 回调进行测试
+或连接功率计。
+
 ## 后端
 
 - `holoeye`：Holoeye LETO、PLUTO、GAEA、LUNA 等型号，支持 LUT 和 Qt 副屏输出；

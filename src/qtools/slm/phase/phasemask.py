@@ -11,9 +11,11 @@ import numpy.typing as npt
 from qtools.slm.phase import (
     basic,
     blaze as blaze_module,
+    knife_edge as knife_edge_module,
     spiral as spiral_module,
     zernike as zernike_module,
 )
+from qtools.slm.phase.perfect_spiral import perfect_spiral as generate_perfect_spiral
 
 if TYPE_CHECKING:
     from qtools.slm.slm import SLMGeometry
@@ -177,6 +179,18 @@ class PhaseMask:
 
         return self + self._active_region().spiral(order, center)
 
+    def perfect_spiral(
+        self,
+        order: int = 1,
+        radial_frequency: float = 0.0,
+        center: tuple[float, float] | None = None,
+    ) -> "PhaseMask":
+        """Add a perfect-vortex phase over this mask's active region."""
+
+        return self + self._active_region().perfect_spiral(
+            order, radial_frequency, center
+        )
+
     def blaze(self, angle: float | tuple[float, float] = 0.0) -> "PhaseMask":
         """Add a blaze phase over this mask's active region."""
 
@@ -192,6 +206,39 @@ class PhaseMask:
         """Add a Zernike phase over this mask's active region."""
 
         return self + self._active_region().zernike(index, radius, weight, center)
+
+    def pseudo_knife_edge(
+        self,
+        axis: str,
+        edge: int | float,
+        *,
+        scan_bounds: Bounds | None = None,
+        seed: int | None = None,
+        phase_range: tuple[float, float] = (0.0, 2 * np.pi),
+    ) -> "PhaseMask":
+        """Add a reproducible random-phase electronic knife edge.
+
+        The random phase is applied before ``edge`` along ``axis`` inside the
+        selected scan rectangle.  Reusing ``seed`` while changing ``edge``
+        keeps the random texture fixed, which makes the optical scan respond
+        primarily to the moving boundary.
+        """
+
+        region = self._active_region()
+        perturbation = knife_edge_module.pseudo_knife_edge(
+            self.geometry.shape,
+            region.bounds,
+            axis,
+            edge,
+            scan_bounds=scan_bounds,
+            seed=seed,
+            phase_range=phase_range,
+        )
+        return self + PhaseMask(
+            perturbation,
+            self.geometry,
+            region_bounds=region.bounds,
+        )
 
 
 class PhaseRegion(PhaseMask):
@@ -305,6 +352,24 @@ class PhaseRegion(PhaseMask):
     ) -> PhaseMask:
         return PhaseMask(
             spiral_module.spiral(self.geometry.shape, self.bounds, order, center),
+            self.geometry,
+            region_bounds=self.bounds,
+        )
+
+    def perfect_spiral(
+        self,
+        order: int = 1,
+        radial_frequency: float = 0.0,
+        center: tuple[float, float] | None = None,
+    ) -> PhaseMask:
+        return PhaseMask(
+            generate_perfect_spiral(
+                self.geometry.shape,
+                self.bounds,
+                order,
+                radial_frequency,
+                center,
+            ),
             self.geometry,
             region_bounds=self.bounds,
         )

@@ -32,10 +32,13 @@ u_k = exp(1j * phi_k)
 
 ```text
 u(x, y) = sum_k c_k(x, y) * exp(1j * phi_k(x, y))
-phase(x, y) = angle(u(x, y))
+u_norm = u / sqrt(sum_x,y(abs(u(x, y)) ** 2))
+phase(x, y) = angle(u_norm(x, y))
 ```
 
 因此 `coefficients=(amplitude_0, amplitude_1 * exp(1j * delta))` 同时表达两个模式的振幅和相对相位；例如 `amplitude_0=1`、`amplitude_1=1`、`delta=π/2` 等价于 `(1, 1j)`。系数也可以是实数径向包络或复数径向包络，从而覆盖实验室笔记中的 `LG00 ± LG0l` 形式。输出仍然只保存相位，不把叠加场的振幅加载到相位型 SLM。
+
+`amplitude_0` 和 `amplitude_1` 被视为叠加态的相对比例。归一化在生成 `PhaseMask` 之前对完整复场执行；由于最终 `PhaseMask` 只保存 `angle()`，对非零复场而言全局正实数归一化不会改变相位，但它明确了叠加态的归一化语义。若完整复场的 L2 范数为零，则抛出 `ValueError`，不生成没有物理意义的相位图。
 
 ## API 设计
 
@@ -58,10 +61,19 @@ def superposition(
 - 所有 mask 必须引用同一个 `SLMGeometry` 对象；
 - 输入 mask 的区域 metadata 不参与区域拼接，输出 `region_bounds=None`，因为相干叠加允许输入区域重叠；
 - 输入系数必须为有限数；
+- 使用完整复场的全局 L2 范数进行 normalization；所有输入系数同时为零或导致完整复场范数为零时抛出 `ValueError`；
 - 空场位置使用 NumPy `angle(0)` 的定义，输出为 `0`，不引入 NaN；
 - 输出通过现有 `PhaseMask.to_display(bits=..., rgb=...)` 生成 `DisplayMask`，不增加新的显示编码路径。
 
 `slm/phase/__init__.py` 导出 `superposition`。本次不改变现有 `spiral()`、`PhaseMask` 算术和 `DisplayMask` 编码规则，也不强制新增 `PhaseMask.superposition()` 方法；函数式入口与用户提出的 `superposition(spiral(...), spiral(...), coefficients=...)` 保持一致。
+
+模块同时提供 `lg_radial_amplitude(mask, waist, order, center=None)`，生成 PDF 中 p=0 LG 模式的未归一化径向因子：
+
+```text
+exp(-(r / waist) ** 2) * (sqrt(2) * r / waist) ** abs(order)
+```
+
+该数组作为 `coefficients` 的逐像素振幅传入 `superposition()`；归一化仍由复场叠加函数统一完成。
 
 ## 示例
 
