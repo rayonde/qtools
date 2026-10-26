@@ -62,12 +62,13 @@ All timing parameters are in **bin units** (multiples of the backend's time reso
 
 ### 2. `list` Subcommand
 
-Scans the local machine and subnet for connected TDC devices.
+Scans registered backend transports for connected TDC devices. Ethernet
+backends use their protocol-aware discovery routines.
 
 | Option | Description |
 |--------|-------------|
 | `--method {usb,ethernet,all}` | Scanning protocol filter (default: `all`) |
-| `--timeout` | Timeout in seconds for Ethernet scan (default: 1.0) |
+| `--timeout` | Compatibility timeout for network discovery (default: 1.0) |
 
 ```bash
 tdc list
@@ -173,7 +174,14 @@ All timing parameters are in **bin units** (the backend's native resolution, e.g
 
 ```python
 from tdc.connection import get_backend
-from tdc import TDC
+from tdc import TDC, discover_all, get_device
+
+# Ethernet devices expose their backend and endpoint in DeviceInfo. The
+# discovery result can be passed directly to get_device().
+for info in discover_all(method="ethernet"):
+    with get_device(info) as device:
+        print(info)
+        print(device.measure_singles(duration=1.0))
 
 # 1. Retrieve the registered backend class
 backend_cls = get_backend("simulator")

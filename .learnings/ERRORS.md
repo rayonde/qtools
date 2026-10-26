@@ -230,3 +230,32 @@ Request approved escalation for the narrowly scoped `git add` and `git commit` o
 - Related Files: `docs/superpowers/specs/2026-10-06-tomography-readme-cn-design.md`
 
 ---
+
+## [ERR-20261024-001] shell_command
+
+**Logged**: 2026-10-24
+**Priority**: low
+**Status**: resolved
+**Area**: docs
+
+### Summary
+文档检查命令调用了不存在的 `python` 可执行文件。
+
+### Error
+```
+zsh: command not found: python
+```
+
+### Context
+- Command attempted a short Markdown fence count using `python`.
+- The environment provides `python3` instead.
+
+### Suggested Fix
+使用 `python3` 运行临时文档检查脚本。
+
+### Metadata
+- Reproducible: yes
+- Related Files: docs/superpowers/specs/2026-10-06-tdc-data-structures-unification.md
+
+---
+

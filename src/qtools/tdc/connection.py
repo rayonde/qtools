@@ -78,7 +78,7 @@ def get_backend(name: str) -> Type[TDCBackend]:
     return _REGISTRY[name]
 
 
-def get_device(backend: str, port: Optional[str] = None, **kwargs) -> TDC:
+def get_device(backend: str | DeviceInfo, port: Optional[str] = None, **kwargs) -> TDC:
     """One-step factory: return a ready-to-use high-level ``TDC`` instance.
 
     Concise, common form mirroring ``powermeter.get_device``: given a backend
@@ -86,7 +86,8 @@ def get_device(backend: str, port: Optional[str] = None, **kwargs) -> TDC:
     instantiate it, and wrap it in the high-level ``TDC`` API.
 
     Args:
-        backend: Registered backend identifier.
+        backend: Registered backend identifier, or a ``DeviceInfo`` returned
+            by discovery.
         port: Device path / address, or None to let the backend auto-discover.
         **kwargs: Extra parameters forwarded to the backend constructor.
 
@@ -97,7 +98,19 @@ def get_device(backend: str, port: Optional[str] = None, **kwargs) -> TDC:
         KeyError: If *backend* is not registered.
     """
 
-    backend_cls = get_backend(backend)
+    if isinstance(backend, DeviceInfo):
+        if port is not None:
+            raise TypeError("port must be omitted when backend is a DeviceInfo")
+        backend_name = backend.backend_name
+        port = backend.device_path
+    elif isinstance(backend, str):
+        backend_name = backend
+    else:
+        raise TypeError(
+            "backend must be a registered backend name or a DeviceInfo instance"
+        )
+
+    backend_cls = get_backend(backend_name)
     return TDC(backend_cls(port, **kwargs))
 
 
@@ -186,9 +199,13 @@ def discover_network_devices(timeout: float = 1.0) -> List[DeviceInfo]:
                     devices.append(
                         DeviceInfo(
                             backend_name="network_tdc",
-                            device_path=f"tcp://{addr[0]}:{addr[1]}",
+                            device_path=f"udp://{addr[0]}:{addr[1]}",
                             serial_number=sn,
                             description=desc,
+                            transport="ethernet",
+                            host=addr[0],
+                            port=addr[1],
+                            protocol="udp",
                         )
                     )
     except Exception as e:
@@ -204,26 +221,37 @@ def discover_all(method: str = "all", timeout: float = 1.0) -> List[DeviceInfo]:
 
     Args:
         method:  The discovery method, either "usb", "ethernet", or "all".
-        timeout: Timeout in seconds for Ethernet discovery.
+        timeout: Retained for API compatibility. Backend-specific discovery
+            routines control their own network probe timeouts.
 
     Returns:
         A list of DeviceInfo for all discovered devices.
     """
-    devices: List[DeviceInfo] = []
+    if method not in {"usb", "ethernet", "all"}:
+        raise ValueError("method must be 'usb', 'ethernet', or 'all'")
 
-    # 1. USB/Serial Device Discovery
-    if method in ("usb", "all"):
-        try:
-            import qtools.tdc.backends  # Dynamically loads and registers all drivers
-        except Exception as e:
-            logger.warning("Error dynamically importing backend modules: %s", e)
-        devices.extend(auto_discover())
+    # The previous implementation used this value only for the generic UDP
+    # broadcast helper. Known Ethernet backends now perform their own
+    # protocol-aware discovery, so retain the argument without broad scans.
+    del timeout
 
-    # 2. Ethernet Device Discovery
-    if method in ("ethernet", "all"):
-        devices.extend(discover_network_devices(timeout))
+    # Import all backends before discovery. Each backend reports its own
+    # transport and produces a path that its connector understands.
+    try:
+        import qtools.tdc.backends  # Dynamically loads and registers all drivers
+    except Exception as e:
+        logger.warning("Error dynamically importing backend modules: %s", e)
 
-    return devices
+    devices = auto_discover()
+    if method == "all":
+        return devices
+
+    if method == "ethernet":
+        return [device for device in devices if device.transport == "ethernet"]
+
+    # The CLI calls this mode "usb", but serial-backed USB devices are part
+    # of the same local-device scan and are included for compatibility.
+    return [device for device in devices if device.transport in {"usb", "serial"}]
 
 
 def display_devices(devices: Optional[List[DeviceInfo]] = None) -> None:
@@ -253,12 +281,26 @@ def display_devices(devices: Optional[List[DeviceInfo]] = None) -> None:
     # -- discovered devices --------------------------------------
     print(f"\nDiscovered devices ({len(devices)}):")
     if devices:
-        print(f"  {'#':<4} {'Backend':<16} {'Path':<28} {'S/N':<16} {'Desc'}")
-        print(f"  {'─' * 4} {'─' * 16} {'─' * 28} {'─' * 16} {'─' * 20}")
+        print(
+            f"  {'#':<4} {'Backend':<16} {'Transport':<12} {'Path':<28} "
+            f"{'Endpoint':<24} {'S/N':<16} {'Desc'}"
+        )
+        print(
+            f"  {'─' * 4} {'─' * 16} {'─' * 12} {'─' * 28} "
+            f"{'─' * 24} {'─' * 16} {'─' * 20}"
+        )
         for i, dev in enumerate(devices, 1):
             sn = dev.serial_number or "N/A"
             desc = dev.description or ""
-            print(f"  {i:<4} {dev.backend_name:<16} {dev.device_path:<28} {sn:<16} {desc}")
+            endpoint = dev.host or ""
+            if dev.port is not None:
+                endpoint = f"{endpoint}:{dev.port}" if endpoint else str(dev.port)
+            if dev.protocol and endpoint:
+                endpoint = f"{dev.protocol}://{endpoint}"
+            print(
+                f"  {i:<4} {dev.backend_name:<16} {dev.transport:<12} "
+                f"{dev.device_path:<28} {endpoint:<24} {sn:<16} {desc}"
+            )
     else:
         print("  (No devices found)")
 

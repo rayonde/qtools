@@ -234,6 +234,7 @@ class S15TDC2Backend(TDCBackend):
                     backend_name="s15_tdc2",
                     device_path=DEFAULT_DEVICE_PATH,
                     description="S-Fifteen TDC2 USB Device",
+                    transport="usb",
                 )
             )
 
@@ -245,6 +246,7 @@ class S15TDC2Backend(TDCBackend):
                         backend_name="s15_tdc2",
                         device_path=path,
                         description="S-Fifteen TDC2 USB Device",
+                        transport="usb",
                     )
                 )
 

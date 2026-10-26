@@ -14,6 +14,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Type
+from urllib.parse import urlsplit
 
 import numpy as np
 from numpy.typing import NDArray
@@ -29,15 +30,65 @@ class DeviceInfo:
 
     Attributes:
         backend_name: Backend identifier, e.g. ``"tdc1"``.
-        device_path:  Device path or URI, e.g. ``"/dev/ttyUSB0"`` or ``"usb://0x1234"``.
+        device_path:  Device path or URI, e.g. ``"/dev/ttyUSB0"``,
+                      ``"usb://0x1234"``, or ``"tcp://192.0.2.10:5555"``.
         serial_number: Device serial number (if available).
         description:  Human-readable device description.
+        transport:    Connection transport, such as ``"serial"``, ``"usb"``,
+                      or ``"ethernet"``. This is retained on the discovered
+                      device record for connection selection.
+        host:         Ethernet host/IP address when applicable.
+        port:         Ethernet port when applicable.
+        protocol:     Network or vendor protocol label when applicable.
     """
 
     backend_name: str
     device_path: str
     serial_number: Optional[str] = None
     description: Optional[str] = None
+    transport: str = "unknown"
+    host: Optional[str] = None
+    port: Optional[int] = None
+    protocol: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """Infer Ethernet metadata from a network URI when needed.
+
+        The four original fields remain positional-compatible. New discovery
+        code can retain the connection transport explicitly, while legacy
+        callers using a ``tcp://``, ``udp://``, or ``eth://`` path are also
+        recognized as Ethernet devices.
+        """
+        path = str(self.device_path)
+        parsed = urlsplit(path)
+        scheme = parsed.scheme.lower()
+
+        if self.transport == "unknown" and scheme in {
+            "tcp",
+            "udp",
+            "eth",
+            "ethernet",
+        }:
+            object.__setattr__(self, "transport", "ethernet")
+
+        if self.transport != "ethernet":
+            return
+
+        host = self.host or parsed.hostname
+        port = self.port
+        protocol = self.protocol
+
+        if port is None:
+            try:
+                port = parsed.port
+            except ValueError:
+                port = None
+        if protocol is None and scheme in {"tcp", "udp"}:
+            protocol = scheme
+
+        object.__setattr__(self, "host", host)
+        object.__setattr__(self, "port", port)
+        object.__setattr__(self, "protocol", protocol)
 
     def __str__(self) -> str:
         parts = [f"[{self.backend_name}] {self.device_path}"]
@@ -45,6 +96,14 @@ class DeviceInfo:
             parts.append(f"S/N: {self.serial_number}")
         if self.description:
             parts.append(self.description)
+        if self.transport == "ethernet" and self.host:
+            endpoint = self.host
+            if self.port is not None:
+                endpoint = f"{endpoint}:{self.port}"
+            if self.protocol:
+                endpoint = f"{self.protocol}://{endpoint}"
+            if endpoint != self.device_path:
+                parts.append(f"Ethernet: {endpoint}")
         return " | ".join(parts)
 
 
@@ -56,11 +115,13 @@ class SinglesResult:
 
     Attributes:
         integration_time: Integration time in seconds.
+        channel_indices: Indices of the channels for which counts are provided.
         counts:           Raw counts per channel, shape ``(n_channels,)``.
         count_rates:      Count rates per channel in counts/s, shape ``(n_channels,)``.
     """
 
     integration_time: float
+    channels: NDArray[np.uint8]
     counts: NDArray[np.uint64]
     count_rates: NDArray[np.float64]
 

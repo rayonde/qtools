@@ -730,6 +730,10 @@ class ID1000Backend(TDCBackend):
                             device_path=f"tcp://{ip}:{cls.DEFAULT_PORT}",
                             serial_number=sn,
                             description=f"IDQ ID1000 Time Controller ({ans[:40]})",
+                            transport="ethernet",
+                            host=ip,
+                            port=cls.DEFAULT_PORT,
+                            protocol="tcp",
                         )
                     )
             except Exception:

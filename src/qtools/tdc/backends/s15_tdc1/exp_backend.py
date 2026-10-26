@@ -84,6 +84,7 @@ def find_tdc1_devices() -> List[DeviceInfo]:
                         device_path=dev_path,
                         serial_number=sn or None,
                         description=f"{desc} ({mfg})" if desc else "S-Fifteen TDC1 Device",
+                        transport="serial",
                     )
                 )
 
@@ -104,6 +105,7 @@ def find_tdc1_devices() -> List[DeviceInfo]:
                         device_path=str(path.resolve()),
                         serial_number=path.name,
                         description="S-Fifteen TDC1 (by-id fallback)",
+                        transport="serial",
                     )
                 )
         except Exception:
@@ -119,6 +121,7 @@ def find_tdc1_devices() -> List[DeviceInfo]:
                             device_path=str(path),
                             serial_number=path.name,
                             description="S-Fifteen TDC1 (macOS fallback)",
+                            transport="serial",
                         )
                     )
         except Exception:

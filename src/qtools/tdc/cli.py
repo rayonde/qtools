@@ -824,7 +824,7 @@ def make_parser(help_verbosity: int = 1):
     )
     pgroup.add_argument(
         "--timeout", type=float, default=1.0,
-        help="Timeout in seconds for Ethernet network discovery scan (default: 1.0)",
+        help="Compatibility timeout for network discovery (default: 1.0)",
     )
 
     # Show the options shared with coincidences under [pairs] as well. argparse

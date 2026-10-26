@@ -585,6 +585,9 @@ class TDC1610Backend(TDCBackend):
                         device_path=f"eth://{dev[2]}",
                         serial_number=str(dev[4]) if len(dev) > 4 else None,
                         description=str(dev[3]) if len(dev) > 3 else "CIQTEK TDC1610 TDC",
+                        transport="ethernet",
+                        host=str(dev[2]),
+                        protocol="vendor-sdk",
                     )
                 )
         except Exception as e:

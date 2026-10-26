@@ -62,83 +62,37 @@ compute_pairs (dict)     ──┘           (门控光子流、预警效率与 
 ```python
 @dataclass
 class CoincidenceResult:
-    """两通道时延关联与符合测量结果 (2-fold Coincidence / g² correlation).
-    
-    统一支持：
-    1. 软件 g² 直方图测量 (含归一化 g²(τ))
-    2. 软件时间窗标量符合计算与偶然侧带扣除
-    3. 硬件 FPGA 标量符合计数 (无直方图时 histogram 为 None)
-    """
-    count: int                                      # 门宽内的原始符合计数
-    channel1_rate: float                            # 通道 1 计数率 (counts/s)
-    channel2_rate: float                            # 通道 2 计数率 (counts/s)
-    integration_time: float                         # 积分测量时间 (s)
-    order: int = 2                                  # 符合阶数，默认 2
-    
+
+    mode: Literal["histogram", "window_count"]
+    singles_start: float
+    singles_stop: float
+    integration_time: float
+    bin_width: 2_000
+    unit: str = "ps" 
+
+    stop_delay: float = 0.0 
+
     # 门宽与本底估算 (标量符合相关)
-    window_ps: Optional[int] = None                 # 门宽 (ps)
-    window_start_ps: Optional[float] = None         # 窗口起始时延 (ps)
-    window_stop_ps: Optional[float] = None          # 窗口截止时延 (ps)
+    window_ps: Optional[np.int64] = None                 # 门宽 (ps)
+    window_start_ps: Optional[np.int64] = None         # 窗口起始时延 (ps)
+    window_stop_ps: Optional[np.int64] = None          # 窗口截止时延 (ps)
+    window_n_bins: np.int64 
+    raw_counts: np.int64
+    net_counts: np.float64
+    raw_pair_rate: np.int64
+    net_pair_rate: np.int64
     accidental_count: Optional[float] = None        # 估算的偶然符合数
     acc_count_perbin: Optional[float] = None        # 侧带单 bin 平均偶然计数
     accidental_method: Optional[str] = None         # 'sideband' 或 'rate_product'
-    method: str = "software"                        # 'software' 或 'hardware'
     
     # 直方图数据 (纯硬件模式下为 None)
+    method: str = Literal["software", "hardware"]                   
+    n_bins: np.int64 
     histogram: Optional[NDArray[np.uint64]] = None  # 延时直方图，shape (n_bins,)
     bin_edges: Optional[NDArray[np.float64]] = None # 直方图 bin 边缘，shape (n_bins + 1,)
     resolution_ps: Optional[float] = None           # 单个 bin 的时间精度 (ps)
 
-    # -- 向下兼容与便利属性 --
-    @property
-    def singles_start(self) -> float:
-        """兼容原 G2Result: start 通道计数率."""
-        return self.channel1_rate
 
-    @property
-    def singles_stop(self) -> float:
-        """兼容原 G2Result: stop 通道计数率."""
-        return self.channel2_rate
-
-    @property
-    def bin_centers(self) -> Optional[NDArray[np.float64]]:
-        """直方图中心坐标 (bin 单位)."""
-        if self.bin_edges is None:
-            return None
-        return (self.bin_edges[:-1] + self.bin_edges[1:]) / 2.0
-
-    @property
-    def n_bins(self) -> int:
-        """直方图 bin 数."""
-        return len(self.histogram) if self.histogram is not None else 0
-
-    @property
-    def normalized(self) -> Optional[NDArray[np.float64]]:
-        """兼容原 G2Result: 归一化 g²(τ) 数组."""
-        if self.histogram is None or self.bin_edges is None or self.integration_time <= 0:
-            return None
-        bin_width_s = np.diff(self.bin_edges) * 1e-12
-        denominator = self.channel1_rate * self.channel2_rate * bin_width_s * self.integration_time
-        with np.errstate(divide="ignore", invalid="ignore"):
-            return np.where(denominator > 0, self.histogram / denominator, 0.0)
-
-    @property
-    def net_count(self) -> float:
-        """净符合数 (原始符合扣除偶然符合)."""
-        return float(self.count) if self.accidental_count is None else float(self.count) - self.accidental_count
-
-    @property
-    def net_rate(self) -> float:
-        """净符合率 (counts/s)."""
-        return self.net_count / self.integration_time if self.integration_time > 0 else 0.0
-
-    @property
-    def rate(self) -> float:
-        """粗符合率 (counts/s)."""
-        return self.count / self.integration_time if self.integration_time > 0 else 0.0
-```
-
----
 
 ### 3.2 统一后的 `MultiCoincidenceResult`
 

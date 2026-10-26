@@ -120,3 +120,26 @@ TEC CSV 日志需要同时记录设定温度和实际温度。
 - Tags: oam, tomography, isolation
 
 ---
+
+## [LRN-20261024-001] correction
+
+**Logged**: 2026-10-24
+**Priority**: medium
+**Status**: pending
+**Area**: docs
+
+### Summary
+数据统一计划中，`HeraldingGateResult` 只负责门控光子结果，`compute_pairs` 保持独立；本次不建立兼容层。
+
+### Details
+用户明确要求保留 `unit`（默认 `"ps"`），使用不带单位后缀的时间字段，并把 `MultiCoincidenceResult` 与 `CoincidenceResult` 设计为 canonical 模型。旧模型别名、继承垫片、字典访问模拟和重复兼容属性均不纳入计划。
+
+### Suggested Action
+后续修改该 plan 时，优先维护三个 canonical 模型和一次性迁移调用方，不重新引入旧模型兼容层。
+
+### Metadata
+- Source: user_feedback
+- Related Files: docs/superpowers/specs/2026-10-06-tdc-data-structures-unification.md
+- Tags: data-unification, canonical-model, no-compatibility-layer
+
+---

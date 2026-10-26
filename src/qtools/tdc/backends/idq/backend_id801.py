@@ -260,6 +260,7 @@ class ID801Backend(TDCBackend):
                             backend_name="id801",
                             device_path="usb://16c0",
                             description="IDQ ID801 Time Tagging Box (USB)",
+                            transport="usb",
                         )
                     )
             except Exception:
