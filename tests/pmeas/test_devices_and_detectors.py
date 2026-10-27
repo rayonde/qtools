@@ -94,8 +94,23 @@ def test_device_keyed_calibrations_and_sync():
         assert dev["calibration"]["cal_file"] == "output/calibration_hwp_123.png"
 
 
-def test_motor_manager_get_motor_delegation():
+def test_motor_manager_get_motor_delegation(monkeypatch):
+    from types import SimpleNamespace
+
+    from qtools.pmeas import motor_manager
     from qtools.pmeas.motor_manager import MotorManager
+
+    fake_motor = SimpleNamespace(port="COM3")
+    connections = []
+
+    def fake_get_motor(*, port=None, target=None, blocking=True, backend=None):
+        if port != "COM3":
+            raise ConnectionError(f"No simulated motor for {target}")
+        connections.append((port, blocking, backend))
+        return fake_motor
+
+    monkeypatch.setattr(motor_manager, "_check_availability", lambda port: port == "COM3")
+    monkeypatch.setattr(motor_manager, "sm_get_motor", fake_get_motor)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         cfg_file = Path(tmpdir) / "polmeas_config.yaml"
@@ -112,11 +127,13 @@ def test_motor_manager_get_motor_delegation():
 
         mm = MotorManager(cfg)
         motor = mm.get_motor("alice")
-        assert motor is not None
+        assert motor is fake_motor
         assert motor.port == "COM3"
 
         # Check caching and alias matching
         assert mm.get_motor("alice") is motor
         assert mm.get_motor("alice1550_basis_hwp") is motor
+        assert len(connections) == 1
+        assert connections[0][:2] == ("COM3", False)
 
 

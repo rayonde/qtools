@@ -16,6 +16,8 @@ qtools/
 │       ├── __init__.py         # Exposes instrument modules (e.g. qtools.slm)
 │       ├── camera/             # 📷 Industrial cameras and vendor backends
 │       ├── motor/              # Motor control and K10CR1 backend
+│       ├── pctrl/              # Polarization control, servo calibration and optimization
+│       ├── pmeas/              # Polarization measurement, waveplate calibration and scans
 │       ├── powermeter/         # Power meters, measurement tools and calibration data
 │       └── slm/                # 🔬 Self-contained SLM subpackage
 │           ├── __init__.py     # Exports SLMDriver
@@ -26,6 +28,8 @@ qtools/
 │               └── __init__.py
 └── tests/
     ├── motor/                  # Motor CLI tests and manual hardware checks
+    ├── pctrl/                  # Polarization controller tests
+    ├── pmeas/                  # Polarization measurement tests
     ├── powermeter/             # Power meter and measurement tests
     └── slm/                    # 🧪 Independent SLM test suite
         ├── __init__.py
@@ -48,6 +52,20 @@ from qtools.powermeter import get_device, measure_power
 
 See the [motor guide](src/qtools/motor/README.md) and
 [power meter guide](src/qtools/powermeter/README.md) for usage and backend details.
+
+`qtools.pctrl` and `qtools.pmeas` provide polarization control and measurement.
+Both are installed with qtools and use its motor, TDC, and power meter modules.
+
+```python
+from qtools.pctrl import PolarizationController
+from qtools.pmeas import TaskController
+```
+
+The `pctrl` and `pmeas` commands are also available as `python -m qtools.pctrl`
+and `python -m qtools.pmeas`. The previous `polmeas` command remains an alias
+for `pmeas`; existing `pctrl_config.yaml` and `polmeas_config.yaml` files retain
+their names. See the [controller guide](src/qtools/pctrl/README.md) and
+[measurement guide](src/qtools/pmeas/README.md).
 
 ## Quick Start
 

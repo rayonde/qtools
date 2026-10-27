@@ -1,163 +1,109 @@
-# Polarization Measurement Library
+# Polarization Measurement (`qtools.pmeas`)
 
-Python library and CLI for automated polarization measurement using Thorlabs K10CR1 rotation stages and photon-counting TDCs or power meters.
-
----
-
-## Physical Principle
-
-A half-wave plate (HWP) on a rotation stage is followed by a polarizing beam splitter (PBS) that transmits H-polarized light to a detector. The transmitted intensity follows Malus's law:
-
-$$I(\theta) = A + B \cos\bigl(4(\theta - \theta_0)\bigr)$$
-
-Fitting this curve yields the calibration parameters needed to set the HWP to any desired polarization basis (H, V, D, A).
-
-For entanglement, two such setups (Alice & Bob) are used. The CHSH Bell parameter S is computed from four correlation coefficients between the two sides.
-
----
+Python API and CLI for waveplate calibration, polarization correlation scans,
+and CHSH measurements. Motor stages, TDCs, and power meters use the corresponding
+`qtools.motor`, `qtools.tdc`, and `qtools.powermeter` modules.
 
 ## Installation
 
+Install from the **qtools repository root**:
+
 ```bash
-pip install -e /path/to/qtools.motor
 pip install -e .
+# Or:
+uv sync
 ```
 
----
-
-## Configuration
-
-Motors and detectors are auto-detected and managed through the `ConfigManager`. Registered devices are stored in `polmeas_config.yaml` and synced to the motor drivers.
-
-```bash
-# View config summary and registered devices
-pmeas config show
-```
-
-Device registration happens automatically during calibration or can be initialized manually.
-
----
+Dependencies, including `lmfit` for calibration fitting, are managed in the root
+`pyproject.toml`. There is no separate package installation for this module.
 
 ## CLI
 
 ```bash
 pmeas --help
+python -m qtools.pmeas --help
 ```
 
-### `calibrate` — Waveplate Calibration
-
-Scans the HWP/QWP, fits the Malus-law curve, verifies H↔V extinction, and saves parameters.
-
-| Option            | Default     | Description                        |
-|-------------------|-------------|------------------------------------|
-| `--hwp`           | —           | Calibrate HWP (default)            |
-| `--qwp`           | —           | Calibrate QWP                      |
-| `--achromatic`    | —           | Multi-wavelength calibration       |
-| `--duration`      | 1.0         | Integration time per point (s)     |
-| `--sample`        | 10          | Measurements per angle             |
-| `--mock`          | —           | Simulation mode (no hardware)      |
-| `--raw`           | —           | Save raw measurement data to file  |
+The previous `polmeas` command remains an alias for `pmeas`. Existing configuration
+files retain the name `polmeas_config.yaml`; use `--config PATH` to select a file.
+Run commands from the experiment directory so configuration and output files are
+stored outside the installed package.
 
 ```bash
-# Run a mock HWP calibration (no hardware needed)
-pmeas calibrate --mock --sample 2
+# Inspect configuration and available commands
+pmeas config show
+pmeas motor --help
+pmeas calibrate --help
+pmeas scan --help
 
-# Real calibration on an auto-detected/configured motor
-pmeas calibrate
+# Calibrate a waveplate with configured hardware
+pmeas calibrate hwp
+pmeas calibrate qwp
+pmeas calibrate achromatic --role hwp
+
+# Polarization scans with configured motor stages and detectors
+pmeas scan singles --start 0 --end 180 --step 10
+pmeas scan pairs --start 0 --end 180 --step 10
+pmeas scan chsh --start 0 --end 90 --step 5
+
+# Characterization, alignment optimization, and drift monitoring
+pmeas chsh
+pmeas chsh --optimize
+pmeas chsh --live
 ```
 
-### `scan coincidence` — Polarization Correlation Scan
-
-Fixes Alice at each basis (H, V, D, A), sweeps Bob's HWP, and records coincidences.
-
-```bash
-# Sweep Bob's angle in mock mode
-pmeas scan coincidence --mock --start 0 --end 180 --step 10
-```
-
-### `scan chsh` — CHSH Bell Offset Scan
-
-Scans Bob's basis offset β and computes the CHSH S parameter.
-
-```bash
-# Sweep CHSH offset angle in mock mode
-pmeas scan chsh --mock --start 0 --end 90 --step 5
-```
-
-### `chsh` — Full Characterization, Optimization & Drift Monitoring
-
-Runs the full characterization workflow, optimizes basis alignments, or tracks drift over time.
-
-| Option       | Description                                           |
-|--------------|-------------------------------------------------------|
-| (none)       | Run full characterization (Coincidence + Bell scans)  |
-| `--optimize` | Run 2-D coordinate descent to maximize |S|            |
-| `--live`     | Monitor |S| and re-optimize when it drifts below a threshold |
-
-```bash
-# Run full characterization in mock mode
-pmeas chsh --mock
-
-# Optimize Alice/Bob basis alignments
-pmeas chsh --optimize --mock
-
-# Monitor drift and dynamically correct zero offsets
-pmeas chsh --live --mock
-```
-
----
+Measurement commands require configured, connected hardware. Unit tests use
+fake devices and do not require laboratory instruments.
 
 ## Python API
 
-The recommended way to interact programmatically with the system is through the orchestrator `PolarizationMeasurementController` context manager, which handles device lifecycles and configuration files cleanly.
+`TaskController` manages configuration, motor connections, and measurement tasks.
+`MeasController` is an alias for the same class.
 
 ```python
-from qtools.pmeas.api import PolarizationMeasurementController
+from qtools.pmeas import TaskController
 
-# Run a waveplate calibration scan under mock simulation
-with PolarizationMeasurementController(mock=True) as ctrl:
+# Uses motors and detectors registered in the selected configuration file.
+with TaskController(config_path="polmeas_config.yaml") as ctrl:
     result = ctrl.calibrate(
-        role="hwp",
+        waveplate="hwp",
         channel=0,
         start_angle=0.0,
         end_angle=180.0,
         step_angle=5.0,
         repetitions=2,
     )
-    print(f"Fitted HWP offset θ₀ = {result['theta_0']:.4f}°")
-    print(f"Fitted visibility = {result['visibility']:.4f}")
-    
-    # Target angles for H/V/D/A bases
-    for basis, angle in result["target_angles"].items():
-        print(f"  {basis}: {angle:.4f}°")
+    print(result)
 ```
 
----
+Lower-level managers and functions are available from `qtools.pmeas`, including
+`ConfigManager`, `MotorManager`, `MeasManager`, `run_calibration`,
+`run_achromatic_calibration`, `run_singles_scan`, `run_coincidence_scan`,
+`run_bell_scan`, `optimize_basis`, and `run_live_correction`.
 
-## Project Structure
+## Structure
 
+```text
+src/qtools/pmeas/
+├── __init__.py             # Public API exports
+├── __main__.py             # python -m qtools.pmeas
+├── api.py                  # TaskController and MeasController exports
+├── cli.py                  # pmeas command and motor CLI delegation
+├── commands/               # Calibration, scan, configuration, CHSH handlers
+├── config.py               # Configuration and archive management
+├── meas_manager.py         # Detector readout and task controller
+├── motor_manager.py        # Motor connection management
+├── calibration.py          # Waveplate calibration
+├── entanglement.py         # Polarization and Bell scans
+├── optimization.py         # Basis optimization and drift correction
+├── backends/motor.py       # qtools.motor integration
+└── analysis/               # Jones calculus, curve fitting, correlations
+
+tests/pmeas/                # Tests run from the qtools repository root
 ```
-qtools.pmeas/
-├── pyproject.toml
-├── polmeas_config.yaml         # Config registry (devices, calibrations, setups)
-├── src/qtools.pmeas/
-│   ├── __init__.py
-│   ├── _path.py                # Path resolver helper
-│   ├── cli.py                  # CLI subcommand parser and handlers
-│   ├── config.py               # ConfigManager class
-│   ├── meas_manager.py         # MeasManager & MockMeasManager classes
-│   ├── motor_manager.py        # MotorManager class (caches Alice/Bob stage connections)
-│   ├── calibration.py          # Waveplate calibration logic and verification
-│   ├── entanglement.py         # Coincidence sweeps and Bell scans
-│   ├── optimize.py             # Basis coordinate descent & drift correction loop
-│   ├── achromatic.py           # Achromatic dispersion calibration
-│   ├── api.py                  # PolarizationMeasurementController high-level orchestrator
-│   ├── backends/
-│   │   ├── __init__.py         # Exports MotorBackend facade
-│   │   ├── motor.py            # MotorBackend facade wrapping real/mock stages
-│   │   └── mockmotor.py        # MockMotor simulation stage
-│   └── analysis/
-│       ├── fit.py              # Least-squares fit and correlation analytics
-│       └── jones.py            # Jones calculus math and angle computation
-└── output/                     # Generated plots (.png) and raw data (.npz)
+
+## Tests
+
+```bash
+pytest tests/pmeas/
 ```
