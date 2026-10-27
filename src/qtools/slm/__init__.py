@@ -9,6 +9,7 @@ from qtools.slm.phase import (
     PhaseRegion,
     lg_radial_amplitude,
     pseudo_knife_edge,
+    random_phase,
     superposition,
 )
 from qtools.slm.slm import SLM, SLMGeometry
@@ -22,6 +23,7 @@ __all__ = [
     "PhaseMask",
     "PhaseRegion",
     "pseudo_knife_edge",
+    "random_phase",
     "QtDisplay",
     "SLM",
     "SLMGeometry",

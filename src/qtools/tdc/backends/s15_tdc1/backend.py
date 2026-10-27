@@ -17,17 +17,6 @@ from qtools.tdc.backends.s15_tdc1.exp_backend import CHANNEL_COUNT, RESOLUTION_P
 from qtools.tdc.backends.s15_common import decode_pattern_channels
 logger = logging.getLogger(__name__)
 
-# Try importing from S15lib.  This must never crash module import: a broken
-# or incomplete S15lib (e.g. a syntax error in one of its modules) should
-# degrade to S15LIB_AVAILABLE=False so the CLI and backend registry load.
-try:
-    from S15lib.instruments.usb_counter_fpga import TimestampTDC1
-    S15LIB_AVAILABLE = True
-except Exception as exc:  # ImportError, SyntaxError, IndentationError, ...
-    logger.warning("S15lib unavailable for the s15_tdc1 backend: %s", exc)
-    S15LIB_AVAILABLE = False
-
-
 @register_backend("s15_tdc1")
 class S15TDC1Backend(TDCBackend):
     """Backend for S-Fifteen TDC1."""
@@ -68,11 +57,13 @@ class S15TDC1Backend(TDCBackend):
         if self._connected:
             return
 
-        if not S15LIB_AVAILABLE:
+        try:
+            from S15lib.instruments.usb_counter_fpga import TimestampTDC1
+        except Exception as exc:
             raise ImportError(
                 "S15lib is required to connect to physical S-Fifteen hardware. "
                 "Please install it with `pip install s15lib`."
-            )
+            ) from exc
 
         # Use parameter device_path or stored path, or auto-discover
         target_path = device_path or self._device_path

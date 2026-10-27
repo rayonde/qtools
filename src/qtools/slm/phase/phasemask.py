@@ -16,6 +16,7 @@ from qtools.slm.phase import (
     zernike as zernike_module,
 )
 from qtools.slm.phase.perfect_spiral import perfect_spiral as generate_perfect_spiral
+from qtools.slm.phase.random import random_phase as generate_random_phase
 
 if TYPE_CHECKING:
     from qtools.slm.slm import SLMGeometry
@@ -247,6 +248,19 @@ class PhaseMask:
             order, radial_frequency, center
         )
 
+    def random_phase(
+        self,
+        *,
+        seed: int | None = None,
+        phase_range: tuple[float, float] = (0.0, 2 * np.pi),
+    ) -> "PhaseMask":
+        """Add a uniform random phase over this mask's active region."""
+
+        return self + self._active_region().random_phase(
+            seed=seed,
+            phase_range=phase_range,
+        )
+
     def blazed_grating(
         self,
         period: int | float,
@@ -444,6 +458,30 @@ class PhaseRegion(PhaseMask):
             ),
             self.geometry,
             region_bounds=self.bounds,
+        )
+
+    def random_phase(
+        self,
+        *,
+        seed: int | None = None,
+        phase_range: tuple[float, float] = (0.0, 2 * np.pi),
+    ) -> PhaseMask:
+        """Generate a uniform random phase in this region."""
+
+        return PhaseMask(
+            generate_random_phase(
+                self.geometry.shape,
+                self.bounds,
+                seed=seed,
+                phase_range=phase_range,
+            ),
+            self.geometry,
+            region_bounds=self.bounds,
+            metadata={
+                "operation": "random_phase",
+                "seed": seed,
+                "random_phase_range_rad": tuple(float(value) for value in phase_range),
+            },
         )
 
     def blazed_grating(

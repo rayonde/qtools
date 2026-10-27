@@ -28,9 +28,12 @@ dependencies = [
     "numpy>=1.24.0",
     "pillow>=12.3.0",
     "pyserial>=3.5",
+    "pyvisa>=1.11.0",
+    "pyyaml>=6.0",
     "qutip>=5.0.0",
     "s15lib>=0.2.0",
     "scipy>=1.10.0",
+    "thorlabs-apt-protocol>=0.2",
     "tomli-w>=1.2.0",
     "tomli>=2.0.1; python_version < '3.11'",
     "tqdm>=4.66",
@@ -42,6 +45,8 @@ slm-rpc = ["ipyutils>=1.0.0"]
 slm-simulated = ["slmsuite>=0.4.1"]
 
 [project.scripts]
+motor = "qtools.motor.cli:main"
+powermeter = "qtools.powermeter.cli:main"
 tdc = "qtools.tdc.cli:main"
 tec = "qtools.tec.cli:main"
 
@@ -53,9 +58,14 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qtools"]
+exclude = [
+    "src/qtools/dm/backends/Thorlabs/DMP40/refs/**",
+    "src/qtools/motor/vendor/**",
+    "src/qtools/motor/output/**",
+]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "src/qtools/camera/tests"]
 pythonpath = ["src"]
 markers = [
     "hardware: tests that require real TDC hardware connected",

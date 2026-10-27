@@ -3,6 +3,7 @@
 from qtools.slm.phase.phasemask import PhaseMask, PhaseRegion
 from qtools.slm.phase.knife_edge import pseudo_knife_edge
 from qtools.slm.phase.perfect_spiral import perfect_spiral
+from qtools.slm.phase.random import random_phase
 from qtools.slm.phase.superposition import lg_radial_amplitude, superposition
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "lg_radial_amplitude",
     "perfect_spiral",
     "pseudo_knife_edge",
+    "random_phase",
     "superposition",
 ]

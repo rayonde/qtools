@@ -1,0 +1,13 @@
+__pycache__/
+.*.swp
+.directory
+*.egg-info/
+build/
+dist/
+/dmlib/*.h5
+/dmlib/version.py
+/.eggs
+/examples/*.h5
+/examples/*.log
+*.log
+/examples/*.json

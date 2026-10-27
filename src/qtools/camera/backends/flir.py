@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import math
 import time
 import warnings
 from collections.abc import Iterable
@@ -201,12 +202,18 @@ class FLIR(CameraBackend):
     def _configure_manual_image_settings(self) -> None:
         assert self.cam is not None
         pyspin = self._pyspin
-        self._set_if_writable("GainAuto", getattr(pyspin, "GainAuto_Off", None))
+        self._set_enum_if_writable("GainAuto", "Off", getattr(pyspin, "GainAuto_Off", None))
         self._set_if_writable("Gain", 0.0)
-        self._set_if_writable("ExposureAuto", getattr(pyspin, "ExposureAuto_Off", None))
-        self._set_if_writable("ExposureMode", getattr(pyspin, "ExposureMode_Timed", None))
+        self._set_enum_if_writable(
+            "ExposureAuto", "Off", getattr(pyspin, "ExposureAuto_Off", None)
+        )
+        self._set_enum_if_writable(
+            "ExposureMode", "Timed", getattr(pyspin, "ExposureMode_Timed", None)
+        )
 
-        self._set_if_writable("BlackLevelSelector", getattr(pyspin, "BlackLevelSelector_All", None))
+        self._set_enum_if_writable(
+            "BlackLevelSelector", "All", getattr(pyspin, "BlackLevelSelector_All", None)
+        )
         self._set_if_writable("BlackLevel", 0.0)
 
         if not self._set_if_writable("GammaEnable", False):
@@ -218,10 +225,29 @@ class FLIR(CameraBackend):
 
     def _configure_trigger(self) -> None:
         pyspin = self._pyspin
-        self._set_if_writable("TriggerMode", getattr(pyspin, "TriggerMode_On", None))
-        self._set_if_writable("TriggerSource", getattr(pyspin, "TriggerSource_Software", None))
-        self._set_if_writable("TriggerSelector", getattr(pyspin, "TriggerSelector_FrameStart", None))
-        self._trigger_is_software = self._read_trigger_is_software()
+        # Spinnaker requires TriggerMode to be disabled before TriggerSource or
+        # TriggerSelector can be changed.  The vendor examples all follow this
+        # order; setting TriggerMode=On first works with some fake cameras but
+        # is rejected by real GenICam devices.
+        trigger_mode = self._quick_node("TriggerMode")
+        trigger_off = getattr(pyspin, "TriggerMode_Off", None)
+        if trigger_off is not None and not self._set_enum_value(trigger_mode, "Off", trigger_off):
+            logger.debug("TriggerMode cannot be disabled; leaving the camera in its current mode.")
+            self._trigger_is_software = False
+            return
+
+        selector = getattr(pyspin, "TriggerSelector_FrameStart", None)
+        source = getattr(pyspin, "TriggerSource_Software", None)
+        selector_ok = self._set_enum_if_writable("TriggerSelector", "FrameStart", selector)
+        source_ok = self._set_enum_if_writable("TriggerSource", "Software", source)
+        enabled = getattr(pyspin, "TriggerMode_On", None)
+        mode_ok = (
+            selector_ok
+            and source_ok
+            and enabled is not None
+            and self._set_enum_value(trigger_mode, "On", enabled)
+        )
+        self._trigger_is_software = bool(selector_ok and source_ok and mode_ok)
 
     def _configure_adc_depth(self, bitdepth: int | None) -> int:
         if bitdepth is not None and bitdepth not in (8, 10, 12):
@@ -251,13 +277,21 @@ class FLIR(CameraBackend):
             if pixel_value is None:
                 continue
             try:
-                pixel_format.SetValue(pixel_value)
-                adc_node = self._quick_node("AdcBitDepth")
-                if adc_value is not None and self._is_writable(adc_node):
-                    adc_node.SetValue(adc_value)
-                return bits
+                pixel_format_symbol = {8: "Mono8", 10: "Mono16", 12: "Mono16"}[bits]
+                self._set_enum_value(pixel_format, pixel_format_symbol, pixel_value)
             except Exception:
                 continue
+            try:
+                adc_node = self._quick_node("AdcBitDepth")
+                if adc_value is not None:
+                    self._set_enum_value(adc_node, f"Bit{bits}", adc_value, required=False)
+            except Exception:
+                logger.debug("AdcBitDepth is unavailable; using the selected pixel format.")
+            return bits
+        if bitdepth is not None:
+            raise CameraConfigurationError(
+                f"Camera does not support the requested {bitdepth}-bit acquisition mode."
+            )
         return self._read_adc_depth()
 
     def _read_adc_depth(self) -> int:
@@ -397,12 +431,14 @@ class FLIR(CameraBackend):
 
     def set_exposure(self, exposure_s: float) -> float:
         exposure_s = float(exposure_s)
-        if exposure_s <= 0:
-            raise ValueError("exposure_s must be positive.")
-        if self.exposure_bounds_s is not None:
-            exposure_s = float(np.clip(exposure_s, *self.exposure_bounds_s))
+        if not math.isfinite(exposure_s) or exposure_s <= 0:
+            raise ValueError("exposure_s must be a finite positive number.")
         try:
             node = self._quick_node("ExposureTime")
+            bounds = self.exposure_bounds_s
+            if bounds is None:
+                bounds = (float(node.GetMin()) / 1e6, float(node.GetMax()) / 1e6)
+            exposure_s = float(np.clip(exposure_s, *bounds))
             node.SetValue(exposure_s * 1e6)
             return self.get_exposure()
         except Exception as exc:
@@ -431,6 +467,7 @@ class FLIR(CameraBackend):
                 raise NotImplementedError(f"Camera {self.name} does not support binning.")
             horizontal.SetValue(int(binning[0]))
             vertical.SetValue(int(binning[1]))
+            self._cache_camera_metadata()
         except NotImplementedError:
             raise
         except Exception as exc:
@@ -511,11 +548,14 @@ class FLIR(CameraBackend):
     def get_image(self, timeout_s: float = 1.0) -> npt.NDArray[np.generic]:
         if self.cam is None or not self._acquiring:
             raise CameraAcquisitionError("FLIR camera is not acquiring.")
+        timeout_s = float(timeout_s)
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise ValueError("timeout_s must be a finite positive number.")
         frame: Any | None = None
         try:
             if self._trigger_is_software:
                 self._quick_node("TriggerSoftware").Execute()
-            frame = self.cam.GetNextImage(int(float(timeout_s) * 1e3))
+            frame = self.cam.GetNextImage(max(1, int(timeout_s * 1e3)))
             if frame.IsIncomplete():
                 status = frame.GetImageStatus()
                 raise CameraAcquisitionError(f"FLIR image is incomplete with status {status}.")
@@ -593,7 +633,78 @@ class FLIR(CameraBackend):
         node = getattr(self.cam, name, None)
         if node is not None:
             return node
-        return self.cam.GetNodeMap().GetNode(name)
+        raw_node = self.cam.GetNodeMap().GetNode(name)
+        pointer_type = {
+            "AdcBitDepth": "CEnumerationPtr",
+            "AcquisitionFrameRateEnable": "CBooleanPtr",
+            "AcquisitionFrameRate": "CFloatPtr",
+            "BlackLevelSelector": "CEnumerationPtr",
+            "BinningHorizontal": "CIntegerPtr",
+            "BinningVertical": "CIntegerPtr",
+            "ExposureAuto": "CEnumerationPtr",
+            "ExposureMode": "CEnumerationPtr",
+            "ExposureTime": "CFloatPtr",
+            "GainAuto": "CEnumerationPtr",
+            "Gain": "CFloatPtr",
+            "GammaEnable": "CBooleanPtr",
+            "Gamma": "CFloatPtr",
+            "Height": "CIntegerPtr",
+            "HeightMax": "CIntegerPtr",
+            "OffsetX": "CIntegerPtr",
+            "OffsetY": "CIntegerPtr",
+            "PixelFormat": "CEnumerationPtr",
+            "TriggerMode": "CEnumerationPtr",
+            "TriggerSelector": "CEnumerationPtr",
+            "TriggerSource": "CEnumerationPtr",
+            "TriggerSoftware": "CCommandPtr",
+            "Width": "CIntegerPtr",
+            "WidthMax": "CIntegerPtr",
+        }.get(name)
+        wrapper = getattr(self._pyspin, pointer_type, None) if pointer_type else None
+        return wrapper(raw_node) if wrapper is not None else raw_node
+
+    def _set_enum_if_writable(self, name: str, symbol: str, value: Any) -> bool:
+        if value is None:
+            return False
+        try:
+            return self._set_enum_value(self._quick_node(name), symbol, value)
+        except Exception:
+            return False
+
+    def _set_enum_value(
+        self,
+        node: Any,
+        symbol: str,
+        value: Any,
+        *,
+        required: bool = True,
+    ) -> bool:
+        """Set either a QuickSpin enum node or a GenICam enum node."""
+
+        if not self._is_writable(node):
+            return False
+        try:
+            get_entry = getattr(node, "GetEntryByName", None)
+            set_int_value = getattr(node, "SetIntValue", None)
+            if get_entry is not None and set_int_value is not None:
+                entry = get_entry(symbol)
+                entry_wrapper = getattr(self._pyspin, "CEnumEntryPtr", None)
+                if entry_wrapper is not None:
+                    entry = entry_wrapper(entry)
+                readable = getattr(self._pyspin, "IsReadable", None)
+                if readable is not None and not readable(entry):
+                    return False
+                set_int_value(entry.GetValue())
+            elif hasattr(node, "SetValue"):
+                # QuickSpin exposes SetValue(enum_constant).
+                node.SetValue(value)
+            elif required:
+                return False
+            else:
+                return False
+            return True
+        except Exception:
+            return False
 
     def _set_if_writable(self, name: str, value: Any) -> bool:
         if value is None:

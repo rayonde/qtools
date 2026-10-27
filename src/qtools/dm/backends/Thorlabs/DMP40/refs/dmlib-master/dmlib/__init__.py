@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from dmlib import version
+
+__author__ = 'J Antonello'
+__copyright__ = 'Copyright 2019-2021, J. Antonello'
+__license__ = 'GPLv3+'
+__email__ = 'jacopo@antonello.org'
+__status__ = 'Production'
+__all__ = [
+    'calibration', 'control', 'core', 'dmplot', 'gui', 'interf', 'version',
+    'zpanel'
+]
+__version__ = version.__version__
+__date__ = version.__date__
+__commit__ = version.__commit__
+__doc__ = f"""
+To be defined.
+
+author:  {__author__}
+date:    {__date__}
+version: {__version__}
+commit:  {__commit__}
+"""

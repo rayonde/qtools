@@ -47,6 +47,10 @@ canvas = slm.create_canvas()
 print(canvas.info)
 ```
 
+In `info`, `shape` is the NumPy array shape `(height, width)`, `pixel_pitch` is
+`(x_pitch_um, y_pitch_um)`, and `dimension` is the physical display size in
+`(width_mm, height_mm)` calculated from those values.
+
 Use `blazed_grating()` for a pixel-periodic phase ramp:
 
 ```python
@@ -66,6 +70,13 @@ print(phase.info)
 Here `order=8` or `order=16` means 8 or 16 discrete phase levels per cycle.
 `phase.info` includes the pixel period, phase levels and predicted diffraction
 angle calculated from the wavelength and pixel pitch.
+
+Generate a reproducible uniform random phase directly from a canvas or region:
+
+```python
+random_phase = canvas.random_phase(seed=0)
+random_phase.show()
+```
 
 ## Regional phase generation
 

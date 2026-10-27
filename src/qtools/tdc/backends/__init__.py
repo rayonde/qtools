@@ -12,6 +12,7 @@ _BACKEND_MODULES = [
     "qtools.tdc.backends.s15_tdc2",
     "qtools.tdc.backends.ciqtek",
     "qtools.tdc.backends.idq",
+    "qtools.tdc.backends.siminics",
 ]
 
 for _mod in _BACKEND_MODULES:

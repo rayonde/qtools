@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _LIBCOINC = None
-_S15LIB_DELTA_LOOP = None
 
 try:
     from qtools.tdc._native import load_libcoincidences
@@ -105,15 +104,6 @@ try:
     logger.debug("Loaded native coincidences library")
 except Exception as e:
     logger.debug("Could not load native coincidences library: %s", e)
-
-# S15lib fallback (expects float arrays and bin_width_ns)
-try:
-    from S15lib.g2lib.g2lib import delta_loop
-    _S15LIB_DELTA_LOOP = delta_loop
-    logger.debug("Loaded S15lib delta_loop fallback")
-except ImportError:
-    logger.debug("S15lib delta_loop not available")
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -368,16 +358,6 @@ def _compute_g2_delta_loop(
             logger.warning("C-based tdc_compute_g2 returned error %d, falling back", err)
         else:
             return hist
-
-    if _S15LIB_DELTA_LOOP is not None:
-        # S15lib expects float64 arrays and a bin_width_ns parameter.
-        # Since we are already in bin units, pass bin_width=1.
-        return _S15LIB_DELTA_LOOP(
-            t1_bins.astype(np.float64),
-            t2_adj_bins.astype(np.float64),
-            bins=bins,
-            bin_width_ns=1,
-        ).astype(np.uint64)
 
     # Pure-Python fallback
     return _compute_g2_python(t1_bins, t2_adj_bins, bins)

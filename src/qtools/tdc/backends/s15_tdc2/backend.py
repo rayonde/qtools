@@ -26,17 +26,6 @@ from qtools.tdc.backends.s15_common import decode_pattern_channels
 
 logger = logging.getLogger(__name__)
 
-# Try importing S15lib.  This must never crash module import: a broken or
-# incomplete S15lib (e.g. a syntax error in one of its modules) should degrade
-# to S15LIB_AVAILABLE=False so the CLI and the backend registry still load.
-try:
-    from S15lib.instruments import TimestampTDC2
-    S15LIB_AVAILABLE = True
-except Exception as exc:  # ImportError, SyntaxError, IndentationError, ...
-    logger.warning("S15lib unavailable for the s15_tdc2 backend: %s", exc)
-    S15LIB_AVAILABLE = False
-
-
 def _parse_binary_timestamps(filename: str, highres_tscard: bool = True):
     """Reads raw timestamp binary file into time and patterns vectors.
 
@@ -113,11 +102,13 @@ class S15TDC2Backend(TDCBackend):
                 "Use the 'simulator' backend for development on other platforms."
             )
 
-        if not S15LIB_AVAILABLE:
+        try:
+            from S15lib.instruments import TimestampTDC2
+        except Exception as exc:
             raise ImportError(
                 "S15lib is required to connect to physical S-Fifteen hardware. "
                 "Please install it with `pip install s15lib`."
-            )
+            ) from exc
 
         target_path = device_path or self._device_path
         readevents_path = kwargs.get("readevents", "/usr/bin/readevents7")

@@ -47,13 +47,14 @@ class SLMGeometry:
         """Return the physical parameters used to generate phase masks."""
 
         return {
-            "pixels": self.resolution,
-            "resolution": self.resolution,
+            # NumPy array order: (height, width).
             "shape": self.shape,
             "pixel_pitch": self.pitch_um,
-            "pixel_pitch_um": self.pitch_um,
-            "wavelength": self.wavelength,
-            "wavelength_m": self.wavelength,
+            # Physical display size in (width_mm, height_mm).
+            "dimension": (
+                self.resolution[0] * self.pitch_um[0] * 1e-3,
+                self.resolution[1] * self.pitch_um[1] * 1e-3,
+            ),
             "wavelength_nm": self.wavelength * 1e9,
             "bitdepth": self.bitdepth,
         }

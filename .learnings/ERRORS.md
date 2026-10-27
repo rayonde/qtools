@@ -2,6 +2,74 @@
 
 ---
 
+## [ERR-20261027-005] parser_export_order_lint
+
+**Logged**: 2026-10-27T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+Ruff rejected the newly added parser export order in `__all__`.
+
+### Context
+- `parse_blocks` was listed after `parse_bytes`; the configured alphabetical rule required the reverse order.
+
+### Resolution
+- **Resolved**: 2026-10-27T00:00:00+08:00
+- **Notes**: Reordered exports; targeted ruff and tests now pass.
+
+---
+
+## [ERR-20261027-004] siminics_test_fixture_overflow_value
+
+**Logged**: 2026-10-27T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: tests
+
+### Summary
+The new T3 parser test initially expected a raw overflow value rather than the expanded sync index.
+
+### Context
+The fixture `FE0002D4` encodes overflow value `0x2D4`; after the vendor 10-bit counter epoch expansion, the following event's sync index is `(0x2D4 + 1) * 1024 + 1`.
+
+### Resolution
+- **Resolved**: 2026-10-27T00:00:00+08:00
+- **Notes**: Corrected the expected value in `tests/tdc/test_siminics_backend.py`.
+
+---
+
+## [ERR-20261027-003] full_tdc_regression_suite
+
+**Logged**: 2026-10-27T00:00:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+The full existing TDC test suite has three unrelated failures outside the Siminics backend.
+
+### Error
+```text
+ExpS15TDC1Backend.get_singles: SinglesResult.__init__() missing channels
+IDQ ID1000 tests: NameError: name 'np' is not defined
+```
+
+### Context
+- Command: `pytest -q tests/tdc`
+- Siminics-specific smoke checks, compileall, ruff, registry, and backend ABC tests passed.
+- Failures occurred in pre-existing S15/IDQ code and were left untouched.
+
+### Suggested Fix
+Add the missing `channels` field to the experimental S15 singles result and import NumPy in the IDQ1000 backend, in a separate maintenance change.
+
+### Metadata
+- Reproducible: yes
+- Related Files: `src/qtools/tdc/backends/s15_tdc1/exp_backend.py`, `src/qtools/tdc/backends/idq/backend_id1000.py`
+
+---
+
 ## [ERR-20261007-003] notebook-ast-check-jupyter-magic
 
 **Logged**: 2026-10-07
@@ -312,5 +380,53 @@ Retry the commit when the workspace grants write access to `.git`, or leave the 
 ### Metadata
 - Reproducible: unknown
 - Related Files: docs/superpowers/specs/2026-10-27-siminics-backend-design.md
+
+---
+
+
+## [ERR-20261027-DM1] optional regression environment
+
+**Logged**: 2026-10-27
+**Priority**: low
+**Status**: pending
+**Area**: tests
+
+### Summary
+The DMP40 change's broader SLM regression could not collect because the active project venv lacks imageio.
+
+### Error
+`ModuleNotFoundError: No module named imageio` from `qtools.slm.display.displaymask`.
+
+### Context
+`pytest tests/dm src/qtools/camera/tests tests/slm/test_architecture.py tests/tdc/test_registry.py` stopped during SLM collection. Running the DM, camera and registry tests separately passed all 40 tests. DM tests alone passed all 30 tests. No dependency changes were needed for DM.
+
+### Suggested Fix
+Install the project's declared imageio dependency when working on SLM; do not report this collection failure as a DM regression or claim the SLM tests passed.
+
+### Metadata
+- Reproducible: yes
+- Related Files: tests/slm/test_architecture.py, tests/dm/test_dmp40.py, pyproject.toml
+
+---
+
+## [ERR-20261027-PKG] Copied-package migration preflight
+
+**Logged**: 2026-10-27T09:39:49.742144+00:00
+**Priority**: low
+**Status**: resolved
+**Area**: infra
+
+### Summary
+Initial migration stopped before writes due to nested JavaScript/Python escaping and duplicate Finder metadata.
+
+### Error
+SyntaxError in nested command text; destination already exists for .DS_Store.
+
+### Resolution
+Use raw template strings only for scripts without backticks; use apply_patch for Markdown. Preflight source entries and remove generated egg-info with the redundant source directory.
+
+### Metadata
+- Reproducible: yes
+- Related Files: src/qtools/motor, src/qtools/powermeter
 
 ---

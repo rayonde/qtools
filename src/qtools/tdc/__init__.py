@@ -5,6 +5,7 @@ Supports multiple TDC hardware backends:
 - S-Fifteen TDC2 (USB)
 - CIQTEK TDC1610 (Ethernet)
 - IDQ TDC (placeholder)
+- Siminics FT10xx (Windows USB)
 - Simulator (for testing)
 """
 

@@ -47,6 +47,10 @@ canvas = slm.create_canvas()
 print(canvas.info)
 ```
 
+`info["shape"]` 使用 NumPy 数组顺序 `(height, width)`；
+`info["pixel_pitch"]` 使用 `(x_pitch_um, y_pitch_um)`；`info["dimension"]`
+使用液晶的物理尺寸 `(width_mm, height_mm)`，由前两个字段计算得到。
+
 相位图可以直接显示。Jupyter 中会 inline 显示，普通终端会打开系统图片查看器：
 
 ```python
@@ -66,6 +70,13 @@ print(phase.info)
 `angle` 是光栅方向角，使用角度制；`angle=-90` 表示相位从上到下增加。
 `order=8` 或 `order=16` 表示每个周期量化为 8 或 16 个相位台阶。
 `phase.info` 会给出像素周期、量化台阶数和按波长/像素间距预测的偏转角。
+
+随机相位可以直接从 canvas 或分区生成；复用同一个 `seed` 会得到相同的相位图：
+
+```python
+random_phase = canvas.random_phase(seed=0)
+random_phase.show()
+```
 
 ## 左右区域相位
 

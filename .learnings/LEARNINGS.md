@@ -166,3 +166,43 @@ Keep user-facing monitor documentation and CLI help 1-based; only Qt widget acce
 - Tags: slm, monitor-indexing
 
 ---
+
+## [LRN-20261027-002] correction
+
+**Logged**: 2026-10-27T00:00:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: backend
+
+### Summary
+SLM info summaries should avoid duplicate dimension and unit fields.
+
+### Details
+Keep `pixels` as the user-facing `(width, height)` device size, `pixel_pitch` in micrometres, and `wavelength_nm`. Remove duplicate `resolution`, `shape`, metre wavelength, and suffixed pitch fields from the info dictionary. The `resolution` and `shape` Python properties remain available for programmatic use.
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/qtools/slm/slm.py, src/qtools/slm/phase/phasemask.py
+- Tags: slm, info, api
+
+---
+
+## [LRN-20261027-003] correction
+
+**Logged**: 2026-10-27T00:00:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: backend
+
+### Summary
+S15lib must be imported only when an S-Fifteen hardware backend actually connects.
+
+### Details
+Top-level qtools and TDC backend registration must not import S15lib or its g2lib module. The S15 TDC1/TDC2 backends now import their vendor classes inside `connect()`. The project g2 analysis uses the native coincidence library or the existing Python implementation without importing S15lib.
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/qtools/__init__.py, src/qtools/tdc/backends/s15_tdc1/backend.py, src/qtools/tdc/backends/s15_tdc2/backend.py, src/qtools/tdc/analysis/g2.py
+- Tags: lazy-import, s15lib, warnings
+
+---

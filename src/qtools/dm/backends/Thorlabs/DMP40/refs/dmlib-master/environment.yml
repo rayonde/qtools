@@ -1,0 +1,15 @@
+name: dmlib
+
+dependencies:
+  - python
+  - numpy<2
+  - h5py
+  - matplotlib
+  - scikit-image
+  - cython<3
+  - pip:
+    - pyqt5
+
+channels:
+  - conda-forge
+  - anaconda

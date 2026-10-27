@@ -22,6 +22,7 @@ from qtools.camera.camera import _BACKEND_MODULES
 class FakeNode:
     def __init__(self, value, minimum=0, maximum=1_000_000, increment=1):
         self.value = value
+        self.writes = []
         self.minimum = minimum
         self.maximum = maximum
         self.increment = increment
@@ -31,6 +32,7 @@ class FakeNode:
         return 1
 
     def SetValue(self, value):
+        self.writes.append(value)
         self.value = value
 
     def GetValue(self):
@@ -181,6 +183,7 @@ def fake_pyspin(monkeypatch):
     module = types.SimpleNamespace(
         RW=1,
         TriggerMode_On="trigger-on",
+        TriggerMode_Off="trigger-off",
         TriggerSource_Software="software",
         TriggerSelector_FrameStart="frame-start",
         GainAuto_Off="gain-off",
@@ -234,6 +237,8 @@ def test_flir_discovery_initialization_and_12bit_capture(fake_pyspin):
     with FLIR(serial="123", pitch_um=3.45) as flir:
         assert flir.shape == (1, 2)
         assert flir.pitch_um == (3.45, 3.45)
+        assert camera.TriggerMode.value == "trigger-on"
+        assert camera.TriggerMode.writes == ["trigger-off", "trigger-on"]
         image = flir.capture()
         assert np.array_equal(image, np.array([[0x123, 0xFFF]], dtype=np.uint16))
         assert camera.TriggerSoftware.executions == 1
@@ -242,6 +247,36 @@ def test_flir_discovery_initialization_and_12bit_capture(fake_pyspin):
     assert camera.deinitialized
     FLIR.close_sdk()
     assert system.released
+
+
+def test_enum_setting_supports_genicam_node_map_style(fake_pyspin):
+    class EnumEntry:
+        def __init__(self, value):
+            self.value = value
+
+        def GetValue(self):
+            return self.value
+
+    class EnumerationNode:
+        def __init__(self):
+            self.value = None
+            self.symbols = {"Software": 7}
+
+        def GetAccessMode(self):
+            return 1
+
+        def GetEntryByName(self, name):
+            return EnumEntry(self.symbols[name])
+
+        def SetIntValue(self, value):
+            self.value = value
+
+    _, _ = fake_pyspin
+    camera = EnumerationNode()
+    flir = object.__new__(FLIR)
+    flir._pyspin = sys.modules["PySpin"]
+    assert flir._set_enum_value(camera, "Software", 0)
+    assert camera.value == 7
 
 
 def test_facade_delegates_and_saves_raw_data(tmp_path, fake_pyspin):
