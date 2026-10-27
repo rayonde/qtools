@@ -1,0 +1,17 @@
+version: 1
+exp: ''
+author: ''
+created_at: '2026-07-24 04:51:12'
+updated_at: '2026-08-06 22:37:48'
+connection:
+  baudrate: 1000000
+  servo_type: scs
+  ids: []
+  os_ports:
+    darwin:
+      port: ''
+    linux:
+      port: ''
+    win32:
+      port: ''
+channels: []

@@ -2,7 +2,7 @@
 """CLI for Thorlabs K10CR1 stepper motor rotation stages.
 
 Motor-control commands only.  For polarization measurement and waveplate
-calibration see the ``polarization_meas`` package.
+calibration see the ``qtools.pmeas`` package.
 
 Device targeting
 ----------------

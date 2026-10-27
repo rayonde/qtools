@@ -219,3 +219,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Imported motor experiment output
+/src/qtools/motor/output/

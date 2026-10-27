@@ -24,6 +24,7 @@ dependencies = [
     "h5py>=3.0",
     "imageio[tifffile]>=2.37.3",
     "kochen",
+    "lmfit>=1.2.0",
     "matplotlib>=3.5.0",
     "numpy>=1.24.0",
     "pillow>=12.3.0",
@@ -46,6 +47,9 @@ slm-simulated = ["slmsuite>=0.4.1"]
 
 [project.scripts]
 motor = "qtools.motor.cli:main"
+pctrl = "qtools.pctrl.cli:main"
+pmeas = "qtools.pmeas.cli:main"
+polmeas = "qtools.pmeas.cli:main"
 powermeter = "qtools.powermeter.cli:main"
 tdc = "qtools.tdc.cli:main"
 tec = "qtools.tec.cli:main"

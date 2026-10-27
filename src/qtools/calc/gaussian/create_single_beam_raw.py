@@ -1,116 +1,73 @@
-"""
-Create a single-beam raw file by removing one beam from a multi-beam raw file.
-This is useful for testing the beam profile fitting algorithm with a single beam.
-"""
+"""Remove a selected beam from RAW data; no hardcoded paths or pixel loops."""
+
+import argparse
 
 import numpy as np
-import cv2
-from scipy.ndimage import maximum_filter
 
-# Parameters (same as in 2D_1D_guass.py)
-pixel_size = 3.75e-3
-local_size = 50
+from qtools.calc.gaussian import find_beam_centers as _find_centers
+from qtools.calc.gaussian import read_raw as _read_raw
+from qtools.calc.gaussian._io import validate_image
 
 
-def read_raw(raw_filename, bit_depth=8):
-    """Read raw file and return 2D array."""
-    if bit_depth == 16:
-        dtype = np.uint16
-    else:
-        dtype = np.uint8
-
-    data = np.fromfile(raw_filename, dtype=dtype)
-    width = int(np.sqrt(len(data) / 12) * 4)
-    height = int(np.sqrt(len(data) / 12) * 3)
-    return data.reshape(height, width), width, height
+def read_raw(raw_filename, bit_depth=8, *, shape=None):
+    data = _read_raw(raw_filename, bit_depth=bit_depth, shape=shape)
+    height, width = data.shape
+    return data, width, height
 
 
-def find_beam_centers(data, n_beams=2):
-    """Find beam centers using local maxima detection."""
-    # Auto-detect background threshold using Otsu
-    _, binary = cv2.threshold(data.astype('uint8'), 0, 1,
-                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    bg_threshold = np.max(data[binary == 0])
-
-    # Create mask for valid region
-    valid_mask = data > bg_threshold
-
-    # Find local maxima
-    local_max = maximum_filter(data, size=local_size) == data
-    coords = np.argwhere(local_max)
-
-    # Get intensity at each peak
-    intensities = data[coords[:, 0], coords[:, 1]]
-
-    # Sort by intensity and take top n_beams
-    top_indices = np.argsort(intensities)[-n_beams:]
-    peak_coords = coords[top_indices]
-
-    return peak_coords, intensities[top_indices]
+def find_beam_centers(data, n_beams=2, **kwargs):
+    """Legacy helper: return (row, column) centers and their pixel intensities."""
+    coordinates = np.rint(_find_centers(data, n_beams, **kwargs)[:, ::-1]).astype(int)
+    return coordinates, np.asarray(data)[tuple(coordinates.T)]
 
 
 def remove_beam(data, center, radius=150):
-    """Remove a beam by zeroing out a circular region around the center."""
-    h, w = data.shape
-    y, x = center
-    mask = np.ones_like(data, dtype=bool)
-
-    for i in range(h):
-        for j in range(w):
-            if (i - y)**2 + (j - x)**2 < radius**2:
-                mask[i, j] = False
-
-    result = data.copy()
-    result[~mask] = 0
+    """Return a copy with a disk at (row, column) set to zero."""
+    array = validate_image(data)
+    center = np.asarray(center, dtype=float)
+    if center.shape != (2,) or not np.isfinite(center).all():
+        raise ValueError("center must contain finite (row, column) coordinates.")
+    if not np.isfinite(radius) or radius <= 0:
+        raise ValueError("radius must be finite and positive.")
+    y, x = np.ogrid[: array.shape[0], : array.shape[1]]
+    result = array.copy()
+    result[(y - center[0]) ** 2 + (x - center[1]) ** 2 < radius**2] = 0
     return result
 
 
 def save_raw(data, filename, bit_depth=8):
-    """Save 2D array as raw file."""
-    if bit_depth == 16:
-        dtype = np.uint16
-    else:
-        dtype = np.uint8
+    if bit_depth not in (8, 16):
+        raise ValueError("bit_depth must be 8 or 16.")
+    array = validate_image(data)
+    dtype = np.dtype("u1" if bit_depth == 8 else "<u2")
+    if np.any(array < 0) or np.any(array > np.iinfo(dtype).max):
+        raise ValueError("Image values are outside the selected RAW bit depth.")
+    array.astype(dtype).tofile(filename)
 
-    data.astype(dtype).tofile(filename)
-    print(f"Saved: {filename}")
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("inputfile")
+    parser.add_argument("outputfile")
+    parser.add_argument("--shape", nargs=2, type=int, metavar=("HEIGHT", "WIDTH"))
+    parser.add_argument("-b", "--bit-depth", type=int, choices=(8, 16), default=8)
+    parser.add_argument("-n", "--n-beams", type=int, default=2)
+    parser.add_argument(
+        "--beam", type=int, default=2, help="1-based beam number, ordered by x then y."
+    )
+    parser.add_argument("--radius", type=float, default=150)
+    args = parser.parse_args(argv)
+    if not 1 <= args.beam <= args.n_beams:
+        parser.error("--beam must be between 1 and --n-beams.")
+    try:
+        data, _, _ = read_raw(args.inputfile, args.bit_depth, shape=args.shape)
+        centers, _ = find_beam_centers(data, args.n_beams)
+        result = remove_beam(data, centers[args.beam - 1], args.radius)
+        save_raw(result, args.outputfile, args.bit_depth)
+    except (ValueError, OSError) as error:
+        parser.error(str(error))
+    return 0
 
 
 if __name__ == "__main__":
-    input_file = "/Users/rayonde/Documents/杭师大/qkd/gaussian/2.5cm.raw"
-    output_file = "/Users/rayonde/Documents/杭师大/qkd/gaussian/2.5cm_single_beam.raw"
-
-    # Read the raw file
-    print(f"Reading {input_file}...")
-    data, width, height = read_raw(input_file)
-    print(f"Image size: {width} x {height}")
-
-    # Find beam centers
-    print("Detecting beams...")
-    peak_coords, intensities = find_beam_centers(data, n_beams=2)
-    print(f"Found {len(peak_coords)} beams at:")
-    for i, (coord, intensity) in enumerate(zip(peak_coords, intensities)):
-        print(f"  Beam {i+1}: y={coord[0]}, x={coord[1]}, intensity={intensity}")
-
-    # Remove the second beam (less intense one)
-    beam_to_remove = 1  # Remove the second (less bright) beam
-    center_to_remove = peak_coords[beam_to_remove]
-    print(f"\nRemoving beam at y={center_to_remove[0]}, x={center_to_remove[1]}")
-
-    # Remove the beam with a radius that covers the beam spot
-    radius = 150  # pixels - adjust as needed
-    data_single = remove_beam(data, center_to_remove, radius=radius)
-
-    # Save the result
-    print(f"\nSaving single-beam raw file...")
-    save_raw(data_single, output_file)
-
-    # Verification
-    print("\nVerifying...")
-    peak_coords_new, intensities_new = find_beam_centers(data_single, n_beams=1)
-    if len(peak_coords_new) == 1:
-        print(f"SUCCESS: Single beam file created with beam at y={peak_coords_new[0][0]}, x={peak_coords_new[0][1]}")
-    else:
-        print(f"WARNING: Found {len(peak_coords_new)} peaks in output file")
-
-    print(f"\nOutput file: {output_file}")
+    raise SystemExit(main())

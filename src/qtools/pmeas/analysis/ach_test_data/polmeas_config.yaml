@@ -1,0 +1,154 @@
+version: 1
+exp: basis calibration
+author: yifan
+created_at: '2026-07-31 20:05:04'
+updated_at: '2026-08-02 19:38:07'
+devices:
+- id: 1
+  name: alice_1560_basis_hwp
+  optical_path: alice
+  role: basis
+  wavelength: 1560
+  waveplate: hwp
+  port: COM3
+  serial: '55119234'
+  zero_offset: 0.0
+  calibration:
+    fast_axis: 0.0
+    theta_0: 0.0
+    zero_offset: 0.0
+    retardance: 180.0
+    visibility: 1.0
+    phi_rad: 0.0
+    r_squared: 1.0
+    cal_file: ''
+  bases:
+    H: 0.0
+    V: 45.0
+    D: 22.5
+    A: 67.5
+- id: 2
+  name: bob_1560_basis_hwp
+  optical_path: bob
+  role: basis
+  wavelength: 1560
+  waveplate: hwp
+  port: COM9
+  serial: '55105664'
+  zero_offset: 0.0
+  calibration:
+    fast_axis: 44.77900182800539
+    theta_0: 44.77900182800539
+    zero_offset: 0.0
+    retardance: 180.0
+    visibility: 1.0064765430955893
+    phi_rad: 3.141592653589793
+    r_squared: 0.9986355298311042
+    cal_file: D:\Exp\20260731calibration\cal_data\calibration_bob_1560_basis_hwp_1560nm_20260731_205933.csv
+  bases:
+    H: 44.77900182800539
+    D: 67.27900182800539
+    V: 89.77900182800539
+    A: 112.27900182800539
+detectors:
+  tdc:
+    backend: ''
+    port: ''
+  powermeter:
+    backend: s15
+    port: COM5
+calibration:
+  detector: powermeter
+  meas_type: power
+  start_angle: 0.0
+  end_angle: 360.0
+  step_angle: 5.0
+  duration: 1.0
+  repetitions: 100
+  wavelength_nm: 1560.0
+  auto_range: true
+  verify: true
+scan:
+  detector: tdc
+  meas_type: pairs
+  thresvolt: 0.05
+  channels:
+  - 1
+  - 2
+  ch_start: 0
+  ch_stop: 1
+  ch_stop_delay: 0
+  bin_offset: 0
+  peak: 0
+  loffset: 0
+  roffset: 0
+  window_start: null
+  window_stop: null
+  delay_bin: 0
+  bins: 500
+  unit: ns
+  ts_bin: 1.0
+  start_angle: 0.0
+  end_angle: 180.0
+  step_angle: 5.0
+  duration: 1.0
+  repetitions: 5
+  subtract_accidentals: true
+  bases:
+  - H
+  - V
+  - D
+  - A
+chsh:
+  detector: tdc
+  meas_type: pairs
+  thresvolt: 0.05
+  channels:
+  - 1
+  - 2
+  ch_start: 0
+  ch_stop: 1
+  ch_stop_delay: 0
+  bin_offset: 0
+  peak: 0
+  loffset: 0
+  roffset: 0
+  window_start: null
+  window_stop: null
+  delay_bin: 0
+  bins: 500
+  unit: ns
+  ts_bin: 1.0
+  start_offset: 0.0
+  end_offset: 90.0
+  step_offset: 3.0
+  duration: 1.0
+  repetitions: 5
+  subtract_accidentals: true
+calibration_results:
+  '55105664':
+    id: '2'
+    timestamp: '2026-07-31 20:59:33'
+    serial: '55105664'
+    role: hwp
+    detector: powermeter
+    meas_type: power
+    wavelength: 1560.0
+    theta_0: 44.77900182800539
+    fast_axis: 44.77900182800539
+    visibility: 1.0064765430955893
+    phi_rad: 3.141592653589793
+    r_squared: 0.9986355298311042
+    bases:
+      H: 44.77900182800539
+      D: 67.27900182800539
+      V: 89.77900182800539
+      A: 112.27900182800539
+    cal_file: D:\Exp\20260731calibration\cal_data\calibration_bob_1560_basis_hwp_1560nm_20260731_205933.csv
+    plot_file: D:\Exp\20260731calibration\output\calibration_stage_bob_1560_basis_hwp_1560nm_20260731_205933.png
+    scan:
+      start_angle: 0.0
+      end_angle: 360.0
+      step_angle: 2.0
+      duration: 3.0
+      repetitions: 200

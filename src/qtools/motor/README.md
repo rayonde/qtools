@@ -8,7 +8,7 @@ Thorlabs **K10CR1** 步进电机旋转台。
 
 > **Note:** This package handles motor control **only**. For waveplate calibration,
 > polarization measurement, entanglement scans, and CHSH Bell tests, see the
-> companion package **`polarization_meas`**.
+> companion package **`qtools.pmeas`**.
 
 ---
 
@@ -330,7 +330,9 @@ src/qtools/motor/
 
 tests/motor/
 ├── test_cli_move_syntax.py
-└── hardware_integration.py  # Manual hardware exercise
+├── hardware_integration.py  # Manual hardware exercise
+├── hardware_homing.py       # Manual homing checks
+└── k10cr1.ipynb             # Interactive hardware diagnostics
 ```
 
 Run unit tests from the qtools repository root:
@@ -343,4 +345,5 @@ Run the hardware exercise explicitly (this moves the connected motor):
 
 ```bash
 uv run python -m tests.motor.hardware_integration -U COM3
+uv run python -m tests.motor.hardware_homing -U COM3
 ```

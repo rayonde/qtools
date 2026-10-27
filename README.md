@@ -51,6 +51,19 @@ See the [motor guide](src/qtools/motor/README.md) and
 
 ## Quick Start
 
+### Gaussian Beam Analysis
+
+```python
+from qtools.calc import gaussian
+
+result = gaussian.fit(frame, pixel_size=3.75, unit="um")
+print(result.to_dict())
+result.plot().savefig("beam-fit.png")
+```
+
+Supports grayscale arrays, image/RAW files, and multiple beams without OpenCV
+or lmfit. See the [Gaussian guide](src/qtools/calc/gaussian/README.md).
+
 ### Basic Usage
 
 ```python

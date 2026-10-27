@@ -11,7 +11,19 @@ from importlib import import_module
 __version__ = "0.1.0"
 
 
-_SUBPACKAGES = {"camera", "dm", "motor", "powermeter", "slm", "tdc", "tec", "tomo"}
+_SUBPACKAGES = {
+    "calc",
+    "camera",
+    "dm",
+    "motor",
+    "pctrl",
+    "pmeas",
+    "powermeter",
+    "slm",
+    "tdc",
+    "tec",
+    "tomo",
+}
 
 
 def __getattr__(name: str):
@@ -21,4 +33,18 @@ def __getattr__(name: str):
     globals()[name] = module
     return module
 
-__all__ = ["__version__", "camera", "dm", "motor", "powermeter", "slm", "tdc", "tec", "tomo"]
+
+__all__ = [
+    "__version__",
+    "calc",
+    "camera",
+    "dm",
+    "motor",
+    "pctrl",
+    "pmeas",
+    "powermeter",
+    "slm",
+    "tdc",
+    "tec",
+    "tomo",
+]

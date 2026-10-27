@@ -10,7 +10,7 @@ def get_config_path() -> Path:
     """Absolute path to the config file.
 
     Respects the ``MOTOR_CONFIG`` environment variable (set by
-    ``polarization_meas`` when stepper is embedded).  Defaults to
+    ``qtools.pmeas`` when stepper is embedded).  Defaults to
     ``motor_config.yaml`` in the **current working directory**.
     """
     env = os.environ.get("MOTOR_CONFIG")
