@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
+import numpy as npw
 
 from qtools.tdc.backends.base import BackendCapability, TDCBackend
 from qtools.tdc.connection import register_backend

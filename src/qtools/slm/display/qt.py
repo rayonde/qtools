@@ -36,7 +36,7 @@ class QtDisplay(DisplayInterface):
         self._resolution = binding.resolution
         self._app = QApplication.instance() or QApplication(["qtools-slm"])
         screens = self._app.screens()
-        screen = screens[binding.index]
+        screen = screens[binding.qt_index]
         geometry = screen.geometry()
         self._rescaling = rescaling
         self._current: QPixmap | None = None

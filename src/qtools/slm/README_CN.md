@@ -7,7 +7,7 @@
 
 ```text
 PhaseRegion（带区域限制的空 PhaseMask）
-        ↓ 调用 lens / spiral / blaze / binary / zernike
+        ↓ 调用 lens / spiral / blazed_grating / binary / zernike
 PhaseMask（整屏弧度相位）
         ↓ to_display()
 DisplayMask（设备灰度值或 RGB 传输数据）
@@ -36,6 +36,36 @@ slm.load(display)
 
 `monitor=None` 默认选择副屏；没有副屏时会回退到主屏。测试和无 GUI 环境
 可以使用 `headless=True`。
+屏幕编号从 1 开始，`monitor=2` 指定第二块屏幕；可以先用
+`list_monitors()` 查看编号和分辨率。
+
+`SLM` 和相位对象都提供 `info` 属性，分别查看设备/几何参数和区域/相位参数：
+
+```python
+print(slm.info)
+canvas = slm.create_canvas()
+print(canvas.info)
+```
+
+相位图可以直接显示。Jupyter 中会 inline 显示，普通终端会打开系统图片查看器：
+
+```python
+import numpy as np
+
+phase = canvas.blazed_grating(
+    period=16,          # 每 16 个像素重复一次
+    angle=90,            # +90：相位从下到上增加
+    direction=1,         # 0 -> max_phase；-1 表示反向
+    max_phase=2 * np.pi,
+    order=None,          # 默认每周期一个像素一个相位台阶
+)
+phase.show()
+print(phase.info)
+```
+
+`angle` 是光栅方向角，使用角度制；`angle=-90` 表示相位从上到下增加。
+`order=8` 或 `order=16` 表示每个周期量化为 8 或 16 个相位台阶。
+`phase.info` 会给出像素周期、量化台阶数和按波长/像素间距预测的偏转角。
 
 ## 左右区域相位
 

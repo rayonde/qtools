@@ -31,6 +31,34 @@ class SLMGeometry:
         return self.resolution[1], self.resolution[0]
 
     @property
+    def pixels(self) -> tuple[int, int]:
+        """Pixel dimensions as ``(width, height)``."""
+
+        return self.resolution
+
+    @property
+    def pixel_pitch(self) -> tuple[float, float]:
+        """Pixel pitch in micrometres as ``(x, y)``."""
+
+        return self.pitch_um
+
+    @property
+    def info(self) -> dict[str, object]:
+        """Return the physical parameters used to generate phase masks."""
+
+        return {
+            "pixels": self.resolution,
+            "resolution": self.resolution,
+            "shape": self.shape,
+            "pixel_pitch": self.pitch_um,
+            "pixel_pitch_um": self.pitch_um,
+            "wavelength": self.wavelength,
+            "wavelength_m": self.wavelength,
+            "wavelength_nm": self.wavelength * 1e9,
+            "bitdepth": self.bitdepth,
+        }
+
+    @property
     def grid(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         if self._grid_cache is None:
             width, height = self.resolution
@@ -95,6 +123,44 @@ class SLM:
     @property
     def shape(self) -> tuple[int, int]:
         return self.geometry.shape
+
+    @property
+    def pixels(self) -> tuple[int, int]:
+        """SLM pixel dimensions as ``(width, height)``."""
+
+        return self.geometry.resolution
+
+    @property
+    def pixel_pitch(self) -> tuple[float, float]:
+        """Pixel pitch in micrometres as ``(x, y)``."""
+
+        return self.geometry.pitch_um
+
+    @property
+    def wavelength(self) -> float:
+        """Operating wavelength in metres."""
+
+        return self.geometry.wavelength
+
+    @property
+    def info(self) -> dict[str, object]:
+        """Return device, geometry and display-binding information."""
+
+        info = dict(self.geometry.info)
+        info.update({"backend": self.name, "model": self.model})
+        binding = getattr(self.backend, "monitor", None)
+        if binding is not None:
+            info.update(
+                {
+                    "monitor": binding.index,
+                    "monitor_name": binding.monitor.name,
+                    "monitor_geometry": binding.monitor.geometry,
+                }
+            )
+        elif hasattr(self.backend, "_monitor_index"):
+            info["monitor"] = getattr(self.backend, "_monitor_index")
+        info["headless"] = bool(getattr(self.backend, "_headless", False))
+        return info
 
     @property
     def is_connected(self) -> bool:

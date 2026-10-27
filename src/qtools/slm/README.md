@@ -17,6 +17,8 @@ DisplayMask (device gray levels or RGB transport data)
 
 For an actual Holoeye SLM, `monitor=None` selects the secondary display when
 available. Set `headless=True` for an in-memory framebuffer.
+Monitor numbers are one-based, so `monitor=2` selects the second display
+after checking `list_monitors()`.
 
 ```python
 from qtools.slm import SLM
@@ -36,6 +38,34 @@ slm.load(display)
 When calling `slm.load()` with a raw NumPy array, it must already be an
 integer-valued 8-bit grayscale/RGB image at the SLM resolution. Use an
 RGB-packed `DisplayMask` for data above 8 bits.
+
+The device and phase objects expose an `info` property for inspection:
+
+```python
+print(slm.info)
+canvas = slm.create_canvas()
+print(canvas.info)
+```
+
+Use `blazed_grating()` for a pixel-periodic phase ramp:
+
+```python
+import numpy as np
+
+phase = canvas.blazed_grating(
+    period=16,          # 16 pixels per cycle
+    angle=90,            # +90 ramps bottom to top; -90 ramps top to bottom
+    direction=1,         # 0 -> max_phase; -1 reverses the ramp
+    max_phase=2 * np.pi,
+    order=None,          # one phase level per pixel by default
+)
+phase.show()             # inline in Jupyter, system viewer in a terminal
+print(phase.info)
+```
+
+Here `order=8` or `order=16` means 8 or 16 discrete phase levels per cycle.
+`phase.info` includes the pixel period, phase levels and predicted diffraction
+angle calculated from the wavelength and pixel pitch.
 
 ## Regional phase generation
 

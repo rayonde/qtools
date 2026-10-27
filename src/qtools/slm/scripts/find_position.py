@@ -324,7 +324,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default="LETO-II", help="Holoeye SLM model.")
     parser.add_argument("--wavelength", type=float, default=532e-9, help="Wavelength in metres.")
-    parser.add_argument("--monitor", type=int, default=None, help="Monitor index for the SLM.")
+    parser.add_argument("--monitor", type=int, default=None, help="1-based monitor number for the SLM.")
     parser.add_argument("--camera-backend", default="flir", help="qtools.camera backend name.")
     parser.add_argument("--camera-serial", default="", help="Camera serial number.")
     parser.add_argument(

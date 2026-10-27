@@ -17,7 +17,25 @@ def show_image(array: npt.NDArray, *, rescale: bool = False) -> None:
         image = np.zeros_like(image, dtype=np.uint8) if high <= low else (
             (image - low) / (high - low) * 255
         ).round().astype(np.uint8)
-    Image.fromarray(image).show()
+    rendered = Image.fromarray(image)
+    # IPython display keeps the image inline in Jupyter.  In a regular Python
+    # process PIL falls back to the platform image viewer.
+    try:
+        from IPython import get_ipython
+
+        shell = get_ipython()
+        in_notebook = shell is not None and (
+            "IPKernelApp" in getattr(shell, "config", {})
+            or shell.__class__.__name__ == "ZMQInteractiveShell"
+        )
+    except ImportError:
+        in_notebook = False
+    if in_notebook:
+        from IPython.display import display
+
+        display(rendered)
+    else:
+        rendered.show()
 
 
 def save_image(array: npt.NDArray, filename: str | Path, *, rescale: bool = False) -> None:

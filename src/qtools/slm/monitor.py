@@ -8,12 +8,20 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class MonitorInfo:
-    """Description of an attached display."""
+    """Description of an attached display.
+
+    ``index`` is the user-facing monitor number and starts at 1.  Qt's
+    internal zero-based index is available as :attr:`qt_index`.
+    """
 
     index: int
     name: str
     resolution: tuple[int, int]
     geometry: tuple[int, int, int, int]
+
+    @property
+    def qt_index(self) -> int:
+        return self.index - 1
 
 
 @dataclass(frozen=True)
@@ -25,6 +33,10 @@ class MonitorBinding:
     @property
     def index(self) -> int:
         return self.monitor.index
+
+    @property
+    def qt_index(self) -> int:
+        return self.monitor.qt_index
 
     @property
     def resolution(self) -> tuple[int, int]:
@@ -45,7 +57,7 @@ def list_monitors() -> list[MonitorInfo]:
         app = QApplication(["qtools-slm-monitor"])
 
     monitors: list[MonitorInfo] = []
-    for index, screen in enumerate(app.screens()):
+    for index, screen in enumerate(app.screens(), start=1):
         geometry = screen.geometry()
         monitors.append(
             MonitorInfo(
@@ -61,7 +73,7 @@ def list_monitors() -> list[MonitorInfo]:
 
 
 def resolve_monitor(index: Optional[int] = None) -> MonitorBinding:
-    """Resolve an explicit monitor or select the secondary screen by default."""
+    """Resolve a 1-based monitor number or select the secondary by default."""
 
     monitors = list_monitors()
     if not monitors:
@@ -69,12 +81,15 @@ def resolve_monitor(index: Optional[int] = None) -> MonitorBinding:
             "No display monitors were detected. Use a headless backend or install/configure Qt."
         )
 
-    selected = 1 if len(monitors) > 1 else 0
+    selected = 2 if len(monitors) > 1 else 1
     if index is not None:
         selected = index
-    if selected < 0 or selected >= len(monitors):
-        raise IndexError(f"Monitor index {selected} is out of range for {len(monitors)} monitors.")
-    return MonitorBinding(monitors[selected])
+    if selected < 1 or selected > len(monitors):
+        raise IndexError(
+            f"Monitor number {selected} is out of range; available numbers are "
+            f"1..{len(monitors)}."
+        )
+    return MonitorBinding(monitors[selected - 1])
 
 
 __all__ = ["MonitorBinding", "MonitorInfo", "list_monitors", "resolve_monitor"]

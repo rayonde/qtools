@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from typing import Any, TYPE_CHECKING, Mapping, Sequence
 
 import numpy as np
 import numpy.typing as npt
 
 from qtools.slm.phase import (
     basic,
-    blaze as blaze_module,
+    blazed_grating as blazed_grating_module,
     knife_edge as knife_edge_module,
     spiral as spiral_module,
     zernike as zernike_module,
@@ -49,6 +49,7 @@ class PhaseMask:
         geometry: "SLMGeometry",
         *,
         region_bounds: Bounds | None = None,
+        metadata: Mapping[str, Any] | None = None,
     ):
         values = np.asarray(array, dtype=np.float64)
         if values.shape != geometry.shape:
@@ -58,6 +59,7 @@ class PhaseMask:
         self.array = np.ascontiguousarray(values.copy())
         self.geometry = geometry
         self.region_bounds = region_bounds
+        self.metadata = dict(metadata or {})
 
     @classmethod
     def zeros(
@@ -78,7 +80,45 @@ class PhaseMask:
         return self.geometry.resolution
 
     def copy(self) -> "PhaseMask":
-        return PhaseMask(self.array, self.geometry, region_bounds=self.region_bounds)
+        return PhaseMask(
+            self.array,
+            self.geometry,
+            region_bounds=self.region_bounds,
+            metadata=self.metadata,
+        )
+
+    @property
+    def info(self) -> dict[str, Any]:
+        """Return geometry and phase-generation metadata for inspection."""
+
+        info = dict(self.geometry.info)
+        info.update(
+            {
+                "type": type(self).__name__,
+                "shape": self.shape,
+                "phase_range_rad": (
+                    float(np.min(self.array)),
+                    float(np.max(self.array)),
+                ),
+            }
+        )
+        if self.region_bounds is not None:
+            left, right, top, bottom = self.region_bounds
+            info.update(
+                {
+                    "bounds": self.region_bounds,
+                    "region_pixels": (right - left, bottom - top),
+                }
+            )
+        info.update(self.metadata)
+        return info
+
+    def show(self) -> None:
+        """Display the wrapped phase image in a notebook or image viewer."""
+
+        from qtools.slm.utils import show_image
+
+        show_image(np.mod(self.array, 2 * np.pi), rescale=True)
 
     def to_display(self, bits: int = 8, rgb: bool = False) -> "DisplayMask":
         from qtools.slm.display.displaymask import DisplayMask
@@ -107,12 +147,16 @@ class PhaseMask:
                 else None
             )
             return PhaseMask(
-                self.array + other.array, self.geometry, region_bounds=bounds
+                self.array + other.array,
+                self.geometry,
+                region_bounds=bounds,
+                metadata={**self.metadata, **other.metadata},
             )
         return PhaseMask(
             self.array + np.asarray(other),
             self.geometry,
             region_bounds=self.region_bounds,
+            metadata=self.metadata,
         )
 
     def __radd__(self, other: "PhaseMask" | npt.ArrayLike | float) -> "PhaseMask":
@@ -127,24 +171,36 @@ class PhaseMask:
                 else None
             )
             return PhaseMask(
-                self.array - other.array, self.geometry, region_bounds=bounds
+                self.array - other.array,
+                self.geometry,
+                region_bounds=bounds,
+                metadata={**self.metadata, **other.metadata},
             )
         return PhaseMask(
             self.array - np.asarray(other),
             self.geometry,
             region_bounds=self.region_bounds,
+            metadata=self.metadata,
         )
 
     def __mul__(self, scalar: float) -> "PhaseMask":
         return PhaseMask(
-            self.array * float(scalar), self.geometry, region_bounds=self.region_bounds
+            self.array * float(scalar),
+            self.geometry,
+            region_bounds=self.region_bounds,
+            metadata=self.metadata,
         )
 
     def __rmul__(self, scalar: float) -> "PhaseMask":
         return self.__mul__(scalar)
 
     def __neg__(self) -> "PhaseMask":
-        return PhaseMask(-self.array, self.geometry, region_bounds=self.region_bounds)
+        return PhaseMask(
+            -self.array,
+            self.geometry,
+            region_bounds=self.region_bounds,
+            metadata=self.metadata,
+        )
 
     def _check_compatible(self, other: "PhaseMask") -> None:
         if self.geometry is not other.geometry:
@@ -191,10 +247,24 @@ class PhaseMask:
             order, radial_frequency, center
         )
 
-    def blaze(self, angle: float | tuple[float, float] = 0.0) -> "PhaseMask":
-        """Add a blaze phase over this mask's active region."""
+    def blazed_grating(
+        self,
+        period: int | float,
+        *,
+        angle: float = 0.0,
+        direction: int | str = 1,
+        max_phase: float = 2 * np.pi,
+        order: int | None = None,
+    ) -> "PhaseMask":
+        """Add a pixel-periodic blazed grating over this mask's active region."""
 
-        return self + self._active_region().blaze(angle)
+        return self + self._active_region().blazed_grating(
+            period=period,
+            angle=angle,
+            direction=direction,
+            max_phase=max_phase,
+            order=order,
+        )
 
     def zernike(
         self,
@@ -294,6 +364,7 @@ class PhaseRegion(PhaseMask):
 
         result = np.zeros(self.geometry.shape, dtype=np.float64)
         used: list[Bounds] = []
+        metadata: dict[str, Any] = {}
         for mask in masks:
             if not isinstance(mask, PhaseMask):
                 raise TypeError("compose() accepts PhaseMask instances.")
@@ -311,7 +382,8 @@ class PhaseRegion(PhaseMask):
                         )
                 used.append(bounds)
             result += mask.array
-        return PhaseMask(result, self.geometry)
+            metadata.update(mask.metadata)
+        return PhaseMask(result, self.geometry, metadata=metadata)
 
     def flat(self, phase: float = 0.0) -> PhaseMask:
         return PhaseMask(
@@ -374,17 +446,50 @@ class PhaseRegion(PhaseMask):
             region_bounds=self.bounds,
         )
 
-    def blaze(self, angle: float | tuple[float, float] = 0.0) -> PhaseMask:
+    def blazed_grating(
+        self,
+        period: int | float,
+        *,
+        angle: float = 0.0,
+        direction: int | str = 1,
+        max_phase: float = 2 * np.pi,
+        order: int | None = None,
+    ) -> PhaseMask:
+        """Generate a pixel-periodic blazed grating in this region."""
+
+        pixels = blazed_grating_module.validate_period(period)
+        sign = blazed_grating_module.normalize_direction(direction)
+        levels = pixels if order is None else int(order)
         return PhaseMask(
-            blaze_module.blaze(
+            blazed_grating_module.blazed_grating(
                 self.geometry.shape,
                 self.bounds,
                 self.geometry.pitch_um,
                 self.geometry.wavelength,
-                angle,
+                period=pixels,
+                angle=angle,
+                direction=sign,
+                max_phase=max_phase,
+                order=order,
             ),
             self.geometry,
             region_bounds=self.bounds,
+            metadata={
+                "operation": "blazed_grating",
+                "period_pixels": pixels,
+                "angle_deg": float(angle),
+                "direction": sign,
+                "max_phase_rad": float(max_phase),
+                "order": order,
+                "phase_levels": levels,
+                "predicted_deflection_angle_deg": blazed_grating_module.predicted_deflection_angle(
+                    pixels,
+                    angle,
+                    self.geometry.pitch_um,
+                    self.geometry.wavelength,
+                    sign,
+                ),
+            },
         )
 
     def zernike(

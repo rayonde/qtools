@@ -143,3 +143,26 @@ TEC CSV 日志需要同时记录设定温度和实际温度。
 - Tags: data-unification, canonical-model, no-compatibility-layer
 
 ---
+
+## [LRN-20261027-001] correction
+
+**Logged**: 2026-10-27T00:00:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: backend
+
+### Summary
+The public SLM monitor selector is 1-based: `monitor=2` selects the second screen.
+
+### Details
+The implementation originally exposed Qt's zero-based screen index directly. The user clarified that monitor numbers should be user-facing and start at 1, so `MonitorInfo.index` and `SLM(monitor=...)` now use 1-based numbers while `MonitorBinding.qt_index` converts to Qt's zero-based index internally.
+
+### Suggested Action
+Keep user-facing monitor documentation and CLI help 1-based; only Qt widget access should use `qt_index`.
+
+### Metadata
+- Source: user_feedback
+- Related Files: src/qtools/slm/monitor.py, src/qtools/slm/display/qt.py
+- Tags: slm, monitor-indexing
+
+---

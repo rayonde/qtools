@@ -259,3 +259,58 @@ zsh: command not found: python
 
 ---
 
+
+## [ERR-20261027-001] compileall_reference_scripts
+
+**Logged**: 2026-10-27T00:00:00+08:00
+**Priority**: low
+**Status**: pending
+**Area**: config
+
+### Summary
+`python3 -m compileall -q src/qtools/slm` reaches legacy Python 2 scripts under `src/qtools/slm/refs/` and reports syntax errors.
+
+### Error
+```
+SyntaxError: Missing parentheses in call to 'print'
+```
+
+### Context
+The active SLM implementation was changed, then compileall was run over the whole SLM tree. The reference directory intentionally contains historical Python 2 examples and was not modified.
+
+### Suggested Fix
+Compile only active SLM modules or exclude `refs/` when validating this package.
+
+### Metadata
+- Reproducible: yes
+- Related Files: src/qtools/slm/refs/lgphase/generate_Laguerre_Gauss_SLM.py
+
+---
+
+## [ERR-20261027-002] git_commit_spec
+
+**Logged**: 2026-10-27T00:00:00+08:00
+**Priority**: medium
+**Status**: pending
+**Area**: config
+
+### Summary
+The approved Siminics backend design spec could not be committed because the workspace denied creation of `.git/index.lock`.
+
+### Error
+```
+fatal: Unable to create '/Users/rayonde/Documents/Code/qtools/.git/index.lock': Operation not permitted
+```
+
+### Context
+- The design file was written under `docs/superpowers/specs/2026-10-27-siminics-backend-design.md` and passed `git diff --check`.
+- The failure occurred while running `git add`/`git commit`; no repository index mutation was completed.
+
+### Suggested Fix
+Retry the commit when the workspace grants write access to `.git`, or leave the design file uncommitted and report the environment restriction.
+
+### Metadata
+- Reproducible: unknown
+- Related Files: docs/superpowers/specs/2026-10-27-siminics-backend-design.md
+
+---
