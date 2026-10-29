@@ -97,7 +97,8 @@ class QtDisplay(DisplayInterface):
         self._set_pixmap(self._QPixmap.fromImage(image))
 
     def clear(self) -> None:
-        self.load(np.zeros((1, 1), dtype=np.uint8))
+        width, height = self._resolution
+        self.load(np.zeros((height, width), dtype=np.uint8))
 
     def undo(self) -> None:
         if self._previous is None:
