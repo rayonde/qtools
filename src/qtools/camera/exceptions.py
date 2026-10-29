@@ -23,8 +23,13 @@ class CameraAcquisitionError(CameraError):
     """A frame could not be acquired or decoded."""
 
 
+class CameraBridgeError(CameraError):
+    """The out-of-process camera worker failed or disconnected."""
+
+
 __all__ = [
     "CameraAcquisitionError",
+    "CameraBridgeError",
     "CameraConfigurationError",
     "CameraDependencyError",
     "CameraDiscoveryError",
