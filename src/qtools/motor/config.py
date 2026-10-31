@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 _DEVICE_FIELDS = {
     "id", "name", "optical_path", "role", "wavelength", "waveplate",
     "port", "zero_offset", "serial",
+    "backend", "stage_settings", "steps_per_rev", "gearbox_ratio", "pitch",
+    "travel_mode",
     "theta_0", "target_angles", "phi_rad", "visibility", "r_squared",
     # polmeas-owned extras tolerated when sharing polmeas_config.yaml
     "bases", "calibration",

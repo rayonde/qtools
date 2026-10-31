@@ -3,6 +3,10 @@
 A Python library and Command Line Interface (CLI) for controlling Thorlabs **K10CR1**
 (and compatible) stepper-motor rotation stages via the APT protocol over USB.
 
+The package also provides a **KDC101** backend for Thorlabs KCube DC-servo
+rotation stages. Both backends expose the same `MotorBackend` API and CLI
+commands.
+
 本库提供一个 Python 接口和命令行工具（CLI），通过 APT 协议经 USB 直接控制
 Thorlabs **K10CR1** 步进电机旋转台。
 
@@ -282,6 +286,59 @@ model, serial = motor.identity
 motor.angle = 90              # blocking absolute move
 motor.close()
 ```
+
+## KDC101 Backend
+
+KDC101 controllers use Thorlabs' Kinesis C API rather than the K10CR1 APT
+driver. The backend has the same motor API, but it is selected explicitly:
+
+```python
+from qtools.motor import get_motor
+
+# Serial numbers are used as KDC101 targets (the CLI calls this the target).
+with get_motor(
+    target="27000001",
+    backend="kdc101",
+    stage_settings="PRM1-Z8",
+) as motor:
+    motor.home()
+    motor.move_to(45.0)
+    print(motor.get_position())
+```
+
+For two KDC101 controllers, specify the serial number or a 1-based index:
+
+```python
+first = get_motor(target="27000001", backend="kdc101", stage_settings="PRM1-Z8")
+second = get_motor(target="27000002", backend="kdc101", stage_settings="PRM1-Z8")
+
+# The index follows the order printed by `motor --backend kdc101 list`.
+second_by_index = get_motor(target=2, backend="kdc101", stage_settings="PRM1-Z8")
+```
+
+CLI examples:
+
+```bash
+motor --backend kdc101 list
+motor --backend kdc101 --stage-settings PRM1-Z8 status 27000001
+motor --backend kdc101 --stage-settings PRM1-Z8 move 27000001 to 45
+motor --backend kdc101 --stage-settings PRM1-Z8 position 27000002
+```
+
+Requirements and behavior:
+
+- Windows with Thorlabs Kinesis installed. Set `THORLABS_KINESIS_DIR` if
+  Kinesis is installed outside `C:\Program Files\Thorlabs\Kinesis`.
+- The backend uses Kinesis' stage-aware unit conversion; it does not use the
+  K10CR1 step count. Positions and velocities exposed by the shared API are
+  in degrees.
+- Only rotational KDC101 configurations are accepted. Linear stages need a
+  different API contract and are intentionally rejected.
+- If the stage is already configured in Kinesis, `stage_settings` may be
+  omitted and the persisted settings are loaded. Explicit stage settings are
+  recommended for reproducible setups.
+- If two or more controllers are connected, always pass a serial number or
+  index; the CLI cannot auto-select a device.
 
 ---
 

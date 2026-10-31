@@ -35,3 +35,27 @@ def test_move_to_target_angle_is_unchanged() -> None:
     assert args.move_action == "to"
     assert args.target == "1"
     assert args.angle == "2.8"
+
+
+def test_backend_option_before_command() -> None:
+    args = parse_cli_args(["--backend", "kdc101", "status"])
+
+    assert args.command == "status"
+    assert args.backend == "kdc101"
+
+
+def test_backend_option_after_command() -> None:
+    args = parse_cli_args(["status", "--backend", "kdc101"])
+
+    assert args.command == "status"
+    assert args.backend == "kdc101"
+
+
+def test_backend_option_does_not_break_legacy_move_syntax() -> None:
+    args = parse_cli_args(["move", "--backend", "kdc101", "1", "to", "2.8"])
+
+    assert args.command == "move"
+    assert args.move_action == "to"
+    assert args.target == "1"
+    assert args.angle == "2.8"
+    assert args.backend == "kdc101"

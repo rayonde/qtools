@@ -17,6 +17,8 @@ import os
 import socket
 import struct
 import subprocess
+import sys
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -127,8 +129,13 @@ class RemoteCamera:
     ----------
     python_executable:
         Interpreter that has both ``qtools`` and the matching PySpin wheel.
+        When omitted for the FLIR backend, a managed camera venv is created or
+        repaired automatically from the wheels in ``backends/refs``.
     backend:
         Backend name passed to :class:`qtools.camera.Camera` in the worker.
+    target:
+        Camera selector returned by :func:`qtools.camera.list_camera`: a
+        one-based number, serial number, USB port, or Ethernet address.
     worker_module:
         Worker module.  The default is the Qtools bridge worker.
     camera_factory:
@@ -139,6 +146,10 @@ class RemoteCamera:
         Maximum time to wait for the worker to connect.
     request_timeout_s:
         Socket timeout for each request, or ``None`` for no timeout.
+    venv_dir:
+        Managed FLIR venv used when ``python_executable`` is omitted.
+    auto_install_python:
+        Use winget to install the required Python version when it is missing.
     cwd, env:
         Optional working directory and environment override for the worker.
     **camera_kwargs:
@@ -147,17 +158,37 @@ class RemoteCamera:
 
     def __init__(
         self,
-        python_executable: str | Path,
+        python_executable: str | Path | None = None,
         *,
         backend: str = "flir",
+        target: str | int | None = None,
         worker_module: str = "qtools.camera.bridge_worker",
         camera_factory: str | None = None,
         startup_timeout_s: float = 30.0,
         request_timeout_s: float | None = 60.0,
+        venv_dir: str | Path = ".venv-camera",
+        auto_install_python: bool = True,
         cwd: str | Path | None = None,
         env: Mapping[str, str] | None = None,
         **camera_kwargs: Any,
     ) -> None:
+        if python_executable is None:
+            if backend != "flir":
+                raise CameraBridgeError(
+                    "python_executable is required for camera backends without "
+                    "automatic runtime provisioning."
+                )
+            from qtools.camera.backends.flir import FLIR
+
+            if FLIR.pyspin_available():
+                python_executable = Path(sys.executable)
+            else:
+                python_executable = FLIR.ensure_bridge_python(
+                    venv_dir,
+                    auto_install_python=auto_install_python,
+                )
+        if target is not None:
+            camera_kwargs["target"] = target
         self._python_executable = str(python_executable)
         self._process: subprocess.Popen[bytes] | None = None
         self._listener: socket.socket | None = None
@@ -191,6 +222,13 @@ class RemoteCamera:
             child_env = os.environ.copy()
             if env:
                 child_env.update({str(key): str(value) for key, value in env.items()})
+            import_root = str(Path(__file__).resolve().parents[2])
+            existing_pythonpath = child_env.get("PYTHONPATH", "")
+            child_env["PYTHONPATH"] = (
+                import_root
+                if not existing_pythonpath
+                else import_root + os.pathsep + existing_pythonpath
+            )
             try:
                 self._process = subprocess.Popen(
                     command,

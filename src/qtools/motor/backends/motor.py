@@ -42,6 +42,10 @@ def _ensure_builtin_backends() -> None:
         import qtools.motor.backends.k10cr1.stage  # noqa: F401
     except ImportError:
         pass
+    try:
+        import qtools.motor.backends.kdc101.stage  # noqa: F401
+    except ImportError:
+        pass
 
 
 class MotorBackend:

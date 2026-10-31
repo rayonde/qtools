@@ -31,6 +31,9 @@ class FakeBridgeCamera:
     def get_images(self, image_count: int, timeout_s: float = 1.0) -> np.ndarray:
         return np.stack([self.capture(timeout_s=timeout_s) + index for index in range(image_count)])
 
+    def get_extra(self) -> dict[str, object]:
+        return dict(self.extra)
+
     def get_exposure(self) -> float:
         return self._exposure_s
 

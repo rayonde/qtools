@@ -15,7 +15,7 @@ qtools/
 │   └── qtools/
 │       ├── __init__.py         # Exposes instrument modules (e.g. qtools.slm)
 │       ├── camera/             # 📷 Industrial cameras and vendor backends
-│       ├── motor/              # Motor control and K10CR1 backend
+│       ├── motor/              # Motor control (K10CR1 and KDC101 backends)
 │       ├── pctrl/              # Polarization control, servo calibration and optimization
 │       ├── pmeas/              # Polarization measurement, waveplate calibration and scans
 │       ├── powermeter/         # Power meters, measurement tools and calibration data

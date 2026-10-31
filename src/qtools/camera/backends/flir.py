@@ -7,18 +7,30 @@ therefore importing :mod:`qtools.camera` does not require the vendor SDK.
 
 from __future__ import annotations
 
+import argparse
+import ctypes
+import ctypes.util
 import importlib
+import ipaddress
 import logging
 import math
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
 import time
 import warnings
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, ClassVar
 
 import numpy as np
 import numpy.typing as npt
 
-from qtools.camera.base import CameraBackend, CameraInfo
+from qtools.camera._spinnaker_c import discover_spinnaker_cameras
+from qtools.camera.base import CameraBackend, CameraInfo, print_camera_list
 from qtools.camera.exceptions import (
     CameraAcquisitionError,
     CameraConfigurationError,
@@ -29,21 +41,472 @@ from qtools.camera.exceptions import (
 
 logger = logging.getLogger(__name__)
 
+_CP_TAG_RE = re.compile(r"(?:^|[-.])(?P<tag>cp\d{3,4})(?:[-.]|$)")
+
+
+def _wheel_cp_tag(wheel: Path) -> str | None:
+    match = _CP_TAG_RE.search(wheel.name)
+    return None if match is None else match.group("tag")
+
+
+def _wheel_version(wheel: Path) -> str | None:
+    parts = wheel.stem.split("-")
+    return parts[1] if len(parts) > 1 else None
+
+
+def _cp_tag_version(tag: str) -> tuple[int, int]:
+    digits = tag.removeprefix("cp")
+    return int(digits[0]), int(digits[1:])
+
+
+def _probe_python(executable: str | Path) -> tuple[int, int, int] | None:
+    code = (
+        "import struct, sys; "
+        "print(sys.version_info[0]); print(sys.version_info[1]); "
+        "print(struct.calcsize('P') * 8)"
+    )
+    try:
+        result = subprocess.run(
+            [str(executable), "-c", code],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        major, minor, bits = (int(value) for value in result.stdout.splitlines()[:3])
+    except (TypeError, ValueError):
+        return None
+    return major, minor, bits
+
+
+def _find_python(
+    required_version: tuple[int, int],
+    base_python: str | Path | None,
+) -> Path | None:
+    if base_python is not None:
+        candidate = Path(base_python).expanduser()
+        executable = str(candidate) if candidate.exists() else shutil.which(str(base_python))
+        if executable is None:
+            raise CameraDependencyError(f"Python executable not found: {base_python}")
+        identity = _probe_python(executable)
+        if identity is None:
+            raise CameraDependencyError(f"Could not run Python executable: {executable}")
+        if identity[:2] != required_version:
+            raise CameraDependencyError(
+                f"{executable} is Python {identity[0]}.{identity[1]}, but the wheel "
+                f"requires Python {required_version[0]}.{required_version[1]}."
+            )
+        return Path(executable).resolve()
+
+    major, minor = required_version
+    version_text = f"{major}.{minor}"
+    launcher = shutil.which("py")
+    if launcher:
+        try:
+            result = subprocess.run(
+                [launcher, f"-{version_text}", "-c", "import sys; print(sys.executable)"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            result = None
+        if result is not None and result.returncode == 0:
+            executable = result.stdout.strip().splitlines()[0]
+            identity = _probe_python(executable)
+            if identity is not None and identity[:2] == required_version:
+                return Path(executable).resolve()
+
+    known: list[Path] = []
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    program_files = os.environ.get("PROGRAMFILES")
+    if local_app_data:
+        known.append(
+            Path(local_app_data) / "Programs" / "Python" / f"Python{major}{minor}" / "python.exe"
+        )
+    if program_files:
+        known.append(Path(program_files) / f"Python{major}{minor}" / "python.exe")
+
+    candidates = [
+        sys.executable,
+        shutil.which(f"python{version_text}"),
+        shutil.which(f"python{major}"),
+        shutil.which("python3"),
+        shutil.which("python"),
+        *(str(path) for path in known),
+    ]
+    checked: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in checked:
+            continue
+        checked.add(candidate)
+        identity = _probe_python(candidate)
+        if identity is not None and identity[:2] == required_version:
+            return Path(candidate).resolve()
+    return None
+
+
+def _install_python_with_winget(required_version: tuple[int, int]) -> bool:
+    if os.name != "nt":
+        return False
+    winget = shutil.which("winget")
+    if winget is None:
+        logger.warning("winget is unavailable; cannot auto-install Python.")
+        return False
+    major, minor = required_version
+    package_id = f"Python.Python.{major}.{minor}"
+    logger.warning(
+        "No Python %s.%s was found. Installing %s with winget; this may take a few minutes.",
+        major,
+        minor,
+        package_id,
+    )
+    try:
+        result = subprocess.run(
+            [
+                winget,
+                "install",
+                "--id",
+                package_id,
+                "--exact",
+                "--scope",
+                "user",
+                "--silent",
+                "--accept-package-agreements",
+                "--accept-source-agreements",
+                "--disable-interactivity",
+            ],
+            check=False,
+        )
+    except OSError as exc:
+        logger.warning("Could not start winget: %s", exc)
+        return False
+    if result.returncode != 0:
+        logger.warning("winget returned exit code %s while installing Python.", result.returncode)
+    return True
+
+
+def _resolve_python(
+    required_version: tuple[int, int],
+    base_python: str | Path | None,
+    *,
+    auto_install: bool = True,
+) -> Path:
+    found = _find_python(required_version, base_python)
+    if found is not None:
+        return found
+
+    attempted_auto_install = False
+    if auto_install and base_python is None:
+        attempted_auto_install = True
+        _install_python_with_winget(required_version)
+        found = _find_python(required_version, None)
+        if found is not None:
+            return found
+
+    major, minor = required_version
+    if attempted_auto_install:
+        recovery = (
+            "Automatic installation with winget was attempted but failed. Install the "
+            "matching 64-bit Python interpreter manually or pass its path with "
+            "base_python=/path/to/python.exe."
+        )
+    else:
+        recovery = (
+            "Install the matching 64-bit Python interpreter or pass its path with "
+            "base_python=/path/to/python.exe."
+        )
+    raise CameraDependencyError(
+        f"Python {major}.{minor} is required by the bundled PySpin wheel, but it was "
+        f"not found. {recovery}"
+    )
+
+
+def _run_checked(command: list[str], description: str) -> None:
+    try:
+        result = subprocess.run(command, check=False)
+    except OSError as exc:
+        raise CameraDependencyError(f"{description} could not start: {exc}") from exc
+    if result.returncode != 0:
+        joined = " ".join(command)
+        raise CameraDependencyError(
+            f"{description} failed with exit code {result.returncode}: {joined}"
+        )
+
+
+def _pyspin_ready(
+    python_executable: Path,
+    expected_version: str | None = None,
+) -> bool:
+    code = (
+        "import importlib.metadata as metadata, numpy, PySpin; "
+        "print(metadata.version('spinnaker-python'))"
+    )
+    try:
+        result = subprocess.run(
+            [str(python_executable), "-c", code],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode != 0:
+        return False
+    if expected_version is None:
+        return True
+    lines = result.stdout.strip().splitlines()
+    return bool(lines) and lines[-1].strip() == expected_version
+
+
+def _ensure_pip(python_executable: Path) -> None:
+    result = subprocess.run(
+        [str(python_executable), "-m", "pip", "--version"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        _run_checked(
+            [str(python_executable), "-m", "ensurepip", "--upgrade"],
+            "Bootstrapping pip",
+        )
+
 
 class FLIR(CameraBackend):
     """Control a FLIR camera through Teledyne's Spinnaker/PySpin SDK."""
 
     backend_name: ClassVar[str] = "flir"
+    default_python_version: ClassVar[tuple[int, int]] = (3, 12)
     sdk: ClassVar[Any | None] = None
     _pyspin: ClassVar[Any | None] = None
+    refs_dir: ClassVar[Path] = Path(__file__).resolve().with_name("refs")
+
+    @classmethod
+    def pyspin_available(cls) -> bool:
+        """Return whether PySpin can be imported by the current interpreter."""
+
+        try:
+            cls._load_pyspin()
+        except Exception:
+            return False
+        return True
+
+    @classmethod
+    def find_pyspin_wheel(
+        cls,
+        *,
+        python_version: tuple[int, int] | None = None,
+        refs_dir: str | Path | None = None,
+    ) -> Path:
+        """Return a bundled PySpin wheel matching the requested Python version.
+
+        By default, the managed camera runtime targets the Python version used
+        by the current bundled PySpin wheel (currently CPython 3.12).
+        """
+
+        directory = Path(refs_dir).expanduser() if refs_dir else cls.refs_dir
+        python_version = cls.default_python_version if python_version is None else python_version
+        candidates = sorted(directory.glob("spinnaker_python-*.whl"))
+        required_tag = f"cp{python_version[0]}{python_version[1]}"
+        candidates = [wheel for wheel in candidates if _wheel_cp_tag(wheel) == required_tag]
+        if not candidates:
+            detail = f" for Python {python_version[0]}.{python_version[1]}"
+            raise CameraDependencyError(
+                f"No spinnaker_python wheel found in {directory}{detail}."
+            )
+        return candidates[0]
+
+    @staticmethod
+    def bridge_python(venv_dir: str | Path = ".venv-camera") -> Path:
+        """Return the Python executable inside a camera bridge environment."""
+
+        root = Path(venv_dir).expanduser()
+        if os.name == "nt":
+            return root / "Scripts" / "python.exe"
+        return root / "bin" / "python"
+
+    @classmethod
+    def create_bridge_venv(
+        cls,
+        venv_dir: str | Path = ".venv-camera",
+        *,
+        base_python: str | Path | None = None,
+        wheel: str | Path | None = None,
+        numpy_requirement: str | None = "numpy<2",
+        auto_install_python: bool = True,
+    ) -> Path:
+        """Create or repair a camera venv from the bundled PySpin wheel.
+
+        The interpreter version is inferred from the wheel's ``cp3xx`` tag.
+        NumPy is installed separately and the vendor wheel is installed with
+        ``--no-deps`` so PySpin cannot replace the selected NumPy version. An
+        existing compatible venv is reused; an incompatible one is recreated.
+        """
+
+        venv_path = Path(venv_dir).expanduser().resolve()
+        wheel_path = (
+            Path(wheel).expanduser().resolve()
+            if wheel is not None
+            else cls.find_pyspin_wheel()
+        )
+        if not wheel_path.is_file():
+            raise CameraDependencyError(f"PySpin wheel not found: {wheel_path}")
+        python_tag = _wheel_cp_tag(wheel_path)
+        if python_tag is None:
+            raise CameraDependencyError(
+                f"Could not determine the CPython version from wheel: {wheel_path.name}"
+            )
+        required_version = _cp_tag_version(python_tag)
+        wheel_version = _wheel_version(wheel_path)
+        if wheel_version is None:
+            raise CameraDependencyError(f"Could not determine wheel version: {wheel_path.name}")
+        base_executable = _resolve_python(
+            required_version,
+            base_python,
+            auto_install=auto_install_python,
+        )
+        base_identity = _probe_python(base_executable)
+        if base_identity is None:
+            raise CameraDependencyError(f"Could not inspect Python: {base_executable}")
+        platform_tag = wheel_path.stem.rsplit("-", 1)[-1]
+        if "64" in platform_tag and base_identity[2] != 64:
+            raise CameraDependencyError(
+                f"{base_executable} is {base_identity[2]}-bit, but "
+                f"{wheel_path.name} requires a 64-bit interpreter."
+            )
+
+        venv_python = cls.bridge_python(venv_path)
+        if venv_path.exists():
+            if not venv_path.is_dir():
+                raise CameraDependencyError(f"Camera venv path is not a directory: {venv_path}")
+            venv_identity = _probe_python(venv_python) if venv_python.is_file() else None
+            recreate = venv_identity is None or venv_identity[:2] != required_version
+        else:
+            recreate = True
+
+        if recreate:
+            _run_checked(
+                [
+                    str(base_executable),
+                    "-m",
+                    "venv",
+                    *(("--clear",) if venv_path.exists() else ()),
+                    str(venv_path),
+                ],
+                f"Creating camera venv with Python {required_version[0]}.{required_version[1]}",
+            )
+        venv_identity = _probe_python(venv_python)
+        if venv_identity is None:
+            raise CameraDependencyError(f"Could not run camera venv Python: {venv_python}")
+        if venv_identity[:2] != required_version:
+            raise CameraDependencyError(
+                f"Camera venv uses Python {venv_identity[0]}.{venv_identity[1]}, but "
+                f"{wheel_path.name} requires Python {required_version[0]}.{required_version[1]}."
+            )
+
+        if _pyspin_ready(venv_python, wheel_version):
+            return venv_path
+
+        _ensure_pip(venv_python)
+        if numpy_requirement:
+            _run_checked(
+                [
+                    str(venv_python),
+                    "-m",
+                    "pip",
+                    "install",
+                    "--disable-pip-version-check",
+                    numpy_requirement,
+                ],
+                "Installing NumPy in the camera venv",
+            )
+        _run_checked(
+            [
+                str(venv_python),
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-deps",
+                str(wheel_path),
+            ],
+            "Installing the PySpin wheel in the camera venv",
+        )
+        if not _pyspin_ready(venv_python, wheel_version):
+            raise CameraDependencyError(
+                "The camera venv was created, but 'import numpy, PySpin' still fails. "
+                "Install the matching Spinnaker SDK runtime and check the Python ABI."
+            )
+        return venv_path
+
+    @classmethod
+    def ensure_bridge_python(
+        cls,
+        venv_dir: str | Path = ".venv-camera",
+        *,
+        base_python: str | Path | None = None,
+        wheel: str | Path | None = None,
+        numpy_requirement: str | None = "numpy<2",
+        auto_install_python: bool = True,
+    ) -> Path:
+        """Ensure the managed FLIR venv exists and return its interpreter."""
+
+        venv_path = cls.create_bridge_venv(
+            venv_dir,
+            base_python=base_python,
+            wheel=wheel,
+            numpy_requirement=numpy_requirement,
+            auto_install_python=auto_install_python,
+        )
+        return cls.bridge_python(venv_path)
+
+    @classmethod
+    def remote_camera(
+        cls,
+        venv_dir: str | Path = ".venv-camera",
+        *,
+        base_python: str | Path | None = None,
+        wheel: str | Path | None = None,
+        numpy_requirement: str | None = "numpy<2",
+        auto_install_python: bool = True,
+        **camera_kwargs: Any,
+    ) -> Any:
+        """Create a :class:`RemoteCamera` backed by a managed FLIR venv."""
+
+        venv_path = cls.create_bridge_venv(
+            venv_dir,
+            base_python=base_python,
+            wheel=wheel,
+            numpy_requirement=numpy_requirement,
+            auto_install_python=auto_install_python,
+        )
+        from qtools.camera.bridge import RemoteCamera
+
+        return RemoteCamera(
+            cls.bridge_python(venv_path),
+            backend=cls.backend_name,
+            **camera_kwargs,
+        )
 
     def __init__(
         self,
         serial: str = "",
         bitdepth: int | None = None,
         pitch_um: float | tuple[float, float] | None = None,
+        *,
+        target: str | int | None = None,
         **kwargs: Any,
     ) -> None:
+        if serial and target is not None:
+            raise ValueError("Specify either serial or target, not both.")
         self._pyspin = self._load_pyspin()
         self.camera_list: Any | None = None
         self.cam: Any | None = None
@@ -68,8 +531,17 @@ class FLIR(CameraBackend):
             cameras = self._enumerate_camera_handles(self.camera_list)
             if not cameras:
                 raise CameraDiscoveryError("No FLIR cameras found by Spinnaker.")
+            try:
+                runtime_info = {
+                    info.serial: info for info in discover_spinnaker_cameras()
+                }
+            except CameraError:
+                runtime_info = {}
+            for entry in cameras:
+                entry.info = runtime_info.get(entry.info.serial, entry.info)
+            cameras.sort(key=lambda entry: entry.info.index)
 
-            selected, selected_info = self._select_camera(cameras, serial)
+            selected, selected_info = self._select_camera(cameras, serial, target)
             self.cam = selected
             self._name = selected_info.serial
             self._initialize_camera()
@@ -82,7 +554,7 @@ class FLIR(CameraBackend):
         except Exception as exc:
             self._cleanup_partial()
             raise CameraConfigurationError(
-                f"Failed to initialize FLIR camera {serial or '<first camera>'}: {exc}"
+                f"Failed to initialize FLIR camera {target if target is not None else serial or '<first camera>'}: {exc}"
             ) from exc
 
     # -- SDK and discovery -------------------------------------------------
@@ -113,22 +585,15 @@ class FLIR(CameraBackend):
 
     @classmethod
     def discover(cls, verbose: bool = True) -> list[CameraInfo]:
-        sdk = cls._get_sdk()
-        camera_list: Any | None = None
         try:
-            camera_list = sdk.GetCameras()
-            entries = cls._enumerate_camera_handles(camera_list)
-            if verbose:
-                for camera in entries:
-                    print(f"{camera.serial} ('{camera.model}')")
-            return [entry.info for entry in entries]
+            cameras = discover_spinnaker_cameras()
         except CameraError:
             raise
         except Exception as exc:
             raise CameraDiscoveryError(f"Failed to enumerate FLIR cameras: {exc}") from exc
-        finally:
-            if camera_list is not None:
-                cls._clear_camera_list(camera_list)
+        if verbose:
+            print_camera_list(cameras)
+        return cameras
 
     @classmethod
     def _enumerate_camera_handles(cls, camera_list: Any) -> list["_CameraEntry"]:
@@ -146,7 +611,13 @@ class FLIR(CameraBackend):
         serial = cls._read_string_node(node_map, "DeviceSerialNumber", pyspin) or f"cam_{index}"
         model = cls._read_string_node(node_map, "DeviceModelName", pyspin) or "unknown"
         vendor = cls._read_string_node(node_map, "DeviceVendorName", pyspin) or "FLIR"
-        return CameraInfo(serial=serial, model=model, vendor=vendor, index=index)
+        return CameraInfo(
+            serial=serial,
+            model=model,
+            vendor=vendor,
+            index=index + 1,
+            device_id=cls._read_string_node(node_map, "DeviceID", pyspin) or "",
+        )
 
     @classmethod
     def _read_string_node(cls, node_map: Any, name: str, pyspin: Any) -> str | None:
@@ -162,16 +633,67 @@ class FLIR(CameraBackend):
         self,
         entries: list["_CameraEntry"],
         serial: str,
+        target: str | int | None,
     ) -> tuple[Any, CameraInfo]:
-        if not serial:
-            if len(entries) > 1:
-                logger.debug("No serial given; choosing first of %s", [e.info.serial for e in entries])
+        selector = target if target is not None else serial
+        if selector is None or str(selector).strip() == "":
+            if len(entries) != 1:
+                available = ", ".join(
+                    f"[{entry.info.index}] {entry.info.serial}" for entry in entries
+                )
+                raise CameraDiscoveryError(
+                    "Multiple FLIR cameras found; specify target by camera number, "
+                    f"serial, USB port, or Ethernet address. Available: {available}"
+                )
             return entries[0].handle, entries[0].info
-        for entry in entries:
-            if entry.info.serial == serial:
+
+        if isinstance(selector, int):
+            index = selector
+            if 1 <= index <= len(entries):
+                entry = entries[index - 1]
                 return entry.handle, entry.info
-        available = ", ".join(entry.info.serial for entry in entries)
-        raise CameraDiscoveryError(f"Serial {serial!r} not found by PySpin. Available: {available}")
+            raise CameraDiscoveryError(
+                f"Camera number {index} is out of range; available numbers are "
+                f"1-{len(entries)}."
+            )
+
+        text = str(selector).strip()
+        fields = (
+            "serial",
+            "device_id",
+            "port",
+            "interface_id",
+            "interface_name",
+        )
+        matches = [
+            entry
+            for entry in entries
+            if any(
+                text.casefold() == str(getattr(entry.info, field, "")).casefold()
+                for field in fields
+                if getattr(entry.info, field, "")
+            )
+        ]
+        if len(matches) == 1:
+            return matches[0].handle, matches[0].info
+        if len(matches) > 1:
+            numbers = ", ".join(str(entry.info.index) for entry in matches)
+            raise CameraDiscoveryError(
+                f"Target {text!r} matches multiple cameras ({numbers}); use the "
+                "camera number or serial number instead."
+            )
+
+        if text.isdigit() and 1 <= int(text) <= len(entries):
+            entry = entries[int(text) - 1]
+            return entry.handle, entry.info
+
+        available = ", ".join(
+            f"[{entry.info.index}] {entry.info.serial} ({entry.info.port})"
+            for entry in entries
+        )
+        raise CameraDiscoveryError(
+            f"Camera target {text!r} was not found. Available: {available}"
+        )
 
     # -- initialization and cleanup ---------------------------------------
 
@@ -780,4 +1302,51 @@ class _CameraEntry:
         self.handle = handle
 
 
+def main(argv: list[str] | None = None) -> None:
+    """Create or repair the managed FLIR camera environment."""
+
+    parser = argparse.ArgumentParser(
+        description="Create a PySpin camera venv using the wheel in refs/."
+    )
+    parser.add_argument("--venv", default=".venv-camera", help="Camera venv directory.")
+    parser.add_argument(
+        "--python",
+        dest="base_python",
+        help="Base Python executable (normally Python 3.12 for the bundled wheel).",
+    )
+    parser.add_argument(
+        "--wheel",
+        help="PySpin wheel path; defaults to the matching wheel in refs/.",
+    )
+    parser.add_argument(
+        "--numpy",
+        default="numpy<2",
+        help="NumPy requirement installed before the vendor wheel (default: numpy<2).",
+    )
+    parser.add_argument(
+        "--no-install-python",
+        action="store_false",
+        dest="install_python",
+        help="Do not try to install a missing Python version with winget.",
+    )
+    args = parser.parse_args(argv)
+    try:
+        venv_path = FLIR.create_bridge_venv(
+            args.venv,
+            base_python=args.base_python,
+            wheel=args.wheel,
+            numpy_requirement=args.numpy,
+            auto_install_python=args.install_python,
+        )
+    except CameraDependencyError as exc:
+        parser.exit(1, f"error: {exc}\n")
+    print(f"Camera venv: {venv_path}")
+    print(f"Camera Python: {FLIR.bridge_python(venv_path)}")
+    print("PySpin import: OK")
+
+
 __all__ = ["FLIR"]
+
+
+if __name__ == "__main__":
+    main()

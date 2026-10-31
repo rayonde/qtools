@@ -17,12 +17,38 @@ import numpy.typing as npt
 
 @dataclass(frozen=True)
 class CameraInfo:
-    """Small, vendor-neutral description returned during discovery."""
+    """Vendor-neutral camera identity and connection information."""
 
     serial: str
     model: str = "unknown"
     vendor: str = "unknown"
     index: int = 0
+    device_id: str = ""
+    interface_type: str = ""
+    interface_id: str = ""
+    interface_name: str = ""
+    port: str = ""
+
+
+def format_camera_info(info: CameraInfo) -> str:
+    """Format one camera for human-readable discovery output."""
+
+    transport = info.interface_type or "unknown"
+    parts = [
+        f"[{info.index}]",
+        f"brand={info.vendor}",
+        f"model={info.model}",
+        f"SN={info.serial}",
+        f"{transport} port={info.port or 'N/A'}",
+    ]
+    return " | ".join(parts)
+
+
+def print_camera_list(cameras: list[CameraInfo]) -> None:
+    """Print one line per discovered camera."""
+
+    for camera in cameras:
+        print(format_camera_info(camera))
 
 
 class CameraBackend(ABC):
@@ -111,4 +137,4 @@ class CameraBackend(ABC):
         self.close()
 
 
-__all__ = ["CameraBackend", "CameraInfo"]
+__all__ = ["CameraBackend", "CameraInfo", "format_camera_info", "print_camera_list"]

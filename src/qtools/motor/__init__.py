@@ -13,13 +13,18 @@ from qtools import __version__ as __version__
 from qtools.motor.backends.motor import MotorBackend, list_devices
 from qtools.motor.backends.k10cr1.k10cr1 import ThorlabsK10CR1
 from qtools.motor.backends.k10cr1.stage import K10CR1Backend
+from qtools.motor.backends.kdc101.kdc101 import KDC101Error, ThorlabsKDC101
+from qtools.motor.backends.kdc101.stage import KDC101Backend
 from qtools.motor.connection import get_motor
 from qtools.motor.config import MotorConfigManager
 
 __all__ = [
     "MotorBackend",
     "K10CR1Backend",
+    "KDC101Backend",
     "ThorlabsK10CR1",
+    "ThorlabsKDC101",
+    "KDC101Error",
     "MotorConfigManager",
     "list_devices",
     "get_motor",

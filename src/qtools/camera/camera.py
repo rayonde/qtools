@@ -17,10 +17,14 @@ _BACKEND_MODULES: dict[str, tuple[str, str] | type[CameraBackend]] = {
 }
 
 
-def list_backends() -> list[str]:
-    """Return registered camera backend names."""
+def list_camera(backend: str = "flir") -> None:
+    """Print connected cameras and identifiers for ``target=...`` selection.
 
-    return sorted(_BACKEND_MODULES)
+    Enumeration does not open a camera or provision the managed camera runtime.
+    The function returns ``None`` so notebooks display only the formatted list.
+    """
+
+    get_backend(backend).discover(verbose=True)
 
 
 def register_backend(name: str, backend: type[CameraBackend]) -> None:
@@ -40,7 +44,8 @@ def get_backend(name: str) -> type[CameraBackend]:
     try:
         registered = _BACKEND_MODULES[key]
     except KeyError as exc:
-        raise KeyError(f"Unknown camera backend {name!r}; available: {list_backends()}") from exc
+        available = ", ".join(sorted(_BACKEND_MODULES))
+        raise KeyError(f"Unknown camera backend {name!r}; available: {available}") from exc
     if isinstance(registered, type):
         return registered
     module_name, class_name = registered
@@ -57,16 +62,6 @@ class Camera:
 
     def __init__(self, backend: str = "flir", **kwargs: Any) -> None:
         self._backend = get_backend(backend)(**kwargs)
-
-    @classmethod
-    def info(cls, backend: str = "flir", verbose: bool = True) -> list[str]:
-        """Discover cameras for a backend without opening one."""
-
-        return get_backend(backend).info(verbose=verbose)
-
-    @classmethod
-    def list_backends(cls) -> list[str]:
-        return list_backends()
 
     @property
     def backend(self) -> CameraBackend:
@@ -214,4 +209,4 @@ class Camera:
         return np.asarray(np.clip(values, 0, 255), dtype=np.uint8)
 
 
-__all__ = ["Camera", "get_backend", "list_backends", "register_backend"]
+__all__ = ["Camera", "get_backend", "list_camera", "register_backend"]

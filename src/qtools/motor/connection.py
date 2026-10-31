@@ -95,17 +95,26 @@ def _parse_device_info(
                 resolved_port = p
                 break
 
-    # 4. Fallback: match device index (1-based) or serial/port substring from list_devices
+    # 4. Fallback: exact serial/port, 1-based index, then substring match
     if not resolved_port:
-        if target_str.isdigit() and devices:
-            idx = int(target_str) - 1
-            if 0 <= idx < len(devices):
-                resolved_port = devices[idx][0]
-        else:
-            for p, label in devices:
-                if target_str.lower() in label.lower() or target_str.lower() in p.lower():
-                    resolved_port = p
-                    break
+        for p, label in devices:
+            serial_match = re.search(r"SN=([a-zA-Z0-9]+)", label)
+            if p == target_str or (
+                serial_match and serial_match.group(1) == target_str
+            ):
+                resolved_port = p
+                break
+
+    if not resolved_port and target_str.isdigit() and devices:
+        idx = int(target_str) - 1
+        if 0 <= idx < len(devices):
+            resolved_port = devices[idx][0]
+
+    if not resolved_port:
+        for p, label in devices:
+            if target_str.lower() in label.lower() or target_str.lower() in p.lower():
+                resolved_port = p
+                break
 
     if not resolved_port:
         raise ConnectionError(
@@ -123,6 +132,7 @@ def get_motor(
     blocking: bool = True,
     backend: str | type[MotorBackend] | None = None,
     config_mgr: MotorConfigManager | None = None,
+    **kwargs,
 ) -> MotorBackend:
     """Resolve device target and return a :class:`MotorBackend` handle.
 
@@ -140,6 +150,10 @@ def get_motor(
         Backend implementation identifier (defaults to 'k10cr1').
     config_mgr : MotorConfigManager, optional
         Custom configuration manager instance.
+    **kwargs
+        Backend-specific options forwarded to the backend constructor. For
+        example, ``stage_settings="PRM1-Z8"`` can be used with the KDC101
+        backend.
 
     Returns
     -------
@@ -162,4 +176,5 @@ def get_motor(
         serial_no=serial_no,
         backend=backend_arg,
         config_mgr=config_mgr,
+        **kwargs,
     )

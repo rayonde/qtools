@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for Thorlabs K10CR1 stepper motor rotation stages.
+"""CLI for Thorlabs K10CR1 stepper and KDC101 DC-servo rotation stages.
 
 Motor-control commands only.  For polarization measurement and waveplate
 calibration see the ``qtools.pmeas`` package.
@@ -45,6 +45,7 @@ def print_device_list(
     show_header: bool = True,
     connected_ports: set[str] | None = None,
     config_mgr: MotorConfigManager | None = None,
+    backend: str = "k10cr1",
 ) -> list[tuple[str, str]]:
     """Scan USB and print connected devices alongside their configured names."""
     if show_header:
@@ -53,7 +54,7 @@ def print_device_list(
         print("=" * 60)
 
     mgr = config_mgr or MotorConfigManager.resolve()
-    devices = list_devices()
+    devices = list_devices(backend)
 
     if not devices:
         print("  No motor devices found.")
@@ -66,7 +67,10 @@ def print_device_list(
             entry = mgr.get_device(sn) or {} if sn else {}
             name = entry.get("name") or entry.get("id") or "(unconfigured)"
             connected_mark = " [connected]" if connected_ports and port in connected_ports else ""
-            print(f"  [{i}] Port:  {port}  |  SN: {sn or 'N/A'}  |  Name: {name}{connected_mark}")
+            print(
+                f"  [{i}] Target: {port}  |  SN: {sn or 'N/A'}  |  "
+                f"Name: {name}{connected_mark}"
+            )
 
     if show_header:
         print("=" * 60 + "\n")
@@ -76,9 +80,37 @@ def print_device_list(
 # Command handlers
 # ═══════════════════════════════════════════════════════════════════════════
 
-def cmd_config(_args: argparse.Namespace) -> None:
-    """Configure connected K10CR1 devices by prompting for their names."""
-    devices = list_devices()
+def _motor_options(args: argparse.Namespace) -> dict[str, object]:
+    """Return backend and backend-specific options from parsed CLI args."""
+    options: dict[str, object] = {
+        "backend": getattr(args, "backend", "k10cr1"),
+    }
+    for key in (
+        "stage_settings",
+        "steps_per_rev",
+        "gearbox_ratio",
+        "pitch",
+        "travel_mode",
+        "move_timeout",
+    ):
+        value = getattr(args, key, None)
+        if value is not None:
+            options[key] = value
+    return options
+
+
+def _open_motor(
+    args: argparse.Namespace,
+    target: str | int | None = None,
+) -> MotorBackend:
+    """Open a motor using the backend selected for this CLI invocation."""
+    return get_motor(target=target, **_motor_options(args))
+
+
+def cmd_config(args: argparse.Namespace) -> None:
+    """Configure connected devices by prompting for their names."""
+    backend = getattr(args, "backend", "k10cr1")
+    devices = list_devices(backend)
     if not devices:
         print("\nNo Motor devices detected. Ensure they are powered on and connected.")
         return
@@ -100,15 +132,16 @@ def cmd_config(_args: argparse.Namespace) -> None:
     print("=" * 60 + "\n")
 
 
-def cmd_list(_args: argparse.Namespace) -> None:
-    """Scan and list connected Thorlabs K10CR1 devices."""
-    _ = print_device_list(show_header=True)
+def cmd_list(args: argparse.Namespace) -> None:
+    """Scan and list connected devices for the selected backend."""
+    backend = getattr(args, "backend", "k10cr1")
+    _ = print_device_list(show_header=True, backend=backend)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
     """Connect and query motor status."""
     try:
-        with get_motor(target=args.device) as stage:
+        with _open_motor(args, target=args.device) as stage:
             print("  [OK] Connected successfully!")
             print(f"       Device Name:   {stage.name or stage.get_stage_name()}")
             print(f"       Serial Number: {stage.serial}")
@@ -121,7 +154,7 @@ def cmd_status(args: argparse.Namespace) -> None:
 def cmd_identify(args: argparse.Namespace) -> None:
     """Blink the device LED."""
     try:
-        with get_motor(target=args.device) as stage:
+        with _open_motor(args, target=args.device) as stage:
             if hasattr(stage, "identify"):
                 stage.identify()
                 print(f"  [OK] Blink command sent to: {stage.name or stage.serial}")
@@ -155,7 +188,7 @@ def cmd_move_to(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     try:
-        with get_motor(target=device) as stage:
+        with _open_motor(args, target=device) as stage:
             if args.speed is not None:
                 stage.set_velocity(args.speed)
             print(f"       Current Angle: {stage.get_position():.4f}°")
@@ -195,7 +228,7 @@ def cmd_move_by(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     try:
-        with get_motor(target=device) as stage:
+        with _open_motor(args, target=device) as stage:
             if args.speed is not None:
                 stage.set_velocity(args.speed)
             print(f"       Current Angle: {stage.get_position():.4f}°")
@@ -221,7 +254,7 @@ def cmd_move(args: argparse.Namespace) -> None:
 def cmd_position(args: argparse.Namespace) -> None:
     """Query current software and physical angle of the motor."""
     try:
-        with get_motor(target=args.device) as stage:
+        with _open_motor(args, target=args.device) as stage:
             pos = stage.get_position()
             print(f"       Current Angle:  {pos:.4f}°")
     except Exception as exc:
@@ -244,7 +277,7 @@ def cmd_set_zero(args: argparse.Namespace) -> None:
             device = args.target
 
     try:
-        with get_motor(target=device) as stage:
+        with _open_motor(args, target=device) as stage:
             stage.set_zero_offset(angle_val)
             print("  [OK] Zero offset set successfully!")
             print(f"       Current Angle: {stage.get_position():.4f}°")
@@ -256,7 +289,7 @@ def cmd_set_zero(args: argparse.Namespace) -> None:
 def cmd_home(args: argparse.Namespace) -> None:
     """Home the motor stage."""
     try:
-        with get_motor(target=args.device) as stage:
+        with _open_motor(args, target=args.device) as stage:
             print("Homing motor stage...")
             stage.home()
             stage.wait_move()
@@ -269,7 +302,7 @@ def cmd_home(args: argparse.Namespace) -> None:
 def cmd_zero(args: argparse.Namespace) -> None:
     """Move the motor to the software zero position (0.0°)."""
     try:
-        with get_motor(target=args.device) as stage:
+        with _open_motor(args, target=args.device) as stage:
             if args.speed is not None:
                 stage.set_velocity(args.speed)
             print(f"       Current Angle: {stage.get_position():.4f}°")
@@ -335,29 +368,87 @@ def cmd_repl(_args: argparse.Namespace) -> None:
 # Argument parser
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _add_runtime_options(
+    parser: argparse.ArgumentParser,
+    *,
+    backend_default: str | None = None,
+) -> None:
+    """Add backend selection and backend-specific options to a parser."""
+    backend_kwargs: dict[str, object] = {
+        "choices": ("k10cr1", "kdc101"),
+        "help": "Motor backend (default: k10cr1)",
+    }
+    if backend_default is None:
+        backend_kwargs["default"] = argparse.SUPPRESS
+    else:
+        backend_kwargs["default"] = backend_default
+    parser.add_argument("--backend", **backend_kwargs)
+
+    default = argparse.SUPPRESS if backend_default is None else None
+    parser.add_argument(
+        "--stage-settings",
+        default=default,
+        help="Kinesis stage settings name for KDC101 (e.g. PRM1-Z8)",
+    )
+    parser.add_argument(
+        "--steps-per-rev",
+        type=float,
+        default=default,
+        help="KDC101 motor steps per revolution",
+    )
+    parser.add_argument(
+        "--gearbox-ratio",
+        type=float,
+        default=default,
+        help="KDC101 gearbox ratio",
+    )
+    parser.add_argument(
+        "--pitch",
+        type=float,
+        default=default,
+        help="KDC101 stage pitch",
+    )
+    parser.add_argument(
+        "--travel-mode",
+        default=default,
+        help="KDC101 travel mode; only rotational/2 is supported",
+    )
+    parser.add_argument(
+        "--move-timeout",
+        type=float,
+        default=default,
+        help="KDC101 move timeout in seconds",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build and return the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="Thorlabs K10CR1 Stepper Motor CLI",
+        description="Thorlabs motor CLI (K10CR1 stepper and KDC101 DC servo)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    _add_runtime_options(parser, backend_default="k10cr1")
     sub = parser.add_subparsers(title="commands", dest="command", required=True)
 
     # ------- list ----------------------------------------------------------
-    sub.add_parser("list", help="List connected K10CR1 devices")
+    p = sub.add_parser("list", help="List connected devices")
+    _add_runtime_options(p)
 
     # ------- status --------------------------------------------------------
     p = sub.add_parser("status", help="Connect and query motor status")
+    _add_runtime_options(p)
     p.add_argument("device", nargs="?", default=None,
                    help="Device name, port, or index (auto-detect if omitted)")
 
     # ------- identify ------------------------------------------------------
     p = sub.add_parser("identify", help="Blink the device LED")
+    _add_runtime_options(p)
     p.add_argument("device", nargs="?", default=None,
                    help="Device name, port, or index")
 
     # ------- move ----------------------------------------------------------
     move_parser = sub.add_parser("move", help="Move the motor stage")
+    _add_runtime_options(move_parser)
     move_parser.add_argument("-s", "--speed", type=float, default=None,
                              help="Rotation velocity in °/s")
 
@@ -365,6 +456,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # move to
     to_p = move_sub.add_parser("to", help="Move to an absolute angle")
+    _add_runtime_options(to_p)
     to_p.add_argument("target", nargs="?", default=None,
                       help="Device name, port, or index (or angle if device omitted)")
     to_p.add_argument("angle", nargs="?", default=None,
@@ -374,6 +466,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # move by
     by_p = move_sub.add_parser("by", help="Rotate by a relative angle")
+    _add_runtime_options(by_p)
     by_p.add_argument("target", nargs="?", default=None,
                       help="Device name, port, or index (or angle if device omitted)")
     by_p.add_argument("angle", nargs="?", default=None,
@@ -383,11 +476,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ------- position ------------------------------------------------------
     p = sub.add_parser("position", help="Query current software and physical angle")
+    _add_runtime_options(p)
     p.add_argument("device", nargs="?", default=None,
                    help="Device name, port, or index")
 
     # ------- set-zero ------------------------------------------------------
     p = sub.add_parser("set-zero", help="Set software zero offset")
+    _add_runtime_options(p)
     p.add_argument("target", nargs="?", default=None,
                    help="Device name, port, or index, or the offset angle if device omitted")
     p.add_argument("angle", type=float, nargs="?", default=None,
@@ -395,6 +490,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ------- zero ----------------------------------------------------------
     p = sub.add_parser("zero", help="Move the motor stage to software zero (0.0°)")
+    _add_runtime_options(p)
     p.add_argument("device", nargs="?", default=None,
                    help="Device name, port, or index")
     p.add_argument("-s", "--speed", type=float, default=None,
@@ -402,16 +498,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ------- home ----------------------------------------------------------
     p = sub.add_parser("home", help="Home the motor stage")
+    _add_runtime_options(p)
     p.add_argument("device", nargs="?", default=None,
                    help="Device name, port, or index")
 
     # ------- repl ----------------------------------------------------------
     p = sub.add_parser("repl", help="Start interactive REPL")
+    _add_runtime_options(p)
     p.add_argument("device", nargs="?", default=None,
                    help="Device name, port, or index")
 
     # ------- config --------------------------------------------------------
-    sub.add_parser("config", help="Interactive naming and configuration wizard")
+    p = sub.add_parser("config", help="Interactive naming and configuration wizard")
+    _add_runtime_options(p)
 
     return parser
 
@@ -423,14 +522,31 @@ def _normalize_move_argv(argv: list[str]) -> list[str]:
         return normalized
 
     tokens = normalized[1:]
-    first_positional = next(
-        (i for i, token in enumerate(tokens) if not token.startswith("-") or token == "-"),
-        None,
-    )
-    action_position = next(
-        (i for i, token in enumerate(tokens) if token in ("to", "by")),
-        None,
-    )
+    options_with_values = {
+        "-s",
+        "--speed",
+        "--backend",
+        "--stage-settings",
+        "--steps-per-rev",
+        "--gearbox-ratio",
+        "--pitch",
+        "--travel-mode",
+        "--move-timeout",
+    }
+    first_positional: int | None = None
+    action_position: int | None = None
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.startswith("-") and token != "-":
+            index += 2 if token in options_with_values else 1
+            continue
+        if token in ("to", "by"):
+            action_position = index
+            break
+        if first_positional is None:
+            first_positional = index
+        index += 1
     if (
         first_positional is None
         or action_position is None

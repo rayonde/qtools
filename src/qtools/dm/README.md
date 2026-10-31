@@ -5,9 +5,8 @@
 [`Light_Control_and_Manipulation_Examples`](backends/Thorlabs/DMP40/refs/Light_Control_and_Manipulation_Examples/Python/DMP40%20DMH40%20Deformable%20Mirrors/DMP40%20using%20ctypes%20-%20Python%203.py)。
 没有使用 `dmlib`，也没有自行拟合压电电压映射。
 
-目前 Python 控制层、离线测试与案例已实现；**DLL 尚未随包提供，Windows +
-DMP40 实机验证待完成**。在 Mac 上可以导入、构造对象、转换模式编号和运行
-`--dry-run`，不会尝试加载 Windows DLL。
+目前 Python 控制层、离线测试、Windows 实机连接与写控均已验证；官方 Windows
+x64 SDK DLL 与许可证已放在包内 `libs/`。
 
 ## Windows 环境与 DLL
 
@@ -25,6 +24,31 @@ src/qtools/dm/backends/Thorlabs/DMP40/libs/
 qtools 默认从包内 `libs` 加载，支持 `dll_dir=...` 覆盖；不需要 `os.chdir()`。
 将 DLL 放入后重新构建的 wheel 会包含它们。只有两个 DLL 并不代表 USB 驱动和
 运行时已经安装，详见 [`libs/README.md`](backends/Thorlabs/DMP40/libs/README.md)。
+
+当前随包文件的来源同一官方安装：
+
+- `TLDFM_64.dll`：3.2.1880.67
+- `TLDFMX_64.dll`：3.2.1876.59
+- `License.rtf`：官方 Deformable Mirror 软件许可证
+
+## Windows 实机验证状态
+
+2026-10-30 在 Windows 10 x64、64 位 Python 3.14.6、Thorlabs DMP40-P01
+（序列号 `M01325728`）上完成以下检查：
+
+- 设备发现：`USB0::0x1313::0x8016::M01325728::0::RAW`，可用状态为 `True`；
+- 连接：`TLDFMX_init(IDQuery=True, resetDevice=False)` 成功，关闭成功；
+- 能力查询：40 个镜面段、3 个独立倾斜臂，Zernike 幅度范围 `[-1, 1]`，
+  镜面和倾斜电压范围均为 `[0, 200] V`；
+- 写控：设置 `defocus=0.01`、`pitch=0.01`、`yaw=-0.01` 后，段电压
+  `100.0 -> 99.0 V`，三路倾斜电压均发生对应变化；归零后 40 段与 3 路倾斜
+  全部恢复为 `100.0 V`，与测试前逐点一致；
+- 示例：`python -m qtools.dm.examples.dmp40_modes --serial M01325728 --hold-s 0`
+  成功执行单模式、组合模式、增量更新和最终归零。
+
+这验证了 SDK 加载、USB 通信、连接、命令计算、电压写入和回读路径。它不等于
+波前质量、机械轴方向、物理角度比例或绝对像差幅度的校准；这些仍需结合波前
+传感器和具体光路验证。
 
 ## 打印可调参数、范围与当前设定值
 
@@ -204,7 +228,7 @@ SDK pattern range check，并在下发前检查计算结果；超限会报错，
 ## Mac 离线案例与 Windows 控制案例
 
 ```bash
-# Mac / Linux / Windows，纯命令预览，不加载 SDK，不模拟真实执行器响应：
+# macOS / Windows，纯命令预览，不加载 SDK，不模拟真实执行器响应：
 python -m qtools.dm.examples.dmp40_modes --dry-run
 
 # Windows + DLL + 已安装驱动 + DMP40：

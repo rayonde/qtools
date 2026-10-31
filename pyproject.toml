@@ -46,6 +46,7 @@ slm-rpc = ["ipyutils>=1.0.0"]
 slm-simulated = ["slmsuite>=0.4.1"]
 
 [project.scripts]
+camera-venv = "qtools.camera.backends.flir:main"
 motor = "qtools.motor.cli:main"
 pctrl = "qtools.pctrl.cli:main"
 pmeas = "qtools.pmeas.cli:main"

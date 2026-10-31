@@ -10,13 +10,15 @@ from qtools.camera import (
     Camera,
     CameraBackend,
     CameraDependencyError,
-    CameraInfo,
+    CameraDiscoveryError,
     FLIR,
-    list_backends,
+    list_camera,
     register_backend,
 )
+import qtools.camera._spinnaker_c as spinnaker_c_module
+from qtools.camera.base import CameraInfo
+from qtools.camera import camera as camera_module
 from qtools.camera.backends import flir as flir_module
-from qtools.camera.camera import _BACKEND_MODULES
 
 
 class FakeNode:
@@ -213,8 +215,8 @@ def fake_pyspin(monkeypatch):
 
 
 def test_camera_imports_without_loading_pyspin():
-    assert "flir" in list_backends()
     assert issubclass(FLIR, flir_module.CameraBackend)
+    assert "PySpin" not in sys.modules
 
 
 def test_missing_pyspin_has_actionable_error(monkeypatch):
@@ -233,7 +235,6 @@ def test_missing_pyspin_has_actionable_error(monkeypatch):
 def test_flir_discovery_initialization_and_12bit_capture(fake_pyspin):
     camera, system = fake_pyspin
 
-    assert FLIR.info(verbose=False) == ["123"]
     with FLIR(serial="123", pitch_um=3.45) as flir:
         assert flir.shape == (1, 2)
         assert flir.pitch_um == (3.45, 3.45)
@@ -286,7 +287,7 @@ def test_facade_delegates_and_saves_raw_data(tmp_path, fake_pyspin):
     assert np.array_equal(np.load(path), image)
 
 
-def test_new_vendor_backend_can_be_registered_without_facade_changes(monkeypatch):
+def test_new_vendor_backend_can_be_registered_without_facade_changes():
     class DummyBackend(CameraBackend):
         backend_name = "dummy"
 
@@ -317,8 +318,141 @@ def test_new_vendor_backend_can_be_registered_without_facade_changes(monkeypatch
 
     register_backend("dummy", DummyBackend)
     try:
-        assert Camera.info(backend="dummy", verbose=False) == ["dummy-1"]
+        assert list_camera(backend="dummy") is None
         with Camera(backend="dummy") as camera:
             assert np.array_equal(camera.capture(), np.array([[7]], dtype=np.uint8))
     finally:
-        monkeypatch.delitem(_BACKEND_MODULES, "dummy", raising=False)
+        camera_module._BACKEND_MODULES.pop("dummy", None)
+
+
+def test_list_camera_does_not_provision_camera_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    info = CameraInfo(serial="camera-a", model="TestCam", vendor="Test", index=1)
+
+    def fail_ensure(*args, **kwargs):
+        raise AssertionError("list_camera must not provision the camera worker")
+
+    monkeypatch.setattr(FLIR, "discover", classmethod(lambda cls, verbose=True: [info]))
+    monkeypatch.setattr(FLIR, "ensure_bridge_python", classmethod(fail_ensure))
+
+    assert list_camera() is None
+
+
+def test_list_camera_prints_identity_and_connection(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    info = CameraInfo(
+        serial="camera-a",
+        model="SameModel",
+        vendor="FLIR",
+        index=1,
+        interface_type="USB3Vision",
+        port="Port_#0001.Hub_#0002",
+        interface_name="USB Host Controller",
+    )
+    def fake_discover(cls, verbose=True):
+        if verbose:
+            flir_module.print_camera_list([info])
+        return [info]
+
+    monkeypatch.setattr(FLIR, "discover", classmethod(fake_discover))
+
+    assert list_camera() is None
+    output = capsys.readouterr().out
+    assert "[1]" in output
+    assert "FLIR" in output
+    assert "SameModel" in output
+    assert "SN=camera-a" in output
+    assert "USB3Vision port=Port_#0001.Hub_#0002" in output
+    assert "adapter=" not in output
+    assert "CameraInfo(" not in output
+
+
+def test_flir_discover_does_not_import_pyspin(monkeypatch: pytest.MonkeyPatch) -> None:
+    info = CameraInfo(serial="camera-a", model="TestCam", vendor="Test", index=1)
+    monkeypatch.setattr(
+        flir_module, "discover_spinnaker_cameras", lambda: [info]
+    )
+
+    def fail_import(name):
+        raise AssertionError(f"unexpected import: {name}")
+
+    monkeypatch.setattr(flir_module.importlib, "import_module", fail_import)
+
+    assert FLIR.discover(verbose=False) == [info]
+
+
+def test_formats_gige_ip_values() -> None:
+    assert spinnaker_c_module._format_gige_ip("192.168.1.10") == "192.168.1.10"
+    assert spinnaker_c_module._format_gige_ip("0xC0A8010A") == "192.168.1.10"
+    assert spinnaker_c_module._format_gige_ip("3232235786") == "192.168.1.10"
+    assert spinnaker_c_module._format_gige_ip("") == ""
+
+
+def test_select_camera_by_number_serial_and_port() -> None:
+    entries = [
+        flir_module._CameraEntry(
+            CameraInfo(
+                serial="serial-a",
+                model="SameModel",
+                index=1,
+                device_id="device-a",
+                port="Port_#0001.Hub_#0002",
+                interface_id="usb-controller-a",
+            ),
+            "handle-a",
+        ),
+        flir_module._CameraEntry(
+            CameraInfo(
+                serial="serial-b",
+                model="SameModel",
+                index=2,
+                device_id="device-b",
+                port="Port_#0003.Hub_#0004",
+                interface_id="usb-controller-b",
+            ),
+            "handle-b",
+        ),
+    ]
+    flir = object.__new__(FLIR)
+
+    assert flir._select_camera(entries, "", 1) == ("handle-a", entries[0].info)
+    assert flir._select_camera(entries, "", "serial-b") == ("handle-b", entries[1].info)
+    assert flir._select_camera(
+        entries, "", "Port_#0003.Hub_#0004"
+    ) == ("handle-b", entries[1].info)
+
+
+def test_select_camera_requires_explicit_target_for_multiple_cameras() -> None:
+    entries = [
+        flir_module._CameraEntry(CameraInfo(serial="serial-a", index=1), "handle-a"),
+        flir_module._CameraEntry(CameraInfo(serial="serial-b", index=2), "handle-b"),
+    ]
+    flir = object.__new__(FLIR)
+
+    with pytest.raises(CameraDiscoveryError, match="Multiple FLIR cameras"):
+        flir._select_camera(entries, "", None)
+
+
+def test_select_camera_rejects_ambiguous_interface_target() -> None:
+    entries = [
+        flir_module._CameraEntry(
+            CameraInfo(serial="serial-a", index=1, interface_id="shared-controller"),
+            "handle-a",
+        ),
+        flir_module._CameraEntry(
+            CameraInfo(serial="serial-b", index=2, interface_id="shared-controller"),
+            "handle-b",
+        ),
+    ]
+    flir = object.__new__(FLIR)
+
+    with pytest.raises(CameraDiscoveryError, match="matches multiple cameras"):
+        flir._select_camera(entries, "", "shared-controller")
+
+
+def test_camera_class_only_represents_an_opened_camera():
+    assert not hasattr(Camera, "info")
+    assert not hasattr(Camera, "list_backends")
+    assert not hasattr(camera_module, "list_backends")
