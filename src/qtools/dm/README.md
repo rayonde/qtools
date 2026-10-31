@@ -8,6 +8,33 @@
 目前 Python 控制层、离线测试、Windows 实机连接与写控均已验证；官方 Windows
 x64 SDK DLL 与许可证已放在包内 `libs/`。
 
+## 发现连接的 DM
+
+`list_dm()` 会扫描 DM 设备，打印 backend 名称、设备信息和可直接使用的
+`DM(...)` 构造参数。有设备时返回 `DeviceInfo` 列表，无设备时返回 `None`。
+
+```python
+from qtools.dm import DM, list_dm
+
+devices = list_dm()
+device = devices[0] if devices else None
+
+if device is not None:
+    dm = DM(backend=device.backend, serial=device.serial)
+```
+
+## 查看 Zernike 当前值
+
+连接后可用 `dm.status` 查看全部 Zernike 模式最近一次成功下发的系数。
+未下发过 Zernike 命令时，各模式显示 `None`，表示硬件状态未知而不是零。
+
+```python
+with dm:
+    print(dm.status)
+    dm.set_zernikes({"defocus": 0.10, "coma_x": 0.03})
+    print(dm.status)
+```
+
 ## Windows 环境与 DLL
 
 在控制电脑上安装 Thorlabs 官方 Deformable Mirror 软件及配套 VISA、USB 驱动和

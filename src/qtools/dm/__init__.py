@@ -5,7 +5,7 @@ or connecting real hardware requires the Thorlabs Windows x64 SDK.
 """
 
 from .backends.Thorlabs.DMP40 import DMP40, DeviceInfo, MirrorCapabilities
-from .dm import DM
+from .dm import DM, list_dm
 from .exceptions import (
     DMCapabilityError,
     DMConnectionError,
@@ -19,6 +19,7 @@ from .modes import TipTilt, ZernikeMode, zernike_vector
 
 __all__ = [
     "DM",
+    "list_dm",
     "DMP40",
     "DMCapabilityError",
     "DMConnectionError",

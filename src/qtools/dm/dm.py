@@ -7,6 +7,7 @@ from numbers import Real
 from typing import Any
 
 from .backends.Thorlabs.DMP40 import DMP40, DeviceInfo, MirrorCapabilities
+from .exceptions import DMError
 from .info import MirrorInfo
 from .modes import TipTilt, ZernikeMode
 
@@ -48,6 +49,21 @@ class DM:
     @property
     def tip_tilt(self) -> TipTilt | None:
         return self.backend.tip_tilt
+    @property
+    def status(self) -> dict[str, float | None]:
+        """Return current commanded amplitudes for every Zernike mode.
+
+        Values are the last successfully commanded setpoints cached by this
+        controller, not optical measurements. ``None`` means no Zernike command
+        has been issued yet, so the hardware state is unknown.
+        """
+
+        zernikes = self.zernikes
+        return {
+            mode.value: None if zernikes is None else zernikes[mode]
+            for mode in ZernikeMode
+        }
+
 
     def connect(self) -> DM:
         self.backend.connect()
@@ -103,3 +119,49 @@ class DM:
 
     def __exit__(self, exc_type, exc, traceback) -> None:
         self.backend.__exit__(exc_type, exc, traceback)
+
+
+def list_dm(
+    backend: str = "dmp40", *, verbose: bool = True
+) -> list[DeviceInfo] | None:
+    """Discover connected deformable mirrors and print their backend names.
+
+    The returned :class:`DeviceInfo` records can be passed directly to
+    ``DM(backend=..., serial=...)`` or ``DM(backend=..., resource=...)``.
+    Discovery does not open a mirror session or change mirror outputs.
+    Returns ``None`` when no device is found or discovery is unavailable.
+    """
+
+    backend_name = str(backend).strip().lower()
+    if backend_name != "dmp40":
+        raise ValueError("The supported DM backend is 'dmp40'.")
+
+    try:
+        devices = DM.discover()
+    except DMError as exc:
+        if verbose:
+            print(f"DM discovery failed: {type(exc).__name__}: {exc}")
+        return None
+
+    if not verbose:
+        return devices
+
+    if not devices:
+        print("No connected deformable mirror found.")
+        return None
+
+    for index, device in enumerate(devices):
+        availability = "available" if device.available else "unavailable"
+        print(
+            f"[{index}] backend={device.backend} | "
+            f"manufacturer={device.manufacturer} | model={device.model} | "
+            f"serial={device.serial} | {availability} | "
+            f"resource={device.resource}"
+        )
+        if device.available:
+            print(
+                "    Create with: "
+                f"DM(backend={device.backend!r}, serial={device.serial!r})"
+            )
+    return devices
+

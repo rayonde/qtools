@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from qtools.camera import CameraBridgeError, FLIR, RemoteCamera
+from qtools.camera import CameraBridgeError, CameraImage, FLIR, RemoteCamera
 
 
 def _remote_camera() -> RemoteCamera:
@@ -31,10 +31,21 @@ def test_remote_camera_round_trip() -> None:
         assert camera.set_exposure(0.025) == pytest.approx(0.025)
 
         image = camera.capture(timeout_s=0.1)
+        assert isinstance(image, CameraImage)
+        assert image.info["serial"] == "unit-test-camera"
+        assert image.info["dtype"] == "<u2"
         np.testing.assert_array_equal(
             image,
             np.array([[1, 2, 3], [4, 5, 6]], dtype=np.uint16),
         )
+        camera.auto_exposure = False
+        camera.auto_gain = False
+        camera.format = "Mono8"
+        assert camera.auto_exposure is False
+        assert camera.auto_gain is False
+        assert camera.format == "Mono8"
+        assert camera.set_gain(0.0) == pytest.approx(0.0)
+        assert camera.capture(timeout=0.1).info["timeout_s"] == pytest.approx(0.1)
 
         images = camera.get_images(2, timeout_s=0.1)
         assert images.shape == (2, 2, 3)

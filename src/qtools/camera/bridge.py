@@ -27,6 +27,7 @@ import numpy as np
 import numpy.typing as npt
 
 from qtools.camera.exceptions import CameraBridgeError
+from qtools.camera.image import CameraImage
 
 _PREFIX = struct.Struct("!I")
 _MAX_HEADER_BYTES = 1 << 20
@@ -98,10 +99,16 @@ def _send_image(
         "dtype": array.dtype.str,
         "nbytes": array.nbytes,
     }
+    image_info = getattr(image, "info", None)
+    if isinstance(image_info, Mapping):
+        message["image_info"] = dict(image_info)
     _send_packet(sock, message, array.tobytes(order="C"))
 
 
-def _recv_image(sock: socket.socket, header: Mapping[str, Any]) -> npt.NDArray[np.generic]:
+def _recv_image(
+    sock: socket.socket,
+    header: Mapping[str, Any],
+) -> CameraImage | npt.NDArray[np.generic]:
     metadata = header.get("image")
     if not isinstance(metadata, Mapping):
         raise CameraBridgeError("Camera bridge response is missing image metadata.")
@@ -119,7 +126,11 @@ def _recv_image(sock: socket.socket, header: Mapping[str, Any]) -> npt.NDArray[n
         raise CameraBridgeError(
             f"Camera bridge image size does not match shape {shape}: {nbytes} bytes."
         ) from exc
-    return np.array(array, copy=True, order="C")
+    result = np.array(array, copy=True, order="C")
+    image_info = header.get("image_info")
+    if isinstance(image_info, Mapping):
+        return CameraImage(result, info=dict(image_info))
+    return result
 
 
 class RemoteCamera:
@@ -198,6 +209,7 @@ class RemoteCamera:
         self._name = ""
         self._model = ""
         self._shape: tuple[int, ...] = (0, 0)
+        self._info: dict[str, Any] = {}
 
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -265,6 +277,9 @@ class RemoteCamera:
             self._name = str(result.get("name", ""))
             self._model = str(result.get("model", ""))
             self._shape = tuple(int(value) for value in result.get("shape", (0, 0)))
+            info = result.get("info")
+            if isinstance(info, Mapping):
+                self._info = dict(info)
         except Exception:
             self._stop_process()
             self._closed = True
@@ -283,6 +298,14 @@ class RemoteCamera:
         return self._shape
 
     @property
+    def info(self) -> dict[str, Any]:
+        response = self._request("get_info")
+        result = response.get("result")
+        if isinstance(result, Mapping):
+            self._info = dict(result)
+        return dict(self._info)
+
+    @property
     def pid(self) -> int | None:
         return None if self._process is None else self._process.pid
 
@@ -290,12 +313,30 @@ class RemoteCamera:
     def closed(self) -> bool:
         return self._closed
 
-    def capture(self, timeout_s: float = 1.0) -> npt.NDArray[np.generic]:
-        header = self._request("capture", timeout_s=timeout_s)
+    def capture(
+        self,
+        timeout_s: float = 1.0,
+        *,
+        timeout: float | None = None,
+        rgb: bool = False,
+    ) -> CameraImage:
+        if timeout is not None:
+            if timeout_s != 1.0:
+                raise TypeError("Specify either timeout_s or timeout, not both.")
+            timeout_s = timeout
+        if not isinstance(rgb, bool):
+            raise TypeError("rgb must be a bool.")
+        header = self._request("capture", timeout_s=timeout_s, rgb=rgb)
         return _recv_image(self._require_socket(), header)
 
-    def get_image(self, timeout_s: float = 1.0) -> npt.NDArray[np.generic]:
-        return self.capture(timeout_s=timeout_s)
+    def get_image(
+        self,
+        timeout_s: float = 1.0,
+        *,
+        timeout: float | None = None,
+        rgb: bool = False,
+    ) -> CameraImage:
+        return self.capture(timeout_s=timeout_s, timeout=timeout, rgb=rgb)
 
     def get_images(
         self,
@@ -317,9 +358,74 @@ class RemoteCamera:
         response = self._request("set_exposure", exposure_s=exposure_s)
         return float(response["result"])
 
+    @property
+    def exposure_s(self) -> float:
+        return self.get_exposure()
+
+    @exposure_s.setter
+    def exposure_s(self, value: float) -> None:
+        self.set_exposure(value)
+
+    def get_gain(self) -> float:
+        return float(self._get_property("gain"))
+
+    def set_gain(self, gain_db: float) -> float:
+        return float(self._set_property("gain", gain_db))
+
+    @property
+    def gain(self) -> float:
+        return self.get_gain()
+
+    @gain.setter
+    def gain(self, value: float) -> None:
+        self.set_gain(value)
+
+    def get_format(self) -> str:
+        return str(self._get_property("format"))
+
+    def set_format(self, pixel_format: str) -> str:
+        return str(self._set_property("format", pixel_format))
+
+    @property
+    def format(self) -> str:
+        return self.get_format()
+
+    @format.setter
+    def format(self, value: str) -> None:
+        self.set_format(value)
+
+    @property
+    def auto_exposure(self) -> bool:
+        return bool(self._get_property("auto_exposure"))
+
+    @auto_exposure.setter
+    def auto_exposure(self, enabled: bool) -> None:
+        if not isinstance(enabled, bool):
+            raise TypeError("auto_exposure must be a bool.")
+        self._set_property("auto_exposure", enabled)
+
+    @property
+    def auto_gain(self) -> bool:
+        return bool(self._get_property("auto_gain"))
+
+    @auto_gain.setter
+    def auto_gain(self, enabled: bool) -> None:
+        if not isinstance(enabled, bool):
+            raise TypeError("auto_gain must be a bool.")
+        self._set_property("auto_gain", enabled)
+
     def autoexpose(self, *args: Any, **kwargs: Any) -> float:
         response = self._request("autoexpose", args=args, kwargs=kwargs)
         return float(response["result"])
+
+
+    def _get_property(self, name: str) -> Any:
+        response = self._request("get_property", name=name)
+        return response.get("result")
+
+    def _set_property(self, name: str, value: Any) -> Any:
+        response = self._request("set_property", name=name, value=value)
+        return response.get("result")
 
     def call(self, method: str, *args: Any, **kwargs: Any) -> Any:
         """Call a backend method and return its JSON value or NumPy array."""

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,7 @@ class DeviceInfo:
     resource: str
     available: bool
     index: int
+    backend: str = field(default="dmp40", kw_only=True)
 
 
 @dataclass(frozen=True)

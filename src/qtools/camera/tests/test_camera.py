@@ -1,5 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
+import json
 import sys
 import types
 
@@ -11,6 +12,7 @@ from qtools.camera import (
     CameraBackend,
     CameraDependencyError,
     CameraDiscoveryError,
+    CameraImage,
     FLIR,
     list_camera,
     register_backend,
@@ -189,7 +191,9 @@ def fake_pyspin(monkeypatch):
         TriggerSource_Software="software",
         TriggerSelector_FrameStart="frame-start",
         GainAuto_Off="gain-off",
+        GainAuto_Continuous="gain-continuous",
         ExposureAuto_Off="exposure-off",
+        ExposureAuto_Continuous="exposure-continuous",
         ExposureMode_Timed="timed",
         BlackLevelSelector_All="all",
         PixelFormat_Mono16="mono16",
@@ -285,6 +289,72 @@ def test_facade_delegates_and_saves_raw_data(tmp_path, fake_pyspin):
     with Camera(backend="flir", serial="123") as camera:
         image = camera.save(path)
     assert np.array_equal(np.load(path), image)
+
+
+def test_camera_save_preview_matches_image_save(tmp_path, fake_pyspin):
+    import imageio.v3 as iio
+
+    path = tmp_path / "frame.tif"
+    with Camera(backend="flir", serial="123") as camera:
+        image = camera.save(path, preview=True)
+        assert path.exists()
+        assert not (tmp_path / "frame.tif.npy").exists()
+        np.testing.assert_array_equal(iio.imread(path), image)
+
+        with pytest.raises(FileExistsError):
+            camera.save(path, preview=True)
+        camera.save(path, preview=True, overwrite=True)
+
+
+def test_flir_simple_capture_controls_and_image_metadata(fake_pyspin):
+    with Camera(backend="flir", serial="123") as camera:
+        camera.auto_exposure = False
+        camera.auto_gain = False
+        camera.format = "Mono8"
+        camera.set_gain(0.0)
+        camera.set_exposure(0.0002)
+
+        image = camera.capture(timeout=0.5)
+
+        assert isinstance(image, CameraImage)
+        assert camera.auto_exposure is False
+        assert camera.auto_gain is False
+        assert camera.format == "Mono8"
+        assert camera.get_gain() == pytest.approx(0.0)
+        assert image.info["serial"] == "123"
+        assert image.info["format"] == "Mono8"
+        assert image.info["exposure_s"] == pytest.approx(0.0002)
+        assert image.info["gain_db"] == pytest.approx(0.0)
+        assert image.info["shape"] == (1, 2)
+        assert image.info["dtype"] == "<u2"
+
+
+def test_camera_image_saves_raw_and_npy(tmp_path):
+    image = CameraImage(
+        np.array([[1, 2], [3, 4]], dtype=np.uint16),
+        info={"shape": (2, 2), "dtype": "<u2", "bitdepth": 12},
+    )
+
+    raw_path = image.save(tmp_path / "frame.raw")
+    assert raw_path.read_bytes() == image.tobytes()
+    with pytest.raises(FileExistsError):
+        image.save(raw_path)
+    assert image.save(raw_path, overwrite=True) == raw_path
+
+    npy_path = image.save(tmp_path / "frame.npy")
+    np.testing.assert_array_equal(np.load(npy_path), image)
+    assert image[0].info["dtype"] == "<u2"
+
+    npz_path = image.save(tmp_path / "frame.npz")
+    with np.load(npz_path) as data:
+        np.testing.assert_array_equal(data["image"], image)
+        metadata = json.loads(str(data["info"]))
+    assert metadata["dtype"] == "<u2"
+
+    bmp_path = image.save(tmp_path / "frame.bmp")
+    import imageio.v3 as iio
+
+    assert iio.imread(bmp_path).shape == image.shape
 
 
 def test_new_vendor_backend_can_be_registered_without_facade_changes():
@@ -453,6 +523,5 @@ def test_select_camera_rejects_ambiguous_interface_target() -> None:
 
 
 def test_camera_class_only_represents_an_opened_camera():
-    assert not hasattr(Camera, "info")
     assert not hasattr(Camera, "list_backends")
     assert not hasattr(camera_module, "list_backends")

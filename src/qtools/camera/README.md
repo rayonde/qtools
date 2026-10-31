@@ -7,16 +7,67 @@ Camera discovery is a module-level operation because it does not operate on an
 already opened camera:
 
 ```python
+from pathlib import Path
+from pprint import pprint
+
 from qtools.camera import RemoteCamera, list_camera
 
 list_camera()
 # [1] | brand=FLIR | model=Blackfly S BFS-U3-16S2M | SN=25354617 |
 #      USB3Vision port=Port_#0011.Hub_#0004
 
-with RemoteCamera(target=1, pitch_um=3.45) as camera:
+with RemoteCamera(
+    backend="flir",
+    serial="25354617",
+    startup_timeout_s=60.0,
+    request_timeout_s=60.0,
+) as camera:
+    pprint(camera.info)
+
+    camera.auto_exposure = False
+    camera.auto_gain = False
+    camera.format = "Mono8"
+    camera.set_gain(0.0)
     camera.set_exposure(0.01)
-    frame = camera.capture(timeout_s=1.0)  # raw NumPy data
+
+    image = camera.capture(timeout=5.0, rgb=False)
+    pprint(image.info)
+    image.save(Path("data") / "capture.raw", overwrite=True)
+    image.show()
 ```
+
+`camera.capture()` does not return a BMP/JPEG byte stream. It returns a
+`CameraImage`, which is a NumPy `ndarray` subclass containing the decoded pixel
+matrix plus acquisition metadata. Existing matrix operations therefore keep
+working:
+
+```python
+assert image.info["shape"] == image.shape
+print(image.mean(), image.dtype)
+```
+
+## Saving one frame
+
+`camera.save(path, preview=True)` is shorthand for
+`camera.capture().save(path)` and follows the same suffix and overwrite rules.
+Without `preview=True`, the legacy form writes the resolved `.npy` data file.
+
+`CameraImage.save()` chooses the representation from the suffix:
+
+| Suffix | Content |
+| --- | --- |
+| `.raw` | Contiguous pixel bytes only; no header |
+| `.npy` | Self-describing NumPy array |
+| `.npz` | Compressed `image` array plus JSON `info` metadata |
+| `.png`, `.bmp`, `.jpg`, `.tif` | Viewable encoded image |
+
+For `.raw`, retain `image.info["shape"]` and `image.info["dtype"]` (or save the
+same frame as `.npy` or `.npz`) because a raw file alone cannot describe its layout. The
+default is not to overwrite; pass `overwrite=True` to replace an existing file.
+
+`rgb=False` returns the native mono frame. `rgb=True` is accepted only if the
+backend already produces an RGB/RGBA frame; the common facade does not perform
+Bayer demosaicing.
 
 `list_camera()` prints the one-based number, vendor, model, serial number,
 transport type, and USB port or Ethernet address. It returns `None`, so Jupyter

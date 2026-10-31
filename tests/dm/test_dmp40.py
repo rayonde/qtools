@@ -487,6 +487,24 @@ def test_no_tilt_hardware_supports_mirror_modes_and_relaxation(hardware):
     assert dm.read_voltages()[1].shape == (0,)
 
 
+def test_dm_status_lists_every_zernike_setpoint():
+    fake = FakeLibraries()
+    dm = DM(sdk=fake.sdk())
+
+    assert list(dm.status) == [mode.value for mode in ZernikeMode]
+    assert all(value is None for value in dm.status.values())
+
+    with dm:
+        dm.set_zernikes({"defocus": 0.1, "coma_x": 0.03})
+        status = dm.status
+
+    assert status["defocus"] == pytest.approx(0.1)
+    assert status["coma_x"] == pytest.approx(0.03)
+    assert status["astigmatism_45"] == 0
+    assert status["spherical"] == 0
+    assert list(status) == [mode.value for mode in ZernikeMode]
+
+
 def test_dm_facade_context_manager_closes_on_exception():
     fake = FakeLibraries()
     dm = DM(sdk=fake.sdk())

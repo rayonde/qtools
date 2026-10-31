@@ -17,6 +17,7 @@ from qtools.camera.exceptions import (
     CameraDiscoveryError,
     CameraError,
 )
+from qtools.camera.image import CameraImage
 
 __all__ = [
     "Camera",
@@ -27,6 +28,7 @@ __all__ = [
     "CameraDependencyError",
     "CameraDiscoveryError",
     "CameraError",
+    "CameraImage",
     "FLIR",
     "RemoteCamera",
     "get_backend",

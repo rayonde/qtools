@@ -517,6 +517,7 @@ class FLIR(CameraBackend):
         self._bitdepth = bitdepth
         self._pitch_um = self._parse_pitch(pitch_um)
         self._name = str(kwargs.pop("name", serial or "FLIR"))
+        self._serial = str(serial or "")
         self.exposure_bounds_s: tuple[float, float] | None = kwargs.pop(
             "exposure_bounds_s", None
         )
@@ -544,6 +545,7 @@ class FLIR(CameraBackend):
             selected, selected_info = self._select_camera(cameras, serial, target)
             self.cam = selected
             self._name = selected_info.serial
+            self._serial = selected_info.serial
             self._initialize_camera()
         except CameraDiscoveryError:
             self._cleanup_partial()
@@ -911,6 +913,10 @@ class FLIR(CameraBackend):
         return self._name
 
     @property
+    def serial(self) -> str:
+        return self._serial
+
+    @property
     def model(self) -> str:
         if self.cam is None:
             return "unknown"
@@ -944,6 +950,149 @@ class FLIR(CameraBackend):
     @exposure_s.setter
     def exposure_s(self, value: float) -> None:
         self.set_exposure(value)
+
+    @property
+    def auto_exposure(self) -> bool:
+        return self._read_auto_mode("ExposureAuto", "ExposureAuto_Off")
+
+    @auto_exposure.setter
+    def auto_exposure(self, enabled: bool) -> None:
+        if not isinstance(enabled, bool):
+            raise TypeError("auto_exposure must be a bool.")
+        self._set_auto_mode(
+            "ExposureAuto",
+            enabled,
+            off_name="ExposureAuto_Off",
+            continuous_name="ExposureAuto_Continuous",
+        )
+
+    @property
+    def auto_gain(self) -> bool:
+        return self._read_auto_mode("GainAuto", "GainAuto_Off")
+
+    @auto_gain.setter
+    def auto_gain(self, enabled: bool) -> None:
+        if not isinstance(enabled, bool):
+            raise TypeError("auto_gain must be a bool.")
+        self._set_auto_mode(
+            "GainAuto",
+            enabled,
+            off_name="GainAuto_Off",
+            continuous_name="GainAuto_Continuous",
+        )
+
+    def get_gain(self) -> float:
+        try:
+            return float(self._quick_node("Gain").GetValue())
+        except Exception as exc:
+            raise CameraConfigurationError(f"Could not read FLIR gain: {exc}") from exc
+
+    def set_gain(self, gain_db: float) -> float:
+        gain_db = float(gain_db)
+        if not math.isfinite(gain_db):
+            raise ValueError("gain_db must be finite.")
+        try:
+            node = self._quick_node("Gain")
+            gain_db = float(np.clip(gain_db, float(node.GetMin()), float(node.GetMax())))
+            node.SetValue(gain_db)
+            return self.get_gain()
+        except Exception as exc:
+            raise CameraConfigurationError(f"Could not set FLIR gain: {exc}") from exc
+
+    @property
+    def gain(self) -> float:
+        return self.get_gain()
+
+    @gain.setter
+    def gain(self, value: float) -> None:
+        self.set_gain(value)
+
+    def get_format(self) -> str:
+        node = self._quick_node("PixelFormat")
+        candidates = (
+            "Mono8",
+            "Mono10",
+            "Mono12",
+            "Mono16",
+            "Mono10Packed",
+            "Mono12Packed",
+            "RGB8",
+            "BGR8",
+            "RGB8Packed",
+            "BGR8Packed",
+            "RGB16",
+            "BGR16",
+        )
+        try:
+            value = node.GetValue()
+            for symbol in candidates:
+                if value == getattr(self._pyspin, f"PixelFormat_{symbol}", object()):
+                    return symbol
+            return str(node.ToString())
+        except Exception as exc:
+            raise CameraConfigurationError(f"Could not read FLIR pixel format: {exc}") from exc
+
+    def set_format(self, pixel_format: str) -> str:
+        requested = str(pixel_format).strip()
+        if not requested:
+            raise ValueError("pixel_format must not be empty.")
+        canonical = {
+            symbol.casefold(): symbol
+            for symbol in (
+                "Mono8",
+                "Mono10",
+                "Mono12",
+                "Mono16",
+                "Mono10Packed",
+                "Mono12Packed",
+                "RGB8",
+                "BGR8",
+                "RGB8Packed",
+                "BGR8Packed",
+                "RGB16",
+                "BGR16",
+            )
+        }
+        symbol = canonical.get(requested.casefold(), requested)
+        was_acquiring = self._stop_acquisition_for_reconfigure()
+        try:
+            node = self._quick_node("PixelFormat")
+            value = getattr(self._pyspin, f"PixelFormat_{symbol}", None)
+            if not self._set_enum_value(node, symbol, value):
+                raise CameraConfigurationError(
+                    f"Camera does not support pixel format {symbol!r}."
+                )
+            bits = self._bitdepth or self._read_adc_depth()
+            if symbol == "Mono8" or symbol.endswith("8") or symbol.endswith("8Packed"):
+                bits = 8
+            elif "12" in symbol:
+                bits = 12
+            elif "10" in symbol:
+                bits = 10
+            elif "16" in symbol:
+                bits = max(16, bits)
+            adc_value = getattr(self._pyspin, f"AdcBitDepth_Bit{bits}", None)
+            if adc_value is not None:
+                self._set_enum_if_writable("AdcBitDepth", f"Bit{bits}", adc_value)
+            self._bitdepth = int(bits)
+            self._cache_camera_metadata()
+        except CameraConfigurationError:
+            raise
+        except Exception as exc:
+            raise CameraConfigurationError(
+                f"Could not set FLIR pixel format {symbol!r}: {exc}"
+            ) from exc
+        finally:
+            self._restart_acquisition(was_acquiring)
+        return self.get_format()
+
+    @property
+    def format(self) -> str:
+        return self.get_format()
+
+    @format.setter
+    def format(self, value: str) -> None:
+        self.set_format(value)
 
     def get_exposure(self) -> float:
         try:
@@ -1148,6 +1297,34 @@ class FLIR(CameraBackend):
         return self.autoexpose(fraction=fraction)
 
     # -- helpers -----------------------------------------------------------
+
+    def _read_auto_mode(self, name: str, off_constant_name: str) -> bool:
+        try:
+            node = self._quick_node(name)
+            off_value = getattr(self._pyspin, off_constant_name, None)
+            value = node.GetValue()
+            if off_value is not None:
+                return value != off_value
+            text = str(node.ToString()).casefold()
+            return text not in {"off", "false", "0", name.casefold() + "_off"}
+        except Exception as exc:
+            raise CameraConfigurationError(f"Could not read FLIR {name}: {exc}") from exc
+
+    def _set_auto_mode(
+        self,
+        name: str,
+        enabled: bool,
+        *,
+        off_name: str,
+        continuous_name: str,
+    ) -> None:
+        symbol = "Continuous" if enabled else "Off"
+        value = getattr(self._pyspin, continuous_name if enabled else off_name, None)
+        if not self._set_enum_if_writable(name, symbol, value):
+            raise CameraConfigurationError(f"Camera does not support {name}={symbol}.")
+        if enabled:
+            return
+        # Manual controls are only writable after their auto mode is disabled.
 
     def _quick_node(self, name: str) -> Any:
         if self.cam is None:

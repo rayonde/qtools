@@ -43,11 +43,15 @@ def _load_factory(specification: str) -> Callable[..., Any]:
 
 def _camera_metadata(camera: Any) -> dict[str, Any]:
     shape = tuple(int(value) for value in getattr(camera, "shape", (0, 0)))
-    return {
+    metadata = {
         "name": str(getattr(camera, "name", "")),
         "model": str(getattr(camera, "model", "")),
         "shape": list(shape),
     }
+    info = getattr(camera, "info", None)
+    if isinstance(info, Mapping):
+        metadata["info"] = dict(info)
+    return metadata
 
 
 def _send_result(socket_: socket.socket, request_id: Any, result: Any) -> None:
@@ -115,7 +119,10 @@ def serve(
                 elif command == "capture":
                     if camera is None:
                         raise RuntimeError("Camera is not open.")
-                    image = camera.capture(timeout_s=float(request.get("timeout_s", 1.0)))
+                    image = camera.capture(
+                        timeout_s=float(request.get("timeout_s", 1.0)),
+                        rgb=bool(request.get("rgb", False)),
+                    )
                     _send_image(socket_, {"id": request_id, "ok": True}, image)
                 elif command == "get_images":
                     if camera is None:
@@ -125,6 +132,25 @@ def serve(
                         timeout_s=float(request.get("timeout_s", 1.0)),
                     )
                     _send_image(socket_, {"id": request_id, "ok": True}, images)
+                elif command == "get_info":
+                    if camera is None:
+                        raise RuntimeError("Camera is not open.")
+                    _send_result(socket_, request_id, camera.info)
+                elif command == "get_property":
+                    if camera is None:
+                        raise RuntimeError("Camera is not open.")
+                    name = str(request["name"])
+                    if name.startswith("_"):
+                        raise ValueError("Private camera attributes cannot be read remotely.")
+                    _send_result(socket_, request_id, getattr(camera, name))
+                elif command == "set_property":
+                    if camera is None:
+                        raise RuntimeError("Camera is not open.")
+                    name = str(request["name"])
+                    if name.startswith("_"):
+                        raise ValueError("Private camera attributes cannot be set remotely.")
+                    setattr(camera, name, request.get("value"))
+                    _send_result(socket_, request_id, getattr(camera, name))
                 elif command == "get_exposure":
                     if camera is None:
                         raise RuntimeError("Camera is not open.")
