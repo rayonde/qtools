@@ -1,7 +1,8 @@
 # `qtools.camera`
 
 `qtools.camera` provides a common facade for industrial-camera backends. The
-current backend is FLIR through the vendor's Spinnaker SDK and `PySpin` binding.
+bundled backends are FLIR through Spinnaker/`PySpin` and Daheng Imaging through
+the Galaxy SDK/`gxipy`.
 
 Camera discovery is a module-level operation because it does not operate on an
 already opened camera:
@@ -95,9 +96,63 @@ cameras are connected, omitting both `target` and `serial` raises an error rathe
 than silently choosing one. Numbers are ordered by serial number for the current
 enumeration; prefer the serial, device ID, or port in persistent configuration.
 
+## Daheng Imaging / IndustryCam
+
+Daheng Imaging's IndustryCam/Galaxy viewer is a user interface on top of the
+Galaxy SDK. Its C API is `GxIAPI.dll`; the installer also ships the official
+Python binding `gxipy` under `Development/Samples/Python`. The backend uses that
+binding rather than trying to control `Viewer.exe`. All official `gxipy`
+objects are normalized by the internal adapter in `qtools.camera._gxipy`, so the
+camera backend only sees typed device, feature, acquisition, and lifecycle APIs.
+
+The backend locates `gxipy` from `GALAXY_SDK_DEVELOPMENT` or the standard
+IndustryCam/Galaxy installation directories. To make it importable explicitly:
+
+```powershell
+$env:PYTHONPATH = "$env:GALAXY_SDK_DEVELOPMENT\Samples\Python;$env:PYTHONPATH"
+```
+
+`gxipy` is a pure-Python ctypes wrapper, so it normally works directly in the
+main interpreter and does not need the managed PySpin environment:
+
+```python
+from qtools.camera import Camera, list_camera
+
+list_camera(backend="daheng")
+with Camera(backend="daheng", target=1) as camera:
+    camera.format = "Mono8"
+    camera.set_exposure(0.01)
+    camera.set_gain(0.0)
+    image = camera.capture(timeout=5.0)
+```
+
+`target` accepts the one-based number, serial number, user ID, IP, or MAC shown
+by `list_camera()`. Exposure is exposed in seconds and converted to the Galaxy
+SDK's microseconds. Use `rgb=True` only when the selected pixel format returns
+an RGB/RGBA array. Image formats that `gxipy` cannot convert to a NumPy array are
+reported as `CameraAcquisitionError`.
+
+For process isolation, pass an interpreter that can import both `qtools` and
+`gxipy`:
+
+```python
+from qtools.camera import RemoteCamera
+
+with RemoteCamera(
+    python_executable=r"C:\Path\To\python.exe",
+    backend="daheng",
+    target=1,
+) as camera:
+    image = camera.capture()
+```
+
+The Galaxy SDK and `gxipy` are vendor-distributed; adding them to a redistributed
+application is subject to the vendor's license terms. Do not assume that
+`pip install gxipy` is available.
+
 ## Managed runtime
 
-`list_camera()` uses the installed Spinnaker SDK C runtime directly. It does not
+For the FLIR backend, `list_camera()` uses the installed Spinnaker SDK C runtime directly. It does not
 import PySpin, create `.venv-camera`, download a wheel, or install another
 Python version. If the Spinnaker SDK runtime is unavailable, it raises
 `CameraDependencyError`.

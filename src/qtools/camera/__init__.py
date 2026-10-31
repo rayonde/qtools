@@ -1,5 +1,6 @@
 """Industrial camera interfaces and vendor backends."""
 
+from qtools.camera.backends.daheng import DAHENG
 from qtools.camera.backends.flir import FLIR
 from qtools.camera.base import CameraBackend
 from qtools.camera.bridge import RemoteCamera
@@ -29,6 +30,7 @@ __all__ = [
     "CameraDiscoveryError",
     "CameraError",
     "CameraImage",
+    "DAHENG",
     "FLIR",
     "RemoteCamera",
     "get_backend",

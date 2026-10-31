@@ -17,6 +17,7 @@ from qtools.camera.image import CameraImage, to_uint8
 
 _BACKEND_MODULES: dict[str, tuple[str, str] | type[CameraBackend]] = {
     "flir": ("qtools.camera.backends.flir", "FLIR"),
+    "daheng": ("qtools.camera.backends.daheng", "DAHENG"),
 }
 
 

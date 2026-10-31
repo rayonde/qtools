@@ -36,8 +36,8 @@ qtools/
         └── test_slm.py
 ```
 
-`qtools.camera` loads the FLIR/PySpin binding lazily, so the package can be
-imported and tested without the proprietary SDK. The native PySpin wheel must
+`qtools.camera` loads the FLIR/PySpin and Daheng Galaxy/`gxipy` bindings
+lazily, so the package can be imported and tested without either proprietary SDK. The native PySpin wheel must
 match the target Python ABI, operating system, architecture, and Spinnaker SDK;
 see [`src/qtools/camera/README.md`](src/qtools/camera/README.md). When the main
 application uses a newer Python than PySpin supports, `RemoteCamera` keeps the
