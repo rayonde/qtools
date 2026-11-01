@@ -75,3 +75,49 @@ def test_save_counts_includes_plane_correlations(tmp_path):
 
     assert rows[0][:6] == ["evaluation", "J", "E_linear", "E_diagonal", "H,H", "V,V"]
     assert rows[1][:6] == ["1", "1.0", "1.0", "1.0", "10.0", "10.0"]
+
+
+def test_composite_measurement_accepts_custom_keys_and_loss():
+    class FakeStage:
+        def move_to(self, angle):
+            pass
+
+        def wait_move(self):
+            pass
+
+    class FakeMotorManager:
+        def get_motor(self, side):
+            return FakeStage()
+
+    class FakeMeasurement:
+        def measure(self, **kwargs):
+            return [(2.0, 0.1)]
+
+    seen = []
+
+    def loss(counts):
+        seen.append(counts)
+        return sum(counts.values())
+
+    composite = joint.CompositeMeasurement(
+        FakeMeasurement(),
+        polmeas_cfg=None,
+        motor_mgr=FakeMotorManager(),
+        measurement_keys=[("H", "V"), ("D", "A")],
+        loss_fn=loss,
+    )
+
+    result = composite.measure(
+        duration=0.1,
+        samples=1,
+        measure_type="pairs",
+        ch_start=1,
+        ch_stop=2,
+        delay=0,
+        window_start=1,
+        window_stop=2,
+        threshvolt=0.6,
+    )
+
+    assert result == [(4.0, 0.0)]
+    assert list(seen[0]) == [("H", "V"), ("D", "A")]

@@ -254,12 +254,22 @@ class CompositeMeasurement:
 
     All measurement arguments arrive from ``optimize_channel`` unchanged, i.e.
     the same ``--measure/--ch_start/--ws/--we`` parameters as `pctrl optimize`.
+
+    ``measurement_keys`` and ``loss_fn`` can be supplied by interactive users
+    for a custom basis objective.  The default values preserve the target and
+    correlation metric selected by the command-line workflow.
     """
 
-    def __init__(self, meas_mgr, polmeas_cfg, motor_mgr):
+    def __init__(self, meas_mgr, polmeas_cfg, motor_mgr,
+                 *, measurement_keys=None, loss_fn=None):
         self.meas_mgr = meas_mgr
         self.polmeas_cfg = polmeas_cfg
         self.motor_mgr = motor_mgr
+        self.measurement_keys = [
+            (str(a).upper(), str(b).upper())
+            for a, b in (measurement_keys or MEASUREMENT_KEYS)
+        ]
+        self.loss_fn = loss_fn or figure_of_merit
         self.servo_mgr = None
         self.servo_names: list[str] = []
         self.limits = None             # (angles, half_width_deg) in tracking mode
@@ -334,7 +344,7 @@ class CompositeMeasurement:
             self.last_elapsed = time.time() - started
             return [(RANGE_PENALTY, 0.0)]
         counts = {}
-        for basis_a, basis_b in MEASUREMENT_KEYS:
+        for basis_a, basis_b in self.measurement_keys:
             self._move_basis(BASIS_SIDES[0], basis_a)
             self._move_basis(BASIS_SIDES[1], basis_b)
             counts[(basis_a, basis_b)] = self._read(
@@ -343,7 +353,7 @@ class CompositeMeasurement:
             )
         self.last_counts = counts
         self.last_elapsed = time.time() - started
-        return [(figure_of_merit(counts), 0.0)]
+        return [(float(self.loss_fn(counts)), 0.0)]
 
     def log_evaluation(self, eval_count, angles, value, raw) -> None:
         """optimize_channel callback: print the per-basis counts behind J."""
@@ -353,11 +363,14 @@ class CompositeMeasurement:
             return
         parts = " ".join(f"{a}{b.lower()}={c:9.2f}"
                          for (a, b), c in self.last_counts.items())
-        correlations = "  ".join(
-            f"E_{name}={value:+.4f}"
-            for name, value in plane_correlations(self.last_counts).items()
-        )
-        print(f"      {parts}   {correlations}   "
+        if self.loss_fn is figure_of_merit:
+            details = "  ".join(
+                f"E_{name}={value:+.4f}"
+                for name, value in plane_correlations(self.last_counts).items()
+            )
+        else:
+            details = f"loss={float(value):+.4f}"
+        print(f"      {parts}   {details}   "
               f"({self.last_elapsed:.1f}s)", flush=True)
 
 
