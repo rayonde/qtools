@@ -211,11 +211,7 @@ def test_invalid_width_fails_before_acquisition(backend, width):
 @pytest.mark.parametrize(
     "measure,channels",
     [
-        (api.g2, {"ch_start": 1, "ch_stop": 2}),
         (api.coincidence, {"window_start": 0, "window_stop": 4}),
-        (api.triplet, {"ch_ref": 1, "ch_sig1": 2, "ch_sig2": 3}),
-        (api.gate, {"ch_ref": 1, "ch_signals": [2, 3]}),
-        (api.heralding_gate, {"heralding_channel": 1, "gated_channels": [2, 3]}),
     ],
 )
 def test_one_shot_measurements_accept_bin_width(

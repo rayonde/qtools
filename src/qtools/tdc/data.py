@@ -447,15 +447,6 @@ class MultiCoincidenceResult:
         }
 
     @property
-    def bin_centers(self) -> Optional[dict[tuple[int, int], list[NDArray[np.float64]]]]:
-        if self.bin_edges is None:
-            return None
-        return {
-            pair: [edges[:-1] / 2.0 + edges[1:] / 2.0 for edges in axes]
-            for pair, axes in self.bin_edges.items()
-        }
-
-    @property
     def window_width(self) -> list[int]:
         return [
             stop - start

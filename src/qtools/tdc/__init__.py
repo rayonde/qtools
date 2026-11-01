@@ -19,17 +19,7 @@ except PackageNotFoundError:
         __version__ = "0.1.0-dev"
 
 import qtools.tdc.backends  # noqa: F401
-from qtools.tdc.api import (
-    TDC,
-    coincidence,
-    count_rate,
-    g2,
-    gate,
-    heralding_gate,
-    pairs,
-    singles,
-    triplet,
-)
+from qtools.tdc.api import coincidence
 from qtools.tdc.backends.base import BackendCapability, TDCBackend
 from qtools.tdc.connection import (
     auto_discover,
@@ -40,6 +30,7 @@ from qtools.tdc.connection import (
     list_backends,
     list_tdc,
 )
+from qtools.tdc.measurement import TDC
 from qtools.tdc.data import (
     CoincidenceResult,
     DataWriter,
@@ -84,12 +75,5 @@ __all__ = [
     "discover_all",
     "display_devices",
     "TDC",
-    "count_rate",
-    "singles",
-    "g2",
-    "pairs",
-    "triplet",
-    "gate",
     "coincidence",
-    "heralding_gate",
 ]

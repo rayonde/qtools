@@ -178,9 +178,9 @@ from qtools.tdc import TDC, get_tdc, list_tdc
 
 devices = list_tdc()  # Scan attached hardware, print a table, return DeviceInfo records
 
-tdc = TDC(backend="s15_tdc1", bin_width=2_000)
+tdc = TDC(backend="exp_s15_tdc1", bin_width=2_000)
 # Equivalent factory form:
-tdc = get_tdc(backend="s15_tdc1", bin_width=2_000)
+tdc = get_tdc(backend="exp_s15_tdc1", bin_width=2_000)
 
 with tdc:  # Open the connection; disconnect when leaving the context
     result = tdc.measure_g2(duration=1.0, ch_start=1, ch_stop=2, bins=500)
@@ -262,7 +262,7 @@ with get_tdc("exp_s15_tdc1") as device:
 
 Event and photon details are omitted by default. `store_events=True` enables them. Heralding details use either `flat` arrays or `per_gate` lists, and `store_histogram=False` provides a summary without histograms. `combine_samples([first, second])` joins compatible result objects; different channels, delays, windows, or axes require separate objects.
 
-The convenience functions `g2`, `coincidence`, `triplet`, `gate`, and `heralding_gate` open and close the device automatically and accept `samples`. `measure_pairs` remains an independent efficiency analysis returning a dictionary with bin-based windows; `api.pairs()` returns its nine-value tuple.
+The convenience function `coincidence` opens and closes the device automatically and accepts `samples`. Other measurements use the context-managed `TDC` interface above. `measure_pairs` remains an independent efficiency analysis returning a dictionary with bin-based windows.
 
 ### Markers and raw acquisition storage
 
@@ -287,8 +287,8 @@ restored = load_ts_binary("capture.ts")
 
 ```text
 src/qtools/tdc/
-├── __init__.py              # Public models, connection helpers, and convenience API
-├── api.py                   # Functions that manage device lifetime
+├── __init__.py              # Public models, connection helpers, and coincidence API
+├── api.py                   # One-shot coincidence wrapper
 ├── measurement.py           # TDC acquisition and repeated measurements
 ├── data.py                  # Canonical results, validation, statistics, and storage
 ├── cli.py                   # singles, pairs, coincidences, service, list

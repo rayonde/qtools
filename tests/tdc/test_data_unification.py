@@ -532,22 +532,10 @@ def test_measurement_repeats_in_same_class_and_uses_actual_live_times():
 @pytest.mark.parametrize(
     "function,options,model",
     [
-        (api.g2, {"ch_start": 0, "ch_stop": 2}, CoincidenceResult),
         (
             api.coincidence,
             {"ch_start": 0, "ch_stop": 2, "window_start": 0, "window_stop": 10},
             CoincidenceResult,
-        ),
-        (
-            api.triplet,
-            {"ch_ref": 0, "ch_sig1": 2, "ch_sig2": 7},
-            MultiCoincidenceResult,
-        ),
-        (api.gate, {"ch_ref": 0, "ch_signals": [2, 7]}, MultiCoincidenceResult),
-        (
-            api.heralding_gate,
-            {"heralding_channel": 0, "gated_channels": [2, 7]},
-            HeraldingGateResult,
         ),
     ],
 )
