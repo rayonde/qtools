@@ -71,15 +71,16 @@ def compute_accidentals(
         The computed accidental counts (0.0 if no background region available).
     """
     if window_size <= 0:
-        return 0.0
+        return 0.0, 0.0
     if acc_size is None:
         bg_region = histogram[acc_start:]
     else:
         bg_region = histogram[acc_start:acc_start + acc_size]
 
     if len(bg_region) == 0:
-        return 0.0
-    return float(window_size * np.mean(bg_region)), np.mean(bg_region)
+        return 0.0, 0.0
+    acc_per_bin = float(np.mean(bg_region))
+    return float(window_size * acc_per_bin), acc_per_bin
 
 
 def compute_pairs(
@@ -99,8 +100,8 @@ def compute_pairs(
     if coinc_start > coinc_stop:
         raise ValueError("coinc_start must not be greater than coinc_stop")
 
-    if integration_time == 0:
-        raise ValueError("Integration time is zero")
+    if not np.isfinite(integration_time) or integration_time <= 0:
+        raise ValueError("integration_time must be a positive finite value")
 
     if np.sum(histogram) == 0:
         return {
@@ -153,8 +154,12 @@ def compute_pairs(
     start_rate = singles_start
     stop_rate = singles_stop
     
-    geometric_mean_singles = np.sqrt(start_rate*stop_rate)
-    eff_avg = net_pairs_rate / geometric_mean_singles
+    geometric_mean_singles = np.sqrt(start_rate * stop_rate)
+    eff_avg = (
+        net_pairs_rate / geometric_mean_singles
+        if geometric_mean_singles > 0
+        else 0.0
+    )
 
     return {
         "pair_counts": corr_coinc_counts,

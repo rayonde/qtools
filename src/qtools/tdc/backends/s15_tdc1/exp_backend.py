@@ -15,7 +15,12 @@ import serial
 from qtools.tdc.backends.base import BackendCapability, TDCBackend
 from qtools.tdc.backends.s15_common import decode_pattern_channels
 from qtools.tdc.connection import register_backend
-from qtools.tdc.data import CoincidenceResult, DeviceInfo, SinglesResult, TimestampResult
+from qtools.tdc.data import (
+    CoincidenceResult,
+    DeviceInfo,
+    SinglesResult,
+    TimestampResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -665,8 +670,10 @@ class ExpS15TDC1Backend(TDCBackend):
         window_start: int | float | None = None,
         window_stop: int | float | None = None,
         method: str = "software",
+        bin_width: int | None = None,
     ) -> CoincidenceResult:
         """Use TDC1's fixed ``pairs`` counter for hardware coincidence."""
+        width = self._bin_width(bin_width)
         if method != "hardware":
             return super().get_coincidence(
                 duration=duration,
@@ -677,6 +684,7 @@ class ExpS15TDC1Backend(TDCBackend):
                 window_start=window_start,
                 window_stop=window_stop,
                 method=method,
+                bin_width=bin_width,
             )
         if duration <= 0:
             raise ValueError("duration must be positive")
@@ -698,15 +706,12 @@ class ExpS15TDC1Backend(TDCBackend):
         pair_index = {(1, 3): 4, (1, 4): 5, (2, 3): 6, (2, 4): 7}[(ch_start, ch_stop)]
         counts = np.asarray(values[:4], dtype=np.float64)
         return CoincidenceResult(
-            count=int(values[pair_index]),
-            acc_count_perbin=None,
-            accidental_count=None,
-            channel1_rate=float(counts[ch_start - 1] / duration),
-            channel2_rate=float(counts[ch_stop - 1] / duration),
-            integration_time=duration,
-            order=2,
-            accidental_method=None,
-            method="hardware",
+            mode="window_count", bin_width=width, method="hardware",
+            channel_start=ch_start, channel_stop=ch_stop,
+            counts_start=[int(counts[ch_start - 1])], counts_stop=[int(counts[ch_stop - 1])],
+            singles_start=[float(counts[ch_start - 1] / duration)],
+            singles_stop=[float(counts[ch_stop - 1] / duration)],
+            integration_time=[duration], stop_delay=[0], raw_counts=[int(values[pair_index])],
         )
 
     def set_threshold(self, threshold: float, channel: int | None = None) -> None:

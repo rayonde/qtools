@@ -927,7 +927,7 @@ def run_device_subcommand(config: str, device_type: str, device_args: list[str],
         try:
             print(f"Connecting to TDC '{active_backend}' at {active_path}...")
             from qtools import tdc as _tdc_pkg
-            with _tdc_pkg.get_device(active_backend, active_path):
+            with _tdc_pkg.get_tdc(active_backend, active_path):
                 # Connection established and closed automatically via the
                 # context manager (TDC.backend.connect() / disconnect()).
                 pass

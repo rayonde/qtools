@@ -100,6 +100,7 @@ class SiminicsBackend(TDCBackend):
         self._last_markers: tuple[MarkerEvent, ...] = ()
         self._last_events: tuple[TTTREvent, ...] = ()
         self._last_ittr: ITTRResult | None = None
+        self._threshold_v = 0.5
 
     # -- identity ---------------------------------------------------------
 
@@ -196,6 +197,8 @@ class SiminicsBackend(TDCBackend):
             self._channel_count = MODEL_CHANNELS[detected]
             self._device_path = f"siminics://{self._dev_id}"
             self._connected = True
+            if "threshold" in kwargs:
+                self.set_threshold(float(kwargs["threshold"]))
         except Exception:
             try:
                 self._sdk.uninit()
@@ -227,10 +230,15 @@ class SiminicsBackend(TDCBackend):
     # -- configuration ----------------------------------------------------
 
     def set_threshold(self, threshold: float, channel: int | None = None) -> None:
-        """Set comparator thresholds in the vendor's native integer units."""
+        """Set comparator thresholds in volts.
+
+        The FT10xx API exposes integer threshold values in millivolts; the
+        common backend API keeps volts and converts at this boundary.
+        """
 
         self._ensure_connected()
-        value = round(float(threshold))
+        self._threshold_v = float(threshold)
+        value = round(self._threshold_v * 1000.0)
         if channel is None:
             self._sdk.check("SetStartThreshold", self._dev_id, self._board, value)
             for ch in range(self._channel_count):
@@ -415,6 +423,7 @@ class SiminicsBackend(TDCBackend):
         self._last_markers = parsed.markers
         self._last_events = parsed.events
         return TimestampResult(
+            markers=list(parsed.markers),
             timestamps=parsed.timestamps,
             channels=parsed.channels,
             resolution_ps=self._resolution_ps,
@@ -554,10 +563,13 @@ class SiminicsBackend(TDCBackend):
         window_start: float | None = None,
         window_stop: float | None = None,
         method: str = "software",
+        bin_width: int | None = None,
     ) -> CoincidenceResult:
+        width = self._bin_width(bin_width)
         if method != "hardware":
             return super().get_coincidence(
-                duration, ch_start, ch_stop, ch_stop_delay, unit, window_start, window_stop, method
+                duration, ch_start, ch_stop, ch_stop_delay, unit, window_start, window_stop, method,
+                bin_width=bin_width,
             )
         self._ensure_connected()
         duration = _check_positive(duration, "duration")
@@ -565,15 +577,18 @@ class SiminicsBackend(TDCBackend):
         self._validate_channel(ch_stop)
         if ch_start == ch_stop:
             raise ValueError("coincidence channels must be different")
-        if unit not in {"ns", "ps", "ms"}:
-            raise ValueError("unit must be 'ps', 'ns', or 'ms'")
-        if window_start is not None or window_stop is not None:
-            if window_start is None or window_stop is None or float(window_stop) <= float(window_start):
-                raise ValueError("window_start and window_stop must form a positive interval")
-            width = float(window_stop) - float(window_start)
-        else:
-            width = 1000.0 if unit == "ns" else (1_000_000.0 if unit == "ps" else 0.001)
-        width_ns = width * {"ps": 1e-3, "ns": 1.0, "ms": 1e6}[unit]
+        from qtools.tdc.data import time_to_ps
+
+        delay_ps = time_to_ps(ch_stop_delay, unit)
+        if window_start not in (None, 0):
+            raise ValueError("Siminics hardware coincidence window_start is fixed at zero")
+        if (window_start is None) != (window_stop is None):
+            raise ValueError("window boundaries must be supplied together")
+        width_ps = 1_000_000 if window_stop is None else time_to_ps(window_stop, unit)
+        if width_ps <= 0 or width_ps % 1000:
+            raise ValueError("Siminics hardware coincidence width must be a positive integer ns")
+        width_ns = width_ps // 1000
+        self.set_delay(delay_ps / 1000, channel=ch_stop)
         self._sdk.check("DmtchInitialize", self._dev_id, self._board)
         self._sdk.check("DmtchModeSelection", self._dev_id, 0)
         self._sdk.check("SetFileMode", MODE_CO, 0, 0)
@@ -597,14 +612,12 @@ class SiminicsBackend(TDCBackend):
             finally:
                 self._active_mode = None
         return CoincidenceResult(
-            count=count,
-            channel1_rate=float(start_count) / duration,
-            channel2_rate=float(stop_count) / duration,
-            integration_time=duration,
-            order=2,
-            window_ps=round(width_ns * 1000.0),
-            accidental_method=None,
-            method="hardware",
+            mode="window_count", bin_width=width, method="hardware",
+            channel_start=ch_start, channel_stop=ch_stop,
+            counts_start=[int(start_count)], counts_stop=[int(stop_count)],
+            singles_start=[float(start_count) / duration], singles_stop=[float(stop_count) / duration],
+            integration_time=[duration], stop_delay=[delay_ps], raw_counts=[count],
+            window_start=[0], window_stop=[width_ps],
         )
 
     @classmethod

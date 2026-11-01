@@ -151,7 +151,7 @@ class MeasManager:
     def _connect_tdc(backend: str, port: str):
         """Create a TDC wrapper and verify the configured port works."""
         from qtools import tdc
-        device = tdc.get_device(backend, port)
+        device = tdc.get_tdc(backend, port)
         device.backend.connect()
         if not device.backend.is_connected():
             raise ConnectionError(

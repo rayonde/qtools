@@ -114,6 +114,22 @@ def test_siminics_backend_preserves_marker_events_with_fake_sdk():
 
     assert result.channels.tolist() == [2]
     assert backend.get_last_markers()[0].mask == 1
+    assert result.markers == list(backend.get_last_markers())
+    assert result.markers[0].photon_index == 1
+    assert result.markers[0].stream_index == 2
+    assert result.markers[0].timestamp_ps is None
     assert [event.kind for event in backend.get_tttr_events()] == ["channel", "marker"]
     assert ("SetMemoryDataMode", False) in sdk.calls
+
+
+def test_siminics_marker_boundaries_preserve_leading_consecutive_and_trailing_records():
+    parsed = parse_words(
+        [0xEB90B712, 0x82000000, 0x86000000, 0x02000000,
+         0x84000000, 0x02000001, 0x90000000, 0xEEEEDDDD],
+        mode="T2", resolution_ps=64,
+    )
+    assert [marker.photon_index for marker in parsed.markers] == [0, 0, 1, 2]
+    assert [marker.stream_index for marker in parsed.markers] == [1, 2, 4, 6]
+    assert [marker.mask for marker in parsed.markers] == [1, 3, 2, 8]
+    assert all(marker.timestamp_ps is None for marker in parsed.markers)
 

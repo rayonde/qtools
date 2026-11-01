@@ -10,7 +10,7 @@ from qtools.tdc.cli import (
     monitor_coincidences,
     monitor_pairs,
 )
-from qtools.tdc.data import CoincidenceResult, G2Result
+from qtools.tdc.data import CoincidenceResult
 
 
 def pair_result():
@@ -106,12 +106,10 @@ def test_pairs_hardware_uses_hardware_counter(capsys):
     class FakeApi:
         def measure_coincidence(self, **kwargs):
             calls.append(kwargs)
-            return CoincidenceResult(
-                count=12,
-                channel1_rate=50.0,
-                channel2_rate=200.0,
-                integration_time=2.0,
-                method="hardware",
+            return CoincidenceResult(mode="window_count", bin_width=2000, channel_start=1, channel_stop=3,
+                counts_start=[int(50.0 * 2.0)], counts_stop=[int(200.0 * 2.0)],
+                singles_start=[50.0], singles_stop=[200.0], integration_time=[2.0],
+                stop_delay=[0], raw_counts=[12], method="hardware",
             )
 
     args = SimpleNamespace(
@@ -130,7 +128,7 @@ def test_pairs_hardware_uses_hardware_counter(capsys):
     assert calls == [
         {"duration": 2.0, "ch_start": 1, "ch_stop": 3, "method": "hardware"}
     ]
-    assert result.count == 12
+    assert result.raw_counts[0] == 12
     assert "Coincidence pairs (hardware): 12" in capsys.readouterr().out
 
 
@@ -224,7 +222,7 @@ def test_coincidences_cli_colors_pairs_and_efficiencies(capsys, monkeypatch):
     def fake_style(text, *args, **kwargs):
         return f"<{kwargs.get('fg')}>{text}</{kwargs.get('fg')}>"
 
-    monkeypatch.setattr("tdc.cli.style", fake_style)
+    monkeypatch.setattr("qtools.tdc.cli.style", fake_style)
     args = SimpleNamespace(
         api=FakeApi(),
         time=1.0,
@@ -266,7 +264,7 @@ def test_coincidences_plot_records_all_samples(monkeypatch):
     def fake_plot(args, results):
         calls.append((args, results))
 
-    monkeypatch.setattr("tdc.cli._plot_coincidence_samples", fake_plot)
+    monkeypatch.setattr("qtools.tdc.cli._plot_coincidence_samples", fake_plot)
 
     results = monitor_coincidences(
         SimpleNamespace(
@@ -317,13 +315,11 @@ def test_coincidences_auto_detects_window_and_prints(capsys):
         backend = SimpleNamespace(resolution_ps=2000.0)
 
         def measure_g2(self, **kwargs):
-            return G2Result(
-                histogram=np.asarray([0, 1, 10, 1, 0], dtype=np.uint64),
-                bin_edges=np.arange(6, dtype=np.float64),
-                singles_start=100.0,
-                singles_stop=200.0,
-                integration_time=1.0,
-                resolution_ps=2000.0,
+            return CoincidenceResult(mode="histogram", bin_width=int(2000.0), channel_start=1, channel_stop=2,
+            counts_start=[int(100.0 * 1.0)], counts_stop=[int(200.0 * 1.0)],
+            singles_start=[100.0], singles_stop=[200.0], integration_time=[1.0], stop_delay=[0],
+            n_bins=[(6 - 1)], stop_offset=[0], histogram=[np.asarray([0, 1, 10, 1, 0], dtype=np.uint64)],
+            bin_edges=[np.arange((6 - 1) + 1, dtype=np.int64) * int(2000.0)],
             )
 
         def measure_pairs(self, **kwargs):
@@ -362,13 +358,11 @@ def test_coincidences_auto_sizes_window_to_peak_width(capsys):
         def measure_g2(self, **kwargs):
             # Broad peak spanning ~5 bins (FWHM): window should be wider than
             # the narrow-peak case above, not a fixed +/- 5.
-            return G2Result(
-                histogram=np.asarray([0, 0, 1, 3, 8, 6, 4, 2, 1, 0], dtype=np.uint64),
-                bin_edges=np.arange(11, dtype=np.float64),
-                singles_start=100.0,
-                singles_stop=200.0,
-                integration_time=1.0,
-                resolution_ps=2000.0,
+            return CoincidenceResult(mode="histogram", bin_width=int(2000.0), channel_start=1, channel_stop=2,
+            counts_start=[int(100.0 * 1.0)], counts_stop=[int(200.0 * 1.0)],
+            singles_start=[100.0], singles_stop=[200.0], integration_time=[1.0], stop_delay=[0],
+            n_bins=[(11 - 1)], stop_offset=[0], histogram=[np.asarray([0, 0, 1, 3, 8, 6, 4, 2, 1, 0], dtype=np.uint64)],
+            bin_edges=[np.arange((11 - 1) + 1, dtype=np.int64) * int(2000.0)],
             )
 
         def measure_pairs(self, **kwargs):
@@ -422,12 +416,10 @@ def test_coincidences_hardware_loop():
     class FakeApi:
         def measure_coincidence(self, **kwargs):
             calls.append(kwargs)
-            return CoincidenceResult(
-                count=12,
-                channel1_rate=50.0,
-                channel2_rate=200.0,
-                integration_time=2.0,
-                method="hardware",
+            return CoincidenceResult(mode="window_count", bin_width=2000, channel_start=1, channel_stop=3,
+                counts_start=[int(50.0 * 2.0)], counts_stop=[int(200.0 * 2.0)],
+                singles_start=[50.0], singles_stop=[200.0], integration_time=[2.0],
+                stop_delay=[0], raw_counts=[12], method="hardware",
             )
 
     args = SimpleNamespace(
@@ -524,6 +516,9 @@ def test_coincidences_software_export_flushes_each_row(tmp_path):
     assert len(lines) == 2
     assert lines[0].startswith("TIME,")
     assert "S1/S2" in lines[0]
+    assert lines[0].split(",")[1] == "SAMPLE"
+    exported_rows = export_path.read_text(encoding="utf-8").splitlines()[1:]
+    assert [int(row.split(",")[1]) for row in exported_rows] == [1, 2]
 
 
 def test_coincidences_hardware_export_flushes_each_row(tmp_path):
@@ -538,12 +533,10 @@ def test_coincidences_hardware_export_flushes_each_row(tmp_path):
             self.calls += 1
             if self.calls == 2:
                 observed_during_run.append(export_path.read_text(encoding="utf-8"))
-            return CoincidenceResult(
-                count=12,
-                channel1_rate=50.0,
-                channel2_rate=200.0,
-                integration_time=2.0,
-                method="hardware",
+            return CoincidenceResult(mode="window_count", bin_width=2000, channel_start=1, channel_stop=3,
+                counts_start=[int(50.0 * 2.0)], counts_stop=[int(200.0 * 2.0)],
+                singles_start=[50.0], singles_stop=[200.0], integration_time=[2.0],
+                stop_delay=[0], raw_counts=[12], method="hardware",
             )
 
     args = SimpleNamespace(
@@ -568,3 +561,6 @@ def test_coincidences_hardware_export_flushes_each_row(tmp_path):
     assert len(lines) == 2
     assert lines[0].startswith("TIME,")
     assert "S1/S2" in lines[0]
+    assert lines[0].split(",")[1] == "SAMPLE"
+    exported_rows = export_path.read_text(encoding="utf-8").splitlines()[1:]
+    assert [int(row.split(",")[1]) for row in exported_rows] == [1, 2]

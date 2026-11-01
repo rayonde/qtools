@@ -43,9 +43,10 @@ def test_python_gate_fallback_terminates_after_cartesian_product(monkeypatch) ->
         bins=5,
         resolution_ps=1.0,
         integration_time=1.0,
+        store_events=True,
     )
 
-    assert result.n_fold_count == 2
-    assert len(result.events) == 2
-    np.testing.assert_array_equal(result.pairwise_hists[0], [0, 2, 0, 0, 0])
-    np.testing.assert_array_equal(result.pairwise_hists[1], [0, 0, 2, 0, 0])
+    assert result.raw_counts[0] == 2
+    assert len(result.events[0]) == 2
+    np.testing.assert_array_equal(result.pairwise_hists[(0, 1)][0], [0, 2, 0, 0, 0])
+    np.testing.assert_array_equal(result.pairwise_hists[(0, 2)][0], [0, 0, 2, 0, 0])

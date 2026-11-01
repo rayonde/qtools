@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from qtools.tdc.backends.s15_tdc1.exp_backend import ExpS15TDC1Backend
-from qtools.tdc.data import G2Result, TimestampResult
+from qtools.tdc.data import CoincidenceResult, TimestampResult
 
 
 @pytest.mark.parametrize(
@@ -32,18 +32,16 @@ def test_software_g2_uses_backend_live_time(monkeypatch, timestamps_ps):
 
     def fake_compute_g2(**kwargs):
         captured.update(kwargs)
-        return G2Result(
-            histogram=np.zeros(4, dtype=np.uint64),
-            bin_edges=np.arange(5, dtype=np.float64),
-            singles_start=1.0,
-            singles_stop=1.0,
-            integration_time=kwargs["integration_time"],
-            resolution_ps=kwargs["resolution_ps"],
-        )
+        return CoincidenceResult(mode="histogram", bin_width=int(kwargs["resolution_ps"]), channel_start=1, channel_stop=2,
+            counts_start=[int(1.0 * kwargs["integration_time"])], counts_stop=[int(1.0 * kwargs["integration_time"])],
+            singles_start=[1.0], singles_stop=[1.0], integration_time=[kwargs["integration_time"]], stop_delay=[0],
+            n_bins=[(5 - 1)], stop_offset=[0], histogram=[np.zeros(4, dtype=np.uint64)],
+            bin_edges=[np.arange((5 - 1) + 1, dtype=np.int64) * int(kwargs["resolution_ps"])],
+            )
 
-    monkeypatch.setattr("tdc.analysis.g2.compute_g2", fake_compute_g2)
+    monkeypatch.setattr("qtools.tdc.analysis.g2.compute_g2", fake_compute_g2)
 
     result = backend.get_g2(duration=1.0, bins=4)
 
-    assert result.integration_time == pytest.approx(1.0)
+    assert result.integration_time[0] == pytest.approx(1.0)
     assert captured["integration_time"] == pytest.approx(1.0)

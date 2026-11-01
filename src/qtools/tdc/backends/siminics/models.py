@@ -13,33 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-
-@dataclass(frozen=True)
-class MarkerEvent:
-    """A decoded M1-M4 sideband event from a TTTR stream."""
-
-    mask: int
-    mode: str
-    raw_word: int
-    stream_index: int
-    timestamp_ps: int | None = None
-    sync_index: int | None = None
-
-    @property
-    def m1(self) -> bool:
-        return bool(self.mask & 0x1)
-
-    @property
-    def m2(self) -> bool:
-        return bool(self.mask & 0x2)
-
-    @property
-    def m3(self) -> bool:
-        return bool(self.mask & 0x4)
-
-    @property
-    def m4(self) -> bool:
-        return bool(self.mask & 0x8)
+from qtools.tdc.data import MarkerEvent
 
 
 @dataclass(frozen=True)

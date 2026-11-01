@@ -35,16 +35,16 @@ def test_tdc_retries_configured_port_then_rescans_and_saves(
     cfg.set_value("detectors.powermeter", {"backend": "", "port": ""})
     cfg.save()
 
-    get_device_calls = []
+    get_tdc_calls = []
 
-    def fake_get_device(backend: str, port: str):
+    def fake_get_tdc(backend: str, port: str):
         if port == "COM_OLD":
             raise ConnectionError("old TDC port is no longer available")
-        get_device_calls.append((backend, port))
+        get_tdc_calls.append((backend, port))
         return SimpleNamespace(backend=_FakeTDCBackend())
 
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
-    monkeypatch.setattr("qtools.tdc.get_device", fake_get_device)
+    monkeypatch.setattr("qtools.tdc.get_tdc", fake_get_tdc)
     monkeypatch.setattr(
         "qtools.powermeter.cli.auto_detect_connected_device",
         lambda: ("", ""),
@@ -64,7 +64,7 @@ def test_tdc_retries_configured_port_then_rescans_and_saves(
     manager = _new_manager(cfg)
     manager._init_configed_detectors()
 
-    assert get_device_calls == [("exp_s15_tdc1", "COM_NEW")]
+    assert get_tdc_calls == [("exp_s15_tdc1", "COM_NEW")]
     assert manager.detectors["tdc"] is not None
     assert cfg.get("detectors.tdc") == {
         "backend": "exp_s15_tdc1",
@@ -85,7 +85,7 @@ def test_tdc_uses_configured_port_without_rescan(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(cfg, "scan_detectors", unexpected_scan)
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
     monkeypatch.setattr(
-        "qtools.tdc.get_device",
+        "qtools.tdc.get_tdc",
         lambda backend, port: SimpleNamespace(backend=_FakeTDCBackend()),
     )
 

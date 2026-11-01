@@ -1,14 +1,15 @@
 """TDC Connection and Device Discovery Registry.
 
-Manages device connection dispatching, hardware backend registration, 
+Manages device connection dispatching, hardware backend registration,
 and auto-discovery scanning.
 """
 
 from __future__ import annotations
 
 import logging
-import socket
 import select
+import socket
+from importlib import import_module
 from typing import Callable, Dict, List, Optional, Type
 
 from qtools.tdc.backends.base import TDCBackend
@@ -48,9 +49,7 @@ def register_backend(name: str) -> Callable[[Type[TDCBackend]], Type[TDCBackend]
                 f"Backend '{name}' is already registered as {_REGISTRY[name].__name__}"
             )
         if not issubclass(cls, TDCBackend):
-            raise TypeError(
-                f"{cls.__name__} must be a subclass of TDCBackend"
-            )
+            raise TypeError(f"{cls.__name__} must be a subclass of TDCBackend")
         _REGISTRY[name] = cls
         logger.debug("Registered backend: %s -> %s", name, cls.__name__)
         return cls
@@ -70,25 +69,30 @@ def get_backend(name: str) -> Type[TDCBackend]:
     Raises:
         KeyError: If the name is not registered.
     """
+    # Explicit selection can load either TDC1 driver independently of the default.
+    if name not in _REGISTRY and name in {"s15_tdc1", "exp_s15_tdc1"}:
+        module = "backend" if name == "s15_tdc1" else "exp_backend"
+        import_module(f"qtools.tdc.backends.s15_tdc1.{module}")
     if name not in _REGISTRY:
         available = ", ".join(sorted(_REGISTRY.keys())) or "none"
-        raise KeyError(
-            f"Backend '{name}' not found. Available: {available}"
-        )
+        raise KeyError(f"Backend '{name}' not found. Available: {available}")
     return _REGISTRY[name]
 
 
-def get_device(backend: str | DeviceInfo, port: Optional[str] = None, **kwargs) -> TDC:
-    """One-step factory: return a ready-to-use high-level ``TDC`` instance.
-
-    Concise, common form mirroring ``powermeter.get_device``: given a backend
-    name (and optional port), look up the registered backend class,
-    instantiate it, and wrap it in the high-level ``TDC`` API.
+def get_tdc(
+    backend: str | DeviceInfo,
+    port: Optional[str] = None,
+    *,
+    bin_width: int | None = None,
+    **kwargs,
+) -> TDC:
+    """Create a TDC; enter its context to open the hardware connection.
 
     Args:
         backend: Registered backend identifier, or a ``DeviceInfo`` returned
             by discovery.
         port: Device path / address, or None to let the backend auto-discover.
+        bin_width: Default analysis bin width in ps, or None for native resolution.
         **kwargs: Extra parameters forwarded to the backend constructor.
 
     Returns:
@@ -98,20 +102,11 @@ def get_device(backend: str | DeviceInfo, port: Optional[str] = None, **kwargs) 
         KeyError: If *backend* is not registered.
     """
 
-    if isinstance(backend, DeviceInfo):
-        if port is not None:
-            raise TypeError("port must be omitted when backend is a DeviceInfo")
-        backend_name = backend.backend_name
-        port = backend.device_path
-    elif isinstance(backend, str):
-        backend_name = backend
-    else:
+    if not isinstance(backend, (str, DeviceInfo)):
         raise TypeError(
             "backend must be a registered backend name or a DeviceInfo instance"
         )
-
-    backend_cls = get_backend(backend_name)
-    return TDC(backend_cls(port, **kwargs))
+    return TDC(backend=backend, port=port, bin_width=bin_width, **kwargs)
 
 
 def list_backends() -> Dict[str, Type[TDCBackend]]:
@@ -175,16 +170,17 @@ def discover_network_devices(timeout: float = 1.0) -> List[DeviceInfo]:
     try:
         # Broadcast ping to local subnet
         sock.sendto(discovery_msg, ("255.255.255.255", discovery_port))
-        
+
         # Listen for replies
         import time
+
         t_end = time.time() + timeout
-        
+
         while time.time() < t_end:
             remaining = t_end - time.time()
             if remaining <= 0:
                 break
-            
+
             ready = select.select([sock], [], [], remaining)
             if ready[0]:
                 data, addr = sock.recvfrom(1024)
@@ -195,7 +191,7 @@ def discover_network_devices(timeout: float = 1.0) -> List[DeviceInfo]:
                     parts = payload.split("|")
                     sn = parts[0] if len(parts) > 0 and parts[0] else None
                     desc = parts[1] if len(parts) > 1 else "Ethernet TDC Device"
-                    
+
                     devices.append(
                         DeviceInfo(
                             backend_name="network_tdc",
@@ -238,7 +234,7 @@ def discover_all(method: str = "all", timeout: float = 1.0) -> List[DeviceInfo]:
     # Import all backends before discovery. Each backend reports its own
     # transport and produces a path that its connector understands.
     try:
-        import qtools.tdc.backends  # Dynamically loads and registers all drivers
+        import_module("qtools.tdc.backends")
     except Exception as e:
         logger.warning("Error dynamically importing backend modules: %s", e)
 
@@ -306,3 +302,14 @@ def display_devices(devices: Optional[List[DeviceInfo]] = None) -> None:
 
     print()
     print("=" * 72)
+
+
+def list_tdc(method: str = "all", timeout: float = 1.0) -> List[DeviceInfo]:
+    """Discover attached TDC hardware, print its details, and return device records.
+
+    Returned records can be passed directly to ``get_tdc`` or ``TDC``.
+    Discovery does not open a persistent measurement connection.
+    """
+    devices = discover_all(method=method, timeout=timeout)
+    display_devices(devices)
+    return devices

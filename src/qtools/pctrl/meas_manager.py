@@ -117,7 +117,7 @@ class MeasManager:
     def _init_tdc(self) -> "Optional[tdc.TDC]":
         """Create (and probe) a TDC from config; auto-rescan + save on failure.
 
-        Connection is delegated to ``tdc.get_device`` — the backend handles
+        Connection is delegated to ``tdc.get_tdc`` — the backend handles
         auto-discovery when no port is configured.  If the configured device
         cannot be reached, scan for a connected TDC and persist the new
         port/backend (pmeas-style) before returning the fresh device.
@@ -128,7 +128,7 @@ class MeasManager:
             return None
         port = cfg.get("port") or None
         try:
-            dev = tdc.get_device(backend, port)
+            dev = tdc.get_tdc(backend, port)
             dev.backend.connect()
             dev.backend.disconnect()
             return dev
@@ -147,7 +147,7 @@ class MeasManager:
             logger.warning("TDC auto-rescan did not find a device")
             return None
         try:
-            dev = tdc.get_device(backend, port)
+            dev = tdc.get_tdc(backend, port)
             dev.backend.connect()
             dev.backend.disconnect()
             return dev

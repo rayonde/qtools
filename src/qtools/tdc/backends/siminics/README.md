@@ -22,7 +22,7 @@ try:
     singles = backend.get_singles(1.0)
     timestamps = backend.get_timestamps(1.0)
     events = backend.get_tttr_events()
-    markers = backend.get_last_markers()
+    markers = timestamps.markers
 finally:
     backend.disconnect()
 ```
@@ -46,14 +46,20 @@ as ordinary channels.
 
 ## Marker events
 
-TTTR Marker records are decoded as separate `MarkerEvent` values. M1, M2, M3,
-and M4 use masks `0x1`, `0x2`, `0x4`, and `0x8`; simultaneous inputs are
-represented by their bitwise combination. Marker records remain in
-`get_tttr_events()` stream order and are not inserted into the generic
-`TimestampResult` arrays because the vendor format does not store an
-independent Marker timestamp.
-Use `get_markers(duration)` when a new acquisition and its Marker list are
-needed in one call.
+TTTR marker records are returned in `TimestampResult.markers` as generic
+`qtools.tdc.MarkerEvent` values from the same acquisition. M1, M2, M3, and M4
+use masks `0x1`, `0x2`, `0x4`, and `0x8`; simultaneous inputs preserve their
+bitwise combination. `photon_index` is the number of preceding photons and
+marks a boundary in `timestamps/channels`. `stream_index` is the original raw
+word position, including control words. Leading, trailing, and consecutive
+markers are preserved.
+
+The vendor format has no independent marker timestamp, so `timestamp_ps` is
+`None`. Markers stay separate from photon arrays and retain their original
+order in `get_tttr_events()`. A marker-capable capture with no markers returns
+`[]`; unsupported backends use `None`. The generic binary/HDF5 save and load
+functions preserve these distinctions. The device extensions
+`get_last_markers()` and `get_markers(duration)` are also available.
 
 ## Siminics-specific modes
 

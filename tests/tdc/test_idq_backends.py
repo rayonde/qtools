@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
 
 from qtools.tdc.backends.base import BackendCapability
 from qtools.tdc.backends.idq import ID801Backend, ID1000Backend, IDQBackend
 from qtools.tdc.connection import get_backend, list_backends
-from qtools.tdc.data import SinglesResult, CoincidenceResult, G2Result
+from qtools.tdc.data import CoincidenceResult, SinglesResult
 
 
 def test_idq_backends_registration():
@@ -163,9 +164,9 @@ def test_id1000_get_coincidence_hardware(mock_zmq_ctx, mock_socket):
         method="hardware",
     )
     assert isinstance(coinc, CoincidenceResult)
-    assert coinc.count == 125
+    assert coinc.raw_counts[0] == 125
     assert coinc.method == "hardware"
-    assert coinc.order == 2
+    assert (coinc.channel_start, coinc.channel_stop) == (1, 2)
 
 
 @patch("socket.socket")
@@ -185,6 +186,7 @@ def test_id1000_get_g2_hardware(mock_zmq_ctx, mock_socket):
         b"\n",  # DEVIce:CONF:LOAD HISTO
         b"\n",  # HIST1:REF:LINK
         b"\n",  # HIST1:STOP:LINK
+        b"\n",  # DELA2:VALU 0
         b"\n",  # REC:...
         b"\n",  # REC:DURation
         b"\n",  # HIST1:BCOUnt...
@@ -207,6 +209,6 @@ def test_id1000_get_g2_hardware(mock_zmq_ctx, mock_socket):
         ch_start=1,
         ch_stop=2,
     )
-    assert isinstance(g2, G2Result)
-    assert g2.integration_time == 0.1
-    np.testing.assert_array_equal(g2.histogram, [0, 5, 20, 150, 20, 5, 0])
+    assert isinstance(g2, CoincidenceResult)
+    assert g2.integration_time[0] == 0.1
+    np.testing.assert_array_equal(g2.histogram[0], [0, 5, 20, 150, 20, 5, 0])

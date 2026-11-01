@@ -83,6 +83,7 @@ class ID801Backend(TDCBackend):
         self._dev = None
         self._connected = False
         self._resolution_ps = 81.0  # Default IDQ ID801 resolution is 81 ps
+        self._threshold_v = 0.6
 
     @property
     def name(self) -> str:
@@ -156,6 +157,8 @@ class ID801Backend(TDCBackend):
                 logger.warning("Could not read hardware timebase, falling back to default 81.0 ps: %s", e)
 
             self._connected = True
+            if "threshold" in kwargs:
+                self.set_threshold(float(kwargs["threshold"]))
         except Exception as e:
             raise ConnectionError(f"Failed to connect to IDQ ID801: {e}") from e
 
@@ -194,6 +197,7 @@ class ID801Backend(TDCBackend):
 
         return SinglesResult(
             integration_time=actual_duration,
+            channels=np.arange(1, len(counts) + 1, dtype=np.uint8),
             counts=counts,
             count_rates=count_rates,
         )
@@ -230,6 +234,7 @@ class ID801Backend(TDCBackend):
         if SignalCond_ENUM is None:
             raise RuntimeError("SignalCond enum is not loaded.")
 
+        self._threshold_v = float(threshold)
         channels_to_set = range(1, self.channel_count + 1) if channel is None else [channel]
         for ch in channels_to_set:
             if not (1 <= ch <= self.channel_count):

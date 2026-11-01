@@ -3,30 +3,33 @@
 Wraps a TDCBackend and provides high-level measurement routines:
 singles, pairs (g²), triplets, and N-fold gate coincidences.
 """
+
 from __future__ import annotations
 
 import logging
 import time
+from dataclasses import replace
 from typing import List, Optional, Tuple
 
 import numpy as np
+
+from qtools.tdc.analysis.efficiency import compute_pairs
+from qtools.tdc.analysis.g2 import (
+    compute_gate_coincidence,
+    compute_gate_photons,
+    compute_triplet_g2,
+)
 from qtools.tdc.backends.base import TDCBackend
 from qtools.tdc.data import (
     CoincidenceResult,
-    G2Result,
-    TripletResult,
-    GateResult,
+    DeviceInfo,
+    HeraldingGateResult,
+    MultiCoincidenceResult,
     SinglesResult,
     TimestampResult,
+    combine_samples,
+    validate_bin_width,
 )
-from qtools.tdc.analysis.g2 import (
-    compute_g2,
-    compute_triplet_g2,
-    compute_gate_coincidence,
-    bin_offset_from_peak,
-    min_range_from_peak,
-)
-from qtools.tdc.analysis.efficiency import compute_pairs
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +37,50 @@ _MAX_SINGLES_RETRIES = 20
 
 
 class TDC:
-    """High-level API class to perform singles, pairs, triplet, and gate measurements."""
+    """High-level measurements with a shared analysis bin width in ps.
 
-    def __init__(self, backend: TDCBackend) -> None:
+    An omitted per-measurement bin_width uses the constructor default, then
+    the native timestamp resolution if no default was configured.
+    """
+
+    def __init__(
+        self,
+        backend: TDCBackend | str | DeviceInfo,
+        port: str | None = None,
+        *,
+        bin_width: int | None = None,
+        **kwargs,
+    ) -> None:
+        """Wrap a backend or create one by name, with a default bin width in ps.
+
+        Enter the context to connect. Per-measurement bin_width overrides
+        this default; None uses the native timestamp resolution.
+        Additional keyword arguments configure a newly created backend.
+        """
+        self.bin_width = None if bin_width is None else validate_bin_width(bin_width)
+        if isinstance(backend, DeviceInfo):
+            if port is not None:
+                raise TypeError("port must be omitted when backend is a DeviceInfo")
+            port = backend.device_path
+            backend = backend.backend_name
+        if isinstance(backend, str):
+            from qtools.tdc.connection import get_backend
+
+            backend = get_backend(backend)(port, **kwargs)
+        elif port is not None or kwargs:
+            raise TypeError(
+                "port and backend options require a backend name or DeviceInfo"
+            )
         self.backend = backend
+
+    def _bin_width(self, override: int | None) -> int | None:
+        """Resolve an analysis override without changing the instance default."""
+        width = self.bin_width if override is None else override
+        return None if width is None else validate_bin_width(width)
 
     def __enter__(self) -> "TDC":
         self.backend.connect()
- 
+
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -49,12 +88,14 @@ class TDC:
 
     def set_threshold(
         self,
-        threshold_or_channel: float | int,
+        threshold_or_channel: float | int | None = None,
         threshold: float | None = None,
         *,
         channel: int | None = None,
     ) -> None:
         """Set threshold voltage.
+
+        Thresholds are expressed in volts (V) at this public API boundary.
 
         Supports flexible signatures for both global devices (e.g. S15 TDC1)
         and per-channel devices (e.g. IDQ):
@@ -70,11 +111,20 @@ class TDC:
         """
         if channel is not None:
             ch = channel
-            val = threshold if threshold is not None else float(threshold_or_channel)
+            if threshold is None:
+                if threshold_or_channel is None:
+                    raise TypeError("threshold is required when channel is specified")
+                val = float(threshold_or_channel)
+            else:
+                val = float(threshold)
         elif threshold is None:
+            if threshold_or_channel is None:
+                raise TypeError("threshold is required")
             ch = None
             val = float(threshold_or_channel)
         else:
+            if threshold_or_channel is None:
+                raise TypeError("channel is required when threshold is positional")
             ch = int(threshold_or_channel)
             val = float(threshold)
 
@@ -82,10 +132,8 @@ class TDC:
 
     @property
     def threshold(self) -> float:
-        """Get default/global threshold."""
-        if hasattr(self.backend, "get_threshold"):
-            return self.backend.get_threshold(0)
-        return 600.0
+        """Get the cached default/global threshold in volts."""
+        return float(self.backend.get_threshold())
 
     @threshold.setter
     def threshold(self, val: float) -> None:
@@ -113,11 +161,18 @@ class TDC:
 
                 # Integration time validation check (0.75 to 2.0)
                 if not (0.75 < inttime / duration < 2.0):
-                    logger.warning("Singles duration check failed: %f vs %f, retrying...", inttime, duration)
+                    logger.warning(
+                        "Singles duration check failed: %f vs %f, retrying...",
+                        inttime,
+                        duration,
+                    )
                     continue
                 # Raw rates positive check
                 if np.any(res.count_rates < 0):
-                    logger.warning("Singles contain negative rates: %s, retrying...", res.count_rates)
+                    logger.warning(
+                        "Singles contain negative rates: %s, retrying...",
+                        res.count_rates,
+                    )
                     continue
 
                 return res
@@ -154,7 +209,7 @@ class TDC:
             results.append((res.integration_time, res.counts))
 
         return results
-    
+
     def measure_rates(
         self,
         duration: float,
@@ -180,7 +235,7 @@ class TDC:
             results.append((res.integration_time, res.count_rates))
 
         return results
-    
+
     def _acquire_timestamp(self, duration: float) -> TimestampResult:
         """Acquire raw timestamp result from backend.
 
@@ -220,9 +275,11 @@ class TDC:
         if unit == "ps":
             ts = ts_ps
         elif unit == "ns":
-            ts = ts_ps // 1000 
+            ts = ts_ps // 1000
             if res_ps < 1000:
-                logger.warning("Converting timestamps from ps to ns loses sub-nanosecond precision")
+                logger.warning(
+                    "Converting timestamps from ps to ns loses sub-nanosecond precision"
+                )
         else:
             raise ValueError(f"Unsupported unit: {unit}. Expected 'ps' or 'ns'.")
 
@@ -232,11 +289,10 @@ class TDC:
 
         result = []
         for channel in channels:
-            mask = (ch == channel)
+            mask = ch == channel
             result.append((channel, total_time_ns, ts[mask]))
 
         return result
-
 
     # -- pairs ----------------------------------------------------------------
 
@@ -254,6 +310,7 @@ class TDC:
         delay: int = 0,
         bin_offset: int = 0,
         unit: str = "ns",
+        bin_width: int | None = None,
     ) -> dict:
         """Perform a coincidence correlation measurement.
 
@@ -268,6 +325,7 @@ class TDC:
             ch_start: Start channel index.
             ch_stop: Stop channel index.
             bins: Number of correlation histogram bins.
+            bin_width: Analysis bin width in ps, or None for the instance default.
             peak: Center of coincidence window in bins.
             loffset: Left offset of coincidence window in bins.
             roffset: Right offset of coincidence window in bins.
@@ -285,29 +343,31 @@ class TDC:
             ``eff_stop``, ``eff_avg``, ``coinc_start``, ``coinc_stop``,
             ``bin_edges``, and ``histogram``.
         """
+        width = self._bin_width(bin_width)
         # delay is specified in bins; convert to the time unit expected by
         # backend.get_g2() (ch_stop_delay).
-        ch_stop_delay = delay * self.backend.resolution_ps
+        ch_stop_delay = delay * (self.backend.resolution_ps if width is None else width)
         if unit == "ns":
             ch_stop_delay = ch_stop_delay / 1e3
+        elif unit == "us":
+            ch_stop_delay = ch_stop_delay / 1e6
         elif unit == "ps":
             pass
         elif unit == "ms":
-            ch_stop_delay = ch_stop_delay / 1e6
+            ch_stop_delay = ch_stop_delay / 1e9
         else:
-            raise ValueError(f"Unsupported unit: {unit!r}. Expected 'ns', 'ps', or 'ms'.")
+            raise ValueError(
+                f"Unsupported unit: {unit!r}. Expected 'ns', 'ps', or 'ms'."
+            )
 
-        use_start_stop = (window_start is not None and window_stop is not None)
+        use_start_stop = window_start is not None and window_stop is not None
         if use_start_stop:
             if window_start < bin_offset:
                 raise ValueError("window_start cannot be less than bin_offset.")
             if window_stop < window_start:
                 raise ValueError("window_stop cannot be less than window_start.")
 
-            # include the window_start bin and window_stop bin 
-            window_bins = window_stop - window_start + 1 
         else:
-            window_bins = peak + roffset - loffset + 1 
             window_start = peak - loffset
             window_stop = peak + roffset
 
@@ -322,11 +382,13 @@ class TDC:
             ch_stop=ch_stop,
             ch_stop_delay=ch_stop_delay,
             bin_offset=bin_offset,
-            unit=unit)
+            unit=unit,
+            bin_width=width,
+        )
 
-        hist = g2res.histogram
-        bin_edges = g2res.bin_edges
-        integration_time = g2res.integration_time
+        hist = g2res.histogram[0]
+        bin_edges = g2res.bin_edges[0] // g2res.bin_width
+        integration_time = g2res.integration_time[0]
         if (
             integration_time is None
             or not np.isfinite(integration_time)
@@ -339,20 +401,18 @@ class TDC:
                 duration,
             )
             integration_time = duration
-        resolution_ps = g2res.resolution_ps
-        singles_start = g2res.singles_start
-        singles_stop = g2res.singles_stop
-
+        singles_start = g2res.singles_start[0]
+        singles_stop = g2res.singles_stop[0]
 
         res_dict = compute_pairs(
-                    histogram=hist,
-                    bin_edges=bin_edges,
-                    singles_start=singles_start,
-                    singles_stop=singles_stop,
-                    integration_time=integration_time,
-                    coinc_start=window_start,
-                    coinc_stop=window_stop,
-                )
+            histogram=hist,
+            bin_edges=bin_edges,
+            singles_start=singles_start,
+            singles_stop=singles_stop,
+            integration_time=integration_time,
+            coinc_start=window_start,
+            coinc_stop=window_stop,
+        )
 
         return res_dict
 
@@ -371,6 +431,7 @@ class TDC:
         bin_offset: int = 0,
         unit: str = "ns",
         num: int = 1,
+        bin_width: int | None = None,
     ) -> dict:
         """Perform multiple coincidence correlation measurements and return aggregated statistics.
 
@@ -379,6 +440,7 @@ class TDC:
             ch_start: Start channel index.
             ch_stop: Stop channel index.
             bins: Number of correlation histogram bins.
+            bin_width: Analysis bin width in ps, or None for the instance default.
             peak: Center of coincidence window in bins.
             loffset: Left offset of coincidence window in bins.
             roffset: Right offset of coincidence window in bins.
@@ -393,25 +455,27 @@ class TDC:
         Returns:
             A dictionary containing raw sample lists, means, standard deviations, and window metadata.
         """
+        width = self._bin_width(bin_width)
         if num <= 0:
             raise ValueError("num must be a positive integer.")
 
         samples = []
         for idx in range(num):
-            res =  self.measure_pairs(
-                    duration=duration,
-                    ch_start=ch_start,
-                    ch_stop=ch_stop,
-                    delay=delay,
-                    bins=bins,
-                    peak=peak,
-                    loffset=loffset,
-                    roffset=roffset,
-                    window_start=window_start,
-                    window_stop=window_stop,
-                    bin_offset=bin_offset,
-                    unit=unit,
-                )
+            res = self.measure_pairs(
+                duration=duration,
+                ch_start=ch_start,
+                ch_stop=ch_stop,
+                delay=delay,
+                bins=bins,
+                peak=peak,
+                loffset=loffset,
+                roffset=roffset,
+                window_start=window_start,
+                window_stop=window_stop,
+                bin_offset=bin_offset,
+                unit=unit,
+                bin_width=width,
+            )
             samples.append(res)
 
         first_sample = samples[0]
@@ -429,17 +493,16 @@ class TDC:
         eff_stops = [s["eff_stop"] for s in samples]
         eff_avgs = [s["eff_avg"] for s in samples]
 
-
         res = {
             "pair_counts": pair_counts,
             "acc_pair_counts": acc_pair_counts,
             "integration_time": integration_time,
             "raw_pair_rate": float(np.mean(raw_pair_rates)),
-            "raw_pair_rate_std": float(np.std(raw_pair_rates)),
+            "raw_pair_rate_std": float(np.std(raw_pair_rates, ddof=1)) if len(raw_pair_rates) > 1 else 0.0,
             "net_pair_rate": float(np.mean(net_pair_rates)),
-            "net_pair_rate_std": float(np.std(net_pair_rates)),
+            "net_pair_rate_std": float(np.std(net_pair_rates, ddof=1)) if len(net_pair_rates) > 1 else 0.0,
             "acc_pair_rate": float(np.mean(acc_pair_rates)),
-            "acc_pair_rate_std": float(np.std(acc_pair_rates)),
+            "acc_pair_rate_std": float(np.std(acc_pair_rates, ddof=1)) if len(acc_pair_rates) > 1 else 0.0,
             "start_rate": float(np.mean(start_rates)),
             "stop_rate": float(np.mean(stop_rates)),
             "eff_start": float(np.mean(eff_starts)),
@@ -451,6 +514,13 @@ class TDC:
         }
         return res
 
+    @staticmethod
+    def _sample_count(samples: int) -> int:
+        """Validate repetitions before acquiring any data."""
+        if isinstance(samples, bool) or not isinstance(samples, int) or samples <= 0:
+            raise ValueError("samples must be a positive integer")
+        return samples
+
     def measure_g2(
         self,
         duration: float,
@@ -461,32 +531,26 @@ class TDC:
         bin_offset: int = 0,
         unit: str = "ns",
         method: str = "software",
-    ) -> G2Result:
-        """Measure only the g2 correlation histogram.
-
-        Args:
-            duration: Measurement time in seconds.
-            ch_start: Start channel index.
-            ch_stop: Stop channel index.
-            ch_stop_delay: Time delay added to stop channel in specified unit (default: 0).
-            bins: Number of histogram bins (default: 500).
-            bin_offset: Start of correlation window in bins (default: 0).
-            unit: Time unit for ch_stop_delay ('ns' or 'ps', default: 'ns').
-            method: G² implementation to use: ``"software"`` (default) or
-                ``"hardware"``.
-
-        Returns:
-            A G2Result object.
-        """
-        return self.backend.get_g2(
-            duration=duration,
-            bins=bins,
-            ch_start=ch_start,
-            ch_stop=ch_stop,
-            ch_stop_delay=ch_stop_delay,
-            bin_offset=bin_offset,
-            unit=unit,
-            method=method,
+        samples: int = 1,
+        bin_width: int | None = None,
+    ) -> CoincidenceResult:
+        """Measure repeated histograms with fixed settings and integer ps axes."""
+        width = self._bin_width(bin_width)
+        return combine_samples(
+            [
+                self.backend.get_g2(
+                    duration=duration,
+                    bins=bins,
+                    ch_start=ch_start,
+                    ch_stop=ch_stop,
+                    ch_stop_delay=ch_stop_delay,
+                    bin_offset=bin_offset,
+                    unit=unit,
+                    bin_width=width,
+                    method=method,
+                )
+                for _ in range(self._sample_count(samples))
+            ]
         )
 
     def measure_coincidence(
@@ -499,20 +563,59 @@ class TDC:
         window_start: int | float | None = None,
         window_stop: int | float | None = None,
         method: str = "software",
+        samples: int = 1,
+        bin_width: int | None = None,
     ) -> CoincidenceResult:
-        """Measure two-fold coincidence counts."""
-        return self.backend.get_coincidence(
-            duration=duration,
-            ch_start=ch_start,
-            ch_stop=ch_stop,
-            ch_stop_delay=ch_stop_delay,
-            unit=unit,
-            window_start=window_start,
-            window_stop=window_stop,
-            method=method,
-        )
+        """Measure repeated window counts, fixing an automatic window after the first sample."""
+        width = self._bin_width(bin_width)
+        from qtools.tdc.analysis.efficiency import compute_coincidence
 
-    # -- triplet (3-fold coincidence) ----------------------------------------
+        results = []
+        automatic = window_start is None and method == "software"
+        for _ in range(self._sample_count(samples)):
+            if automatic and results:
+                first = results[0]
+                hist = self.backend.get_g2(
+                    duration=duration,
+                    bins=first.n_bins[0],
+                    ch_start=ch_start,
+                    ch_stop=ch_stop,
+                    ch_stop_delay=ch_stop_delay,
+                    unit=unit,
+                    bin_width=first.bin_width,
+                    method=method,
+                    bin_offset=first.stop_offset[0] // first.bin_width,
+                )
+                raw, per_bin, accidental = compute_coincidence(
+                    histogram=hist.histogram[0],
+                    bin_edges=hist.bin_edges[0],
+                    window_start=first.window_start[0],
+                    window_stop=first.window_stop[0],
+                )
+                result = replace(
+                    hist,
+                    mode="window_count",
+                    window_start=first.window_start.copy(),
+                    window_stop=first.window_stop.copy(),
+                    raw_counts=[raw],
+                    accidental_counts_per_bin=[per_bin],
+                    accidental_counts=[accidental],
+                    accidental_method=["sideband"],
+                )
+            else:
+                result = self.backend.get_coincidence(
+                    duration=duration,
+                    ch_start=ch_start,
+                    ch_stop=ch_stop,
+                    ch_stop_delay=ch_stop_delay,
+                    unit=unit,
+                    bin_width=width,
+                    window_start=window_start,
+                    window_stop=window_stop,
+                    method=method,
+                )
+            results.append(result)
+        return combine_samples(results)
 
     def measure_triplet(
         self,
@@ -523,38 +626,31 @@ class TDC:
         bins: int = 500,
         bin_offset: int = 0,
         deduplicate: bool = False,
-    ) -> TripletResult:
-        """Measure 3-fold coincidence between three channels.
-
-        Args:
-            duration: Measurement time in seconds.
-            ch_ref: Reference channel index (1-based, e.g. 1).
-            ch_sig1: First signal channel index.
-            ch_sig2: Second signal channel index.
-            bins: Number of histogram bins.
-            bin_offset: Start of correlation window in bins.
-            deduplicate: If True, count unique delays per ref once.
-
-        Returns:
-            A TripletResult with four delay histograms and events.
-        """
-        ts_res = self.backend.get_timestamps(duration)
-        resolution_ps = ts_res.resolution_ps
-
-        return compute_triplet_g2(
-            timestamps_ps=ts_res.timestamps,
-            channels=ts_res.channels,
-            ch_ref=ch_ref,
-            ch_sig1=ch_sig1,
-            ch_sig2=ch_sig2,
-            bins=bins,
-            resolution_ps=resolution_ps,
-            bin_offset=bin_offset,
-            integration_time=ts_res.duration_s,
-            deduplicate=deduplicate,
-        )
-
-    # -- gate (N-fold coincidence) -------------------------------------------
+        samples: int = 1,
+        store_events: bool = False,
+        bin_width: int | None = None,
+    ) -> MultiCoincidenceResult:
+        """Measure repeated three-channel combinations with four directed histograms."""
+        width = self._bin_width(bin_width)
+        results = []
+        for _ in range(self._sample_count(samples)):
+            ts = self.backend.get_timestamps(duration)
+            results.append(
+                compute_triplet_g2(
+                    timestamps_ps=ts.timestamps,
+                    channels=ts.channels,
+                    ch_ref=ch_ref,
+                    ch_sig1=ch_sig1,
+                    ch_sig2=ch_sig2,
+                    bins=bins,
+                    resolution_ps=ts.resolution_ps if width is None else width,
+                    bin_offset=bin_offset,
+                    integration_time=ts.duration_s,
+                    deduplicate=deduplicate,
+                    store_events=store_events,
+                )
+            )
+        return combine_samples(results)
 
     def measure_gate(
         self,
@@ -564,34 +660,67 @@ class TDC:
         bins: int = 500,
         bin_offset: int = 0,
         deduplicate: bool = False,
-    ) -> GateResult:
-        """Measure N-fold gated coincidence.
+        samples: int = 1,
+        store_events: bool = False,
+        bin_width: int | None = None,
+    ) -> MultiCoincidenceResult:
+        """Count reference events with a hit on every configured signal channel."""
+        width = self._bin_width(bin_width)
+        results = []
+        for _ in range(self._sample_count(samples)):
+            ts = self.backend.get_timestamps(duration)
+            results.append(
+                compute_gate_coincidence(
+                    timestamps_ps=ts.timestamps,
+                    channels=ts.channels,
+                    ch_ref=ch_ref,
+                    ch_signals=ch_signals,
+                    bins=bins,
+                    resolution_ps=ts.resolution_ps if width is None else width,
+                    bin_offset=bin_offset,
+                    integration_time=ts.duration_s,
+                    deduplicate=deduplicate,
+                    store_events=store_events,
+                )
+            )
+        return combine_samples(results)
 
-        For each reference event, checks for coincidences with all signal
-        channels within the time window.
+    def measure_heralding_gate(
+        self,
+        duration: float,
+        heralding_channel: int,
+        gated_channels: List[int],
+        bins: int = 500,
+        bin_offset: int = 0,
+        samples: int = 1,
+        stop_delay: dict[int, int] | None = None,
+        store_events: bool = False,
+        detail_format: str = "flat",
+        store_histogram: bool = True,
+        bin_width: int | None = None,
+    ) -> HeraldingGateResult:
+        """Measure associations for every herald, optionally retaining gate details.
 
-        Args:
-            duration: Measurement time in seconds.
-            ch_ref: Reference channel index (1-based, e.g. 1).
-            ch_signals: List of signal channel indices.
-            bins: Number of histogram bins.
-            bin_offset: Start of correlation window in bins.
-            deduplicate: If True, count unique delays per ref once.
-
-        Returns:
-            A GateResult with pairwise histograms, N-fold count, and events.
+        stop_delay values and returned times are integer picoseconds.
         """
-        ts_res = self.backend.get_timestamps(duration)
-        resolution_ps = ts_res.resolution_ps
-
-        return compute_gate_coincidence(
-            timestamps_ps=ts_res.timestamps,
-            channels=ts_res.channels,
-            ch_ref=ch_ref,
-            ch_signals=ch_signals,
-            bins=bins,
-            resolution_ps=resolution_ps,
-            bin_offset=bin_offset,
-            integration_time=ts_res.duration_s,
-            deduplicate=deduplicate,
-        )
+        width = self._bin_width(bin_width)
+        results = []
+        for _ in range(self._sample_count(samples)):
+            ts = self.backend.get_timestamps(duration)
+            results.append(
+                compute_gate_photons(
+                    timestamps_ps=ts.timestamps,
+                    channels=ts.channels,
+                    ch_gate=heralding_channel,
+                    ch_photons=gated_channels,
+                    bins=bins,
+                    resolution_ps=ts.resolution_ps if width is None else width,
+                    bin_offset=bin_offset,
+                    integration_time=ts.duration_s,
+                    stop_delay=stop_delay,
+                    store_events=store_events,
+                    detail_format=detail_format,
+                    store_histogram=store_histogram,
+                )
+            )
+        return combine_samples(results)

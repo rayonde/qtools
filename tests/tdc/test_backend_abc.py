@@ -6,7 +6,7 @@ import inspect
 
 import pytest
 
-from qtools.tdc.backends.base import TDCBackend, BackendCapability
+from qtools.tdc.backends.base import BackendCapability, TDCBackend
 from qtools.tdc.backends.s15_tdc1.config import DEFAULT_TDC1_BACKEND
 from qtools.tdc.connection import list_backends
 
@@ -46,9 +46,9 @@ def test_backends_use_optional_threshold_channel():
 def test_backends_use_single_g2_method_selector():
     """All backends expose one g2 entry point with software as the default."""
     for cls in list_backends().values():
-        params = list(inspect.signature(cls.get_g2).parameters.values())
-        assert params[-1].name == "method"
-        assert params[-1].default == "software"
+        params = inspect.signature(cls.get_g2).parameters
+        assert params["method"].default == "software"
+        assert params["bin_width"].default is None
 
         backend = cls()
         with pytest.raises(NotImplementedError):

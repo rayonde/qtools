@@ -30,10 +30,14 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from qtools.tdc.measurement import TDC  # noqa: F401 — re-export for backward compatibility
-from qtools.tdc.connection import get_device
 from qtools.tdc.backends.s15_tdc1.config import DEFAULT_TDC1_BACKEND
-from qtools.tdc.data import G2Result, TripletResult, GateResult
+from qtools.tdc.connection import get_tdc
+from qtools.tdc.data import (
+    CoincidenceResult,
+    HeraldingGateResult,
+    MultiCoincidenceResult,
+)
+from qtools.tdc.measurement import TDC  # noqa: F401
 
 
 def count_rate(
@@ -69,7 +73,7 @@ def count_rate(
         for t, rates in samples:
             print(f"{t:.2f}s: {rates}")
     """
-    tdc = get_device(backend, port)
+    tdc = get_tdc(backend, port)
     with tdc:
         results = tdc.measure_rates(duration=duration, num=num)
 
@@ -108,7 +112,7 @@ def singles(
         [(inttime, counts)] = singles(duration=1.0)
         print(f"Total counts: {counts.sum()}")
     """
-    tdc = get_device(backend, port)
+    tdc = get_tdc(backend, port)
     with tdc:
         results = tdc.measure_singles(duration=duration, num=num)
 
@@ -130,7 +134,9 @@ def g2(
     bin_offset: int = 0,
     unit: str = "ns",
     method: str = "software",
-) -> G2Result:
+    samples: int = 1,
+    bin_width: int | None = None,
+) -> CoincidenceResult:
     """Measure g²(τ) correlation histogram.
 
     Auto-discovers and connects to the device, acquires timestamps,
@@ -143,25 +149,30 @@ def g2(
         ch_start: Start channel (1-indexed, default: 1).
         ch_stop: Stop channel (1-indexed, default: 2).
         ch_stop_delay: Time delay in specified unit added to ch_stop.
+        bin_width: Analysis bin width in ps, or None for native resolution.
         bins: Number of histogram bins.
         bin_offset: Start of correlation window in bins.
-        unit: Time unit for ch_stop_delay ('ns' or 'ps').
+        unit: Input delay unit (``ps``, ``ns``, ``us``, or ``ms``).
+            Returned time fields use integer ps.
         method: G² implementation to use: ``"software"`` (default) or
             ``"hardware"``.
+        samples: Number of acquisitions with the same settings (default: 1).
 
     Returns:
-        A ``G2Result`` with histogram, bin edges, singles rates, and
-        integration time.
+        A ``CoincidenceResult`` with histogram, bin edges, singles rates, and
+        per-sample integration times. Measurement fields remain lists for a
+        single acquisition.
 
     Example::
 
         result = g2(duration=5.0, ch_start=0, ch_stop=1, bins=500)
-        print(f"Peak bin: {result.histogram.argmax()}")
+        print(f"Peak bin: {result.histogram[0].argmax()}")
         print(f"Normalized g²: {result.normalized}")
     """
-    tdc = get_device(backend, port)
+    tdc = get_tdc(backend, port)
     with tdc:
         return tdc.measure_g2(
+            bin_width=bin_width,
             duration=duration,
             ch_start=ch_start,
             ch_stop=ch_stop,
@@ -170,6 +181,7 @@ def g2(
             bin_offset=bin_offset,
             unit=unit,
             method=method,
+            samples=samples,
         )
 
 
@@ -185,6 +197,7 @@ def pairs(
     roffset: int = 5,
     window_start: Optional[int] = None,
     window_stop: Optional[int] = None,
+    bin_width: int | None = None,
 ) -> Tuple[np.ndarray, float, float, float, float, float, float, float, float]:
     """Measure coincidence pairs with efficiency analysis.
 
@@ -198,6 +211,7 @@ def pairs(
         duration: Measurement time in seconds.
         ch_start: Start channel (1-indexed, default: 1).
         ch_stop: Stop channel (1-indexed, default: 2).
+        bin_width: Analysis bin width in ps, or None for native resolution.
         bins: Number of correlation histogram bins.
         peak: Center of coincidence window in bins.
         loffset: Left offset of the coincidence window in bins.
@@ -217,9 +231,10 @@ def pairs(
         )
         print(f"Pairs: {p:.1f}, Efficiency: {eavg:.4f}")
     """
-    tdc = get_device(backend, port)
+    tdc = get_tdc(backend, port)
     with tdc:
         res = tdc.measure_pairs(
+            bin_width=bin_width,
             duration=duration,
             ch_start=ch_start,
             ch_stop=ch_stop,
@@ -253,7 +268,10 @@ def triplet(
     bins: int = 500,
     bin_offset: int = 0,
     deduplicate: bool = False,
-) -> TripletResult:
+    samples: int = 1,
+    store_events: bool = False,
+    bin_width: int | None = None,
+) -> MultiCoincidenceResult:
     """Measure 3-fold coincidence between three channels.
 
     Auto-discovers and connects to the device, acquires timestamps,
@@ -266,21 +284,26 @@ def triplet(
         ch_ref: Reference channel index (1-indexed, default: 1).
         ch_sig1: First signal channel index (1-indexed, default: 2).
         ch_sig2: Second signal channel index (1-indexed, default: 3).
+        bin_width: Analysis bin width in ps, or None for native resolution.
         bins: Number of histogram bins.
         bin_offset: Start of correlation window in bins.
         deduplicate: If True, count unique delays per ref once.
+        samples: Number of acquisitions with the same settings (default: 1).
+        store_events: Retain relative event details when True (default: False).
 
     Returns:
-        A ``TripletResult`` with four delay histograms and events.
+        A ``MultiCoincidenceResult`` with four directed histograms keyed by
+        actual channel IDs, combination counts, and optional events.
 
     Example::
 
         result = triplet(duration=10.0)
-        print(f"Triplet events: {len(result.events)}")
+        print(f"Triplet events: {result.raw_counts}")
     """
-    tdc = get_device(backend, port)
+    tdc = get_tdc(backend, port)
     with tdc:
         return tdc.measure_triplet(
+            bin_width=bin_width,
             duration=duration,
             ch_ref=ch_ref,
             ch_sig1=ch_sig1,
@@ -288,6 +311,8 @@ def triplet(
             bins=bins,
             bin_offset=bin_offset,
             deduplicate=deduplicate,
+            samples=samples,
+            store_events=store_events,
         )
 
 
@@ -295,12 +320,15 @@ def gate(
     backend: str = DEFAULT_TDC1_BACKEND,
     port: Optional[str] = None,
     duration: float = 1.0,
-    ch_ref: int = 0,
+    ch_ref: int = 1,
     ch_signals: Optional[List[int]] = None,
     bins: int = 500,
     bin_offset: int = 0,
     deduplicate: bool = False,
-) -> GateResult:
+    samples: int = 1,
+    store_events: bool = False,
+    bin_width: int | None = None,
+) -> MultiCoincidenceResult:
     """Measure N-fold gated coincidence.
 
     For each reference event, checks for coincidences with all signal
@@ -311,29 +339,112 @@ def gate(
         backend: Registered backend identifier.
         port: Device path/address, or None to auto-discover.
         duration: Measurement time in seconds.
-        ch_ref: Reference channel index (0-indexed).
-        ch_signals: List of signal channel indices (default: ``[1, 2, 3]``).
+        ch_ref: Reference channel index (1-indexed).
+        ch_signals: List of signal channel indices (default: ``[2, 3, 4]``).
+        bin_width: Analysis bin width in ps, or None for native resolution.
         bins: Number of histogram bins.
         bin_offset: Start of correlation window in bins.
         deduplicate: If True, count unique delays per ref once.
+        samples: Number of acquisitions with the same settings (default: 1).
+        store_events: Retain relative event details when True (default: False).
 
     Returns:
-        A ``GateResult`` with pairwise histograms, N-fold count, and events.
+        A ``MultiCoincidenceResult`` with star histograms, successful reference
+        event counts, and optional event combinations. Times use integer ps.
 
     Example::
 
-        result = gate(duration=10.0, ch_ref=0, ch_signals=[1, 2, 3])
-        print(f"N-fold coincidences: {result.n_fold_count}")
+        result = gate(duration=10.0, ch_ref=1, ch_signals=[2, 3, 4])
+        print(f"N-fold coincidences: {result.raw_counts}")
     """
     if ch_signals is None:
-        ch_signals = [1, 2, 3]
-    tdc = get_device(backend, port)
+        ch_signals = [2, 3, 4]
+    tdc = get_tdc(backend, port)
     with tdc:
         return tdc.measure_gate(
+            bin_width=bin_width,
             duration=duration,
             ch_ref=ch_ref,
             ch_signals=ch_signals,
             bins=bins,
             bin_offset=bin_offset,
             deduplicate=deduplicate,
+            samples=samples,
+            store_events=store_events,
+        )
+
+
+def coincidence(
+    backend: str = DEFAULT_TDC1_BACKEND,
+    port: Optional[str] = None,
+    duration: float = 1.0,
+    ch_start: int = 1,
+    ch_stop: int = 2,
+    ch_stop_delay: int | float = 0,
+    unit: str = "ns",
+    window_start: int | float | None = None,
+    window_stop: int | float | None = None,
+    method: str = "software",
+    samples: int = 1,
+    bin_width: int | None = None,
+) -> CoincidenceResult:
+    """Acquire repeated window counts and expose per-sample rates and mean/std.
+
+    Duration is seconds per acquisition; samples defaults to one. Delay and
+    window inputs use unit (ps/ns/us/ms), and results use integer ps. Omit both
+    window bounds to select a window on the first acquisition and reuse it.
+    Channels and settings are fixed across acquisitions.
+    """
+    with get_tdc(backend, port) as tdc:
+        return tdc.measure_coincidence(
+            bin_width=bin_width,
+            duration=duration,
+            ch_start=ch_start,
+            ch_stop=ch_stop,
+            ch_stop_delay=ch_stop_delay,
+            unit=unit,
+            window_start=window_start,
+            window_stop=window_stop,
+            method=method,
+            samples=samples,
+        )
+
+
+def heralding_gate(
+    backend: str = DEFAULT_TDC1_BACKEND,
+    port: Optional[str] = None,
+    duration: float = 1.0,
+    heralding_channel: int = 1,
+    gated_channels: Optional[List[int]] = None,
+    bins: int = 500,
+    bin_offset: int = 0,
+    samples: int = 1,
+    stop_delay: dict[int, int] | None = None,
+    store_events: bool = False,
+    detail_format: str = "flat",
+    store_histogram: bool = True,
+    bin_width: int | None = None,
+) -> HeraldingGateResult:
+    """Acquire associations for one heralding channel and fixed gated channels.
+
+    Duration is seconds per acquisition; samples defaults to one. Bin offset
+    and bins specify the gate in bin units. stop_delay maps actual gated
+    channel IDs to integer ps. Returned physical times also use integer ps.
+    Every herald opens a gate, including gates with no hits. Histograms are
+    optional; details are omitted unless store_events is True, then selected
+    by detail_format (flat or per_gate).
+    """
+    with get_tdc(backend, port) as tdc:
+        return tdc.measure_heralding_gate(
+            bin_width=bin_width,
+            duration=duration,
+            heralding_channel=heralding_channel,
+            gated_channels=[2, 3] if gated_channels is None else gated_channels,
+            bins=bins,
+            bin_offset=bin_offset,
+            samples=samples,
+            stop_delay=stop_delay,
+            store_events=store_events,
+            detail_format=detail_format,
+            store_histogram=store_histogram,
         )

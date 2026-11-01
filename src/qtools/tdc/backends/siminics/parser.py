@@ -172,8 +172,7 @@ def parse_words(
         if mask:
             marker = MarkerEvent(
                 mask=mask,
-                mode=mode,
-                raw_word=word,
+                photon_index=len(timestamps),
                 stream_index=stream_index,
             )
             marker_list.append(marker)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import enum
 import math
 from abc import ABC, abstractmethod
+from dataclasses import replace
 from typing import List, Optional
 
 import numpy as np
@@ -17,9 +18,10 @@ import numpy as np
 from qtools.tdc.data import (
     CoincidenceResult,
     DeviceInfo,
-    G2Result,
     SinglesResult,
     TimestampResult,
+    time_to_ps,
+    validate_bin_width,
 )
 
 
@@ -243,6 +245,10 @@ class TDCBackend(ABC):
             RuntimeError: Not connected or hardware error.
         """
     
+    def _bin_width(self, bin_width: int | None) -> int:
+        """Resolve an analysis bin width independently of hardware resolution."""
+        return validate_bin_width(self.resolution_ps if bin_width is None else bin_width)
+
     def get_g2(
         self,
         duration: float,
@@ -253,7 +259,8 @@ class TDCBackend(ABC):
         bin_offset: int = 0,
         unit: str = "ns",
         method: str = "software",
-    ) -> G2Result:
+        bin_width: int | None = None,
+    ) -> CoincidenceResult:
         """Compute the g²(τ) correlation histogram.
 
         The default software implementation acquires timestamps and delegates
@@ -268,13 +275,13 @@ class TDCBackend(ABC):
             ch_stop: Stop channel index (1-based, default: 2).
             ch_stop_delay: Time delay in specified ``unit`` added to stop channel (default: 0).
             bin_offset: Start of the correlation window in bins (default: 0).
-            unit: Time unit for ``ch_stop_delay`` and returned bin edges / total_time.
-                Supported units: ``'ns'`` (default) or ``'ps'``.
+            unit: Input time unit for ``ch_stop_delay``; results use integer ps.
             method: Implementation to use: ``"software"`` (default) or
                 ``"hardware"``.
+            bin_width: Analysis bin width in ps, or None for native resolution.
 
         Returns:
-            A ``G2Result`` containing the histogram, bin edges, count rates and
+            A ``CoincidenceResult`` containing the histogram, bin edges, count rates and
             the backend-reported live measurement time.
 
         Raises:
@@ -300,23 +307,17 @@ class TDCBackend(ABC):
                 "if the backend provides hardware g2."
             )
 
+        if bin_width is not None:
+            bin_width = validate_bin_width(bin_width)
         res = self.get_timestamps(duration)
-        resolution_ps = res.resolution_ps
+        width = validate_bin_width(res.resolution_ps) if bin_width is None else bin_width
         # Event timestamps do not mark the start/end of the acquisition gate:
         # their first-to-last span is shortened by random arrival gaps and can
         # be inflated by a corrupt or unwrapped timestamp.  ``total_time_ns``
         # is the backend-reported live time and is the correct rate denominator.
         integration_time = res.total_time_ns * 1e-9
 
-        if unit == "ps":
-            ch_stop_delay_ps = ch_stop_delay
-        elif unit == "ns":
-            ch_stop_delay_ps = ch_stop_delay * 1e3
-        elif unit == "ms":
-            ch_stop_delay_ps = ch_stop_delay * 1e6
-        else:
-            raise ValueError(f"Unsupported unit: {unit!r}")
-        ch_stop_delay_bin = ch_stop_delay_ps // resolution_ps
+        ch_stop_delay_ps = time_to_ps(ch_stop_delay, unit)
 
         # Lazy import to avoid a circular dependency: tdc.analysis.g2 imports
         # tdc.backends.base at module level.
@@ -328,10 +329,10 @@ class TDCBackend(ABC):
             ch_start=ch_start,
             ch_stop=ch_stop,
             bins=bins,
-            resolution_ps=resolution_ps,
+            resolution_ps=width,
             bin_offset=bin_offset,
             integration_time=integration_time,
-            delay=ch_stop_delay_bin,
+            stop_delay=ch_stop_delay_ps,
         )
 
     def get_coincidence(
@@ -344,13 +345,14 @@ class TDCBackend(ABC):
         window_start: Optional[int | float] = None,
         window_stop: Optional[int | float] = None,
         method: str = "software",
+        bin_width: int | None = None,
     ) -> CoincidenceResult:
         """Measure coincidence counts using software or backend hardware.
 
         The default software path acquires a g² histogram and counts bins in a
         physical delay window. Bins outside that window provide a normalized
-        background estimate. If no window is supplied, exactly one prominent
-        peak must be found automatically and its recommended window is printed.
+        background estimate. If no window is supplied, the highest prominent
+        peak is selected automatically and its recommended window is printed.
         Hardware-capable backends override this same method.
 
         Args:
@@ -358,12 +360,13 @@ class TDCBackend(ABC):
             ch_start: Reference channel index (1-based).
             ch_stop: Signal channel index (1-based).
             ch_stop_delay: Delay applied by ``get_g2`` in ``unit``.
-            unit: Time unit for delay and coincidence window (``ps``, ``ns``, or ``ms``).
-            window_start: Non-negative signal-window start in ``unit``. If
-                omitted together with ``window_stop``, a unique g² peak is
+            unit: Time unit for delay and coincidence window (``ps``, ``ns``, ``us``, or ``ms``).
+            window_start: Signal-window start in ``unit``. If
+                omitted together with ``window_stop``, the highest prominent g² peak is
                 selected automatically and the recommended window is printed.
             window_stop: Exclusive signal-window stop in ``unit``.
             method: ``"software"`` (default) or ``"hardware"``.
+            bin_width: Analysis bin width in ps, or None for native resolution.
 
         Returns:
             A ``CoincidenceResult`` with raw signal-window pairs and estimated
@@ -386,99 +389,61 @@ class TDCBackend(ABC):
         if (window_start is None) != (window_stop is None):
             raise ValueError("window_start and window_stop must be supplied together")
 
-        unit_to_ps = {"ps": 1.0, "ns": 1e3, "ms": 1e6}
-        if unit not in unit_to_ps:
-            raise ValueError(f"Unsupported unit: {unit!r}. Expected 'ps', 'ns', or 'ms'.")
-
-        # Coincidence uses a fixed zero-origin delay axis. ch_stop_delay is
-        # the only control that moves the stop channel relative to the start.
-        # Explicit windows reserve an additional right-side region for the
-        # accidental-background estimate.
+        factor = time_to_ps(1, unit)
+        width = self._bin_width(bin_width)
+        offset = 0
         if window_start is None:
             g2_bins = 500
         else:
-            resolution_ps = float(self.resolution_ps)
-            start_ps = float(window_start) * unit_to_ps[unit]
-            stop_ps = float(window_stop) * unit_to_ps[unit]
-            if not math.isfinite(start_ps) or not math.isfinite(stop_ps):
-                raise ValueError("coincidence window must be finite")
-            if start_ps < 0:
-                raise ValueError(
-                    "window_start must be non-negative; use ch_stop_delay "
-                    "to move the coincidence peak onto the delay axis"
-                )
+            start_ps = time_to_ps(window_start, unit)
+            stop_ps = time_to_ps(window_stop, unit)
             if stop_ps <= start_ps:
                 raise ValueError("window_stop must be greater than window_start")
-            start_bin = math.floor(start_ps / resolution_ps)
-            stop_bin = math.ceil(stop_ps / resolution_ps)
-            signal_bins = max(1, stop_bin - start_bin)
-            sideband_bins = max(20, min(500, signal_bins))
-            g2_bins = stop_bin + sideband_bins
+            start_bin = start_ps // width
+            stop_bin = math.ceil(stop_ps / width)
+            offset = min(0, start_bin)
+            sideband_bins = max(20, min(500, stop_bin - start_bin))
+            g2_bins = stop_bin - offset + sideband_bins
 
         g2 = self.get_g2(
-            duration=duration,
-            bins=g2_bins,
-            ch_start=ch_start,
-            ch_stop=ch_stop,
-            ch_stop_delay=ch_stop_delay,
-            unit=unit,
-            method=method,
+            duration=duration, bins=g2_bins, ch_start=ch_start, ch_stop=ch_stop,
+            ch_stop_delay=ch_stop_delay, bin_offset=offset, unit=unit, method=method,
+            bin_width=bin_width,
         )
-
+        histogram, edges = g2.histogram[0], g2.bin_edges[0]
         if window_start is None:
-            histogram = np.asarray(g2.histogram, dtype=float)
-            if histogram.size == 0 or float(np.max(histogram, initial=0.0)) <= 0:
+            if histogram.size == 0 or np.max(histogram, initial=0) <= 0:
                 raise ValueError("Cannot detect a coincidence peak in an empty histogram")
             peak = _find_coincidence_peak(histogram)
             if peak is None:
                 raise ValueError("Cannot detect a coincidence peak in the histogram")
-            window_start_bin = float(g2.bin_edges[peak])
-            window_stop_bin = float(g2.bin_edges[peak + 1])
-            window_start_value = window_start_bin * g2.resolution_ps / unit_to_ps[unit]
-            window_stop_value = window_stop_bin * g2.resolution_ps / unit_to_ps[unit]
+            start_ps, stop_ps = int(edges[peak]), int(edges[peak + 1])
             print(
                 "Recommended coincidence window: "
-                f"window_start={window_start_value:g} {unit}, "
-                f"window_stop={window_stop_value:g} {unit}"
+                f"window_start={start_ps / factor:g} {unit}, "
+                f"window_stop={stop_ps / factor:g} {unit}"
             )
         else:
-            window_start_bin = math.floor(
-                float(window_start) * unit_to_ps[unit] / g2.resolution_ps
-            )
-            window_stop_bin = math.ceil(
-                float(window_stop) * unit_to_ps[unit] / g2.resolution_ps
-            )
+            start_ps = (time_to_ps(window_start, unit) // g2.bin_width) * g2.bin_width
+            stop_ps = math.ceil(time_to_ps(window_stop, unit) / g2.bin_width) * g2.bin_width
 
         from qtools.tdc.analysis.efficiency import compute_coincidence
 
-        count, acc_count_perbin, accidental_count = compute_coincidence(
-            histogram=g2.histogram,
-            bin_edges=g2.bin_edges,
-            window_start=window_start_bin,
-            window_stop=window_stop_bin,
+        count, per_bin, accidental = compute_coincidence(
+            histogram=histogram, bin_edges=edges,
+            window_start=start_ps, window_stop=stop_ps,
         )
-        window_start_ps = window_start_bin * g2.resolution_ps
-        window_stop_ps = window_stop_bin * g2.resolution_ps
-        return CoincidenceResult(
-            count=count,
-            acc_count_perbin=acc_count_perbin,
-            accidental_count=accidental_count,
-            channel1_rate=g2.singles_start,
-            channel2_rate=g2.singles_stop,
-            integration_time=g2.integration_time,
-            order=2,
-            window_ps=int(round(window_stop_ps - window_start_ps)),
-            window_start_ps=window_start_ps,
-            window_stop_ps=window_stop_ps,
-            accidental_method="sideband",
-            method="software",
+        return replace(
+            g2, mode="window_count", window_start=[start_ps], window_stop=[stop_ps],
+            raw_counts=[count], accidental_counts_per_bin=[per_bin],
+            accidental_counts=[accidental], accidental_method=["sideband"],
         )
 
     # -- threshold control --------------------------------------------------
 
     @abstractmethod
     def set_threshold(self, threshold: float, channel: int | None = None) -> None:
-        """Set threshold voltage.
+        """Set threshold voltage in volts (V).
 
         A backend with a global threshold may ignore ``channel``. A backend
         with per-channel threshold control should apply the value to the
@@ -488,6 +453,20 @@ class TDCBackend(ABC):
             threshold: Threshold voltage value.
             channel: Channel index (1-based, e.g. 1..N), if applicable.
         """
+
+    def get_threshold(self, channel: int | None = None) -> float:
+        """Return the cached threshold in volts.
+
+        Hardware APIs do not expose a common readback operation, so backends
+        keep the last requested public value in ``_threshold_v``.  A backend
+        may override this method when it can query the instrument directly.
+        """
+        value = getattr(self, "_threshold_v", None)
+        if value is None:
+            value = getattr(self, "_init_threshold", None)
+        if value is None:
+            raise RuntimeError("threshold value is unavailable before configuration")
+        return float(value)
 
     # -- device discovery ---------------------------------------------------
 

@@ -61,6 +61,7 @@ class S15TDC2Backend(TDCBackend):
         self._device_path = device_path or DEFAULT_DEVICE_PATH
         self._dev = None
         self._connected = False
+        self._threshold_v = 0.6
 
     @property
     def name(self) -> str:
@@ -123,7 +124,8 @@ class S15TDC2Backend(TDCBackend):
                 outfile_path=outfile_path,
             )
             # Set default threshold
-            timestamp.threshold = kwargs.get("threshold", 0.6)
+            self._threshold_v = float(kwargs.get("threshold", self._threshold_v))
+            timestamp.threshold = self._threshold_v
             timestamp.fast = kwargs.get("fast", False)
 
             self._dev = timestamp
@@ -162,6 +164,7 @@ class S15TDC2Backend(TDCBackend):
 
         return SinglesResult(
             integration_time=actual_duration,
+            channels=np.arange(1, len(counts) + 1, dtype=np.uint8),
             counts=counts,
             count_rates=count_rates,
         )
@@ -206,8 +209,8 @@ class S15TDC2Backend(TDCBackend):
         if not self._connected or self._dev is None:
             raise RuntimeError("Device not connected")
 
-        voltage_V = float(threshold) / 1000.0 if threshold > 10 else float(threshold)
-        self._dev.threshold = voltage_V
+        self._threshold_v = float(threshold)
+        self._dev.threshold = self._threshold_v
 
     @classmethod
     def discover_devices(cls) -> List[DeviceInfo]:

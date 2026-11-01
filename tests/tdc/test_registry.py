@@ -7,9 +7,9 @@ import inspect
 import pytest
 
 import qtools.tdc.api
+import qtools.tdc.connection as connection
 from qtools.tdc.backends.base import TDCBackend
 from qtools.tdc.backends.s15_tdc1.config import DEFAULT_TDC1_BACKEND
-import qtools.tdc.connection as connection
 from qtools.tdc.connection import get_backend, list_backends
 from qtools.tdc.data import DeviceInfo
 
@@ -17,15 +17,11 @@ from qtools.tdc.data import DeviceInfo
 def test_registry_lookup():
     """Verify backend retrieval by name."""
     backends = list_backends()
+    assert DEFAULT_TDC1_BACKEND in backends
     for name in ("s15_tdc1", "exp_s15_tdc1"):
-        if name == DEFAULT_TDC1_BACKEND:
-            assert name in backends
-        else:
-            assert name not in backends
+        assert issubclass(get_backend(name), TDCBackend)
     with pytest.raises(KeyError):
         get_backend("non_existent_backend")
-    with pytest.raises(KeyError):
-        get_backend("s15_tdc1" if DEFAULT_TDC1_BACKEND == "exp_s15_tdc1" else "exp_s15_tdc1")
 
 
 def test_default_backend_matches_selection():

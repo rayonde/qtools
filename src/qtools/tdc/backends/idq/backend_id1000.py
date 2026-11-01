@@ -11,9 +11,9 @@ Features:
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
-import math
 import os
 import re
 import socket
@@ -29,9 +29,9 @@ from qtools.tdc.connection import register_backend
 from qtools.tdc.data import (
     CoincidenceResult,
     DeviceInfo,
-    G2Result,
     SinglesResult,
     TimestampResult,
+    time_to_ps,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,7 @@ class ID1000Backend(TDCBackend):
         self._connected = False
         self._resolution_ps = 1.0  # Default 1 ps for ID1000 in HIRES mode
         self._is_hires = True
+        self._threshold_v = -0.4
 
     @property
     def name(self) -> str:
@@ -203,6 +204,8 @@ class ID1000Backend(TDCBackend):
                 self._resolution_ps = 1.0 if hires else 100.0
 
             self._connected = True
+            if "threshold" in kwargs:
+                self.set_threshold(float(kwargs["threshold"]))
         except Exception as e:
             self.disconnect()
             raise ConnectionError(f"Failed to initialize ID1000 communication: {e}") from e
@@ -250,6 +253,7 @@ class ID1000Backend(TDCBackend):
         if not self.is_connected():
             raise RuntimeError("Device not connected")
 
+        self._threshold_v = float(threshold)
         channels_to_set = range(1, self.channel_count + 1) if channel is None else [channel]
         for ch in channels_to_set:
             if ch not in _INPUT_BLOCK_MAP:
@@ -331,8 +335,10 @@ class ID1000Backend(TDCBackend):
         window_start: Optional[int | float] = None,
         window_stop: Optional[int | float] = None,
         method: str = "hardware",
+        bin_width: int | None = None,
     ) -> CoincidenceResult:
         """Measure coincidence counts using hardware TSCO blocks or software analysis."""
+        width = self._bin_width(bin_width)
         if method == "software":
             return super().get_coincidence(
                 duration=duration,
@@ -343,6 +349,7 @@ class ID1000Backend(TDCBackend):
                 window_start=window_start,
                 window_stop=window_stop,
                 method="software",
+                bin_width=bin_width,
             )
 
         if method != "hardware":
@@ -351,7 +358,7 @@ class ID1000Backend(TDCBackend):
         if not self.is_connected():
             raise RuntimeError("Device not connected")
 
-        unit_to_ps = {"ps": 1.0, "ns": 1e3, "ms": 1e6}
+        unit_to_ps = {"ps": 1, "ns": 1000, "us": 1_000_000, "ms": 1_000_000_000}
         if unit not in unit_to_ps:
             raise ValueError(f"Unsupported unit: {unit!r}")
 
@@ -363,18 +370,17 @@ class ID1000Backend(TDCBackend):
             )
         tsco_block = _COINC_BLOCK_MAP[pair]
 
-        # Calculate coincidence window
-        if window_start is not None and window_stop is not None:
-            window_ps = int(round((float(window_stop) - float(window_start)) * unit_to_ps[unit]))
-            window_start_ps = float(window_start) * unit_to_ps[unit]
-            window_stop_ps = float(window_stop) * unit_to_ps[unit]
-        else:
-            window_ps = 10000  # Default 10 ns coincidence window
-            window_start_ps = 0.0
-            window_stop_ps = float(window_ps)
-
+        if duration <= 0:
+            raise ValueError("duration must be positive")
+        if (window_start is None) != (window_stop is None):
+            raise ValueError("window boundaries must be supplied together")
+        if ch_stop_delay != 0:
+            raise ValueError("ID1000 hardware coincidence does not support channel delay")
+        window_start_ps = 0 if window_start is None else time_to_ps(window_start, unit)
+        window_stop_ps = 10000 if window_stop is None else time_to_ps(window_stop, unit)
+        window_ps = window_stop_ps - window_start_ps
         if window_ps <= 0:
-            raise ValueError(f"Window must be positive, got {window_ps} ps")
+            raise ValueError("Window must be positive")
 
         # Load predefined coincidence configuration in hardware
         self.exec_scpi("DEVI:CONFI:LOAD COUNT")
@@ -385,8 +391,8 @@ class ID1000Backend(TDCBackend):
         self.exec_scpi(f"DELA8:VALU {window_ps * 3}")
 
         # Setup coincidence block window
-        self.exec_scpi(f"{tsco_block}:WIND:BEGI:DELA 0")
-        self.exec_scpi(f"{tsco_block}:WIND:END:DELA {window_ps}")
+        self.exec_scpi(f"{tsco_block}:WIND:BEGI:DELA {window_start_ps}")
+        self.exec_scpi(f"{tsco_block}:WIND:END:DELA {window_stop_ps}")
 
         exp_ns = max(int(duration * 1e9), 1)
         self.exec_scpi(f"{tsco_block}:COUN:MODE CYCL;INTE {exp_ns};RESEt")
@@ -398,26 +404,22 @@ class ID1000Backend(TDCBackend):
 
         # Read counts
         coinc_count = int(self.exec_scpi(f"{tsco_block}:COUNter?").strip())
-        rate1 = float(self.exec_scpi(f"INPU{ch_start}:COUNter?").strip()) / duration
-        rate2 = float(self.exec_scpi(f"INPU{ch_stop}:COUNter?").strip()) / duration
+        count1 = int(self.exec_scpi(f"INPU{ch_start}:COUNter?").strip())
+        rate1 = count1 / duration
+        count2 = int(self.exec_scpi(f"INPU{ch_stop}:COUNter?").strip())
+        rate2 = count2 / duration
 
         # Accidental coincidence background estimate
-        accidental_count = int(round(rate1 * rate2 * (window_ps * 1e-12) * duration))
-        acc_per_bin = accidental_count / max(1, window_ps)
-
+        accidental_count = rate1 * rate2 * window_ps * 1e-12 * duration
         return CoincidenceResult(
-            count=coinc_count,
-            acc_count_perbin=acc_per_bin,
-            accidental_count=accidental_count,
-            channel1_rate=rate1,
-            channel2_rate=rate2,
-            integration_time=duration,
-            order=2,
-            window_ps=window_ps,
-            window_start_ps=window_start_ps,
-            window_stop_ps=window_stop_ps,
-            accidental_method="poisson_rate",
-            method="hardware",
+            mode="window_count", bin_width=width, method="hardware",
+            channel_start=ch_start, channel_stop=ch_stop,
+            counts_start=[count1], counts_stop=[count2],
+            singles_start=[rate1], singles_stop=[rate2], integration_time=[duration],
+            stop_delay=[0], raw_counts=[coinc_count],
+            window_start=[window_start_ps], window_stop=[window_stop_ps],
+            accidental_counts=[accidental_count], accidental_method=["rate_product"],
+            accidental_counts_per_bin=[rate1 * rate2 * width * 1e-12 * duration],
         )
 
     def get_g2(
@@ -430,7 +432,8 @@ class ID1000Backend(TDCBackend):
         bin_offset: int = 0,
         unit: str = "ns",
         method: str = "software",
-    ) -> G2Result:
+        bin_width: int | None = None,
+    ) -> CoincidenceResult:
         """Compute the g2 correlation histogram.
         
         Software g2 delegates to tdc.analysis.g2 via get_timestamps().
@@ -451,6 +454,7 @@ class ID1000Backend(TDCBackend):
             bin_offset=bin_offset,
             unit=unit,
             method=method,
+            bin_width=bin_width,
         )
 
     def get_hardware_histogram(
@@ -462,12 +466,12 @@ class ID1000Backend(TDCBackend):
         ch_stop_delay: int | float = 0,
         unit: str = "ns",
         hist_index: int = 1,
-    ) -> G2Result:
+    ) -> CoincidenceResult:
         """Acquire Start-Stop histogram directly calculated by onboard hardware (HIST1..4)."""
         if not self.is_connected():
             raise RuntimeError("Device not connected")
 
-        unit_to_ps = {"ps": 1.0, "ns": 1e3, "ms": 1e6}
+        unit_to_ps = {"ps": 1, "ns": 1000, "us": 1_000_000, "ms": 1_000_000_000}
         if unit not in unit_to_ps:
             raise ValueError(f"Unsupported unit: {unit!r}")
 
@@ -477,16 +481,22 @@ class ID1000Backend(TDCBackend):
             # If user asks for bins in ns, scale bin width accordingly
             bin_width_ps = max(int(round(1000.0)), int(round(self._resolution_ps)))
 
-        # Setup hardware routing for HIST1
+        if isinstance(hist_index, bool) or not 1 <= int(hist_index) <= 4:
+            raise ValueError("hist_index must be an integer from 1 to 4")
+        hist_name = f"HIST{int(hist_index)}"
+
+        # Setup hardware routing for the selected histogram.
         start_block = _INPUT_BLOCK_MAP.get(ch_start, f"INPU{ch_start}")
         stop_block = _INPUT_BLOCK_MAP.get(ch_stop, f"INPU{ch_stop}")
 
         self.exec_scpi("DEVIce:CONF:LOAD HISTO")
-        self.exec_scpi(f"HIST1:REF:LINK {start_block}")
-        self.exec_scpi(f"HIST1:STOP:LINK {stop_block}")
+        self.exec_scpi(f"{hist_name}:REF:LINK {start_block}")
+        self.exec_scpi(f"{hist_name}:STOP:LINK {stop_block}")
 
-        if ch_stop_delay > 0 and ch_stop in (1, 2, 3, 4):
-            delay_ps = int(round(ch_stop_delay * unit_to_ps[unit]))
+        delay_ps = time_to_ps(ch_stop_delay, unit)
+        if delay_ps < 0:
+            raise ValueError("ID1000 hardware histogram requires nonnegative delay")
+        if ch_stop in (1, 2, 3, 4):
             self.exec_scpi(f"DELA{ch_stop}:VALU {delay_ps}")
 
         # Setup RECord timer
@@ -494,7 +504,7 @@ class ID1000Backend(TDCBackend):
         self.exec_scpi(f"REC:DURation {int(duration * 1e12)}")
 
         # Configure HIST1
-        self.exec_scpi(f"HIST1:BCOUnt {bins};BWID {bin_width_ps};FLUSh")
+        self.exec_scpi(f"{hist_name}:BCOUnt {bins};BWID {bin_width_ps};FLUSh")
 
         # Start acquisition
         self.exec_scpi("REC:PLAY")
@@ -504,23 +514,25 @@ class ID1000Backend(TDCBackend):
             time.sleep(0.1)
 
         # Retrieve histogram data
-        raw_hist = eval(self.exec_scpi("HIST1:DATA?").strip())
+        raw_hist = ast.literal_eval(self.exec_scpi(f"{hist_name}:DATA?").strip())
         histogram = np.array(raw_hist, dtype=np.uint64)
 
-        # Compute bin edges in bins
-        bin_edges = np.arange(len(histogram) + 1, dtype=np.int64)
+        # Express bin edges in physical picoseconds.
+        bin_edges = np.arange(len(histogram) + 1, dtype=np.int64) * bin_width_ps
 
         # Query singles
-        rate_start = float(self.exec_scpi(f"{start_block}:COUN?").strip()) / duration
-        rate_stop = float(self.exec_scpi(f"{stop_block}:COUN?").strip()) / duration
+        count_start = int(self.exec_scpi(f"{start_block}:COUN?").strip())
+        rate_start = count_start / duration
+        count_stop = int(self.exec_scpi(f"{stop_block}:COUN?").strip())
+        rate_stop = count_stop / duration
 
-        return G2Result(
-            histogram=histogram,
-            bin_edges=bin_edges.astype(np.float64),
-            singles_start=rate_start,
-            singles_stop=rate_stop,
-            integration_time=duration,
-            resolution_ps=float(bin_width_ps),
+        return CoincidenceResult(
+            mode="histogram", bin_width=bin_width_ps, method="hardware",
+            channel_start=ch_start, channel_stop=ch_stop,
+            counts_start=[count_start], counts_stop=[count_stop],
+            histogram=[histogram], bin_edges=[bin_edges],
+            singles_start=[rate_start], singles_stop=[rate_stop], integration_time=[duration],
+            stop_delay=[delay_ps], n_bins=[len(histogram)], stop_offset=[0],
         )
 
     def get_timestamps(self, duration: float, channels: Optional[List[int]] = None, **kwargs) -> TimestampResult:
@@ -537,6 +549,7 @@ class ID1000Backend(TDCBackend):
         output_dir = Path(kwargs.get("output_dir", Path.cwd()))
 
         # Check if DLT is reachable
+        dlt_ctx = None
         dlt_socket = None
         if ZMQ_AVAILABLE:
             try:
@@ -647,6 +660,8 @@ class ID1000Backend(TDCBackend):
         finally:
             if dlt_socket is not None:
                 dlt_socket.close(linger=0)
+            if dlt_ctx is not None:
+                dlt_ctx.term()
 
     # -- ID1000 Advanced Diagnostics & Status Helpers -------------------------
 

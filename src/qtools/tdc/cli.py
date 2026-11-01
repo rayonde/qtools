@@ -12,10 +12,10 @@ import kochen.logging
 import kochen.scriptutil
 import numpy as np
 
-from qtools.tdc.connection import get_backend, display_devices, discover_all
-from qtools.tdc.data import save_ts_binary, save_hdf5
 from qtools.tdc.backends.base import _find_coincidence_peak, _peak_width_bins
 from qtools.tdc.backends.s15_tdc1.config import DEFAULT_TDC1_BACKEND
+from qtools.tdc.connection import discover_all, display_devices, get_backend, list_backends
+from qtools.tdc.data import combine_samples, save_hdf5, save_ts_binary
 from qtools.tdc.measurement import TDC
 
 
@@ -216,9 +216,9 @@ def monitor_singles(args):
                 ts_res = args.api.backend.get_timestamps(args.time)
                 _, ext = os.path.splitext(sample_path)
                 if ext.lower() in (".h5", ".hdf5"):
-                    save_hdf5(sample_path, ts_res.timestamps, ts_res.channels, ts_res.resolution_ps)
+                    save_hdf5(sample_path, ts_res)
                 else:
-                    save_ts_binary(sample_path, ts_res.timestamps, ts_res.channels, ts_res.resolution_ps)
+                    save_ts_binary(sample_path, ts_res)
                 print(f"Raw timestamps saved to: {sample_path}")
             except Exception as e:
                 print(f"Error saving raw timestamps: {e}", file=sys.stderr)
@@ -310,9 +310,9 @@ def monitor_pairs(args):
             timestamps = args.api.backend.get_timestamps(args.time)
             _, ext = os.path.splitext(raw_path)
             if ext.lower() in (".h5", ".hdf5"):
-                save_hdf5(raw_path, timestamps.timestamps, timestamps.channels, timestamps.resolution_ps)
+                save_hdf5(raw_path, timestamps)
             else:
-                save_ts_binary(raw_path, timestamps.timestamps, timestamps.channels, timestamps.resolution_ps)
+                save_ts_binary(raw_path, timestamps)
             print(f"Raw timestamps saved to: {raw_path}")
         except Exception as exc:
             print(f"Error saving raw timestamps: {exc}", file=sys.stderr)
@@ -345,10 +345,10 @@ def _monitor_pairs_hardware(args):
         ch_stop=args.ch_stop,
         method="hardware",
     )
-    print(f"Integration time: {result.integration_time:.3f} s")
-    print(f"Coincidence pairs (hardware): {result.count}")
-    print(f"Channel {args.ch_start} rate: {result.channel1_rate:.1f} cps")
-    print(f"Channel {args.ch_stop} rate: {result.channel2_rate:.1f} cps")
+    print(f"Integration time: {result.integration_time[0]:.3f} s")
+    print(f"Coincidence pairs (hardware): {result.raw_counts[0]}")
+    print(f"Channel {args.ch_start} rate: {result.singles_start[0]:.1f} cps")
+    print(f"Channel {args.ch_stop} rate: {result.singles_stop[0]:.1f} cps")
     return result
 
 
@@ -396,7 +396,7 @@ def _auto_detect_window(args):
         bins=500,
         unit="ns",
     )
-    hist = np.asarray(g2res.histogram, dtype=float)
+    hist = np.asarray(g2res.histogram[0], dtype=float)
     if hist.size == 0 or float(np.max(hist, initial=0.0)) <= 0:
         raise ValueError("Cannot detect a coincidence peak in an empty histogram")
     peak = _find_coincidence_peak(hist)
@@ -406,7 +406,7 @@ def _auto_detect_window(args):
     half = max((fwhm + 1) // 2, 1)  # FWHM/2 rounded up, at least 1 bin per side
     ws = max(peak - half, 0)
     we = min(peak + half, hist.size - 1)
-    res_ns = g2res.resolution_ps / 1e3
+    res_ns = g2res.bin_width / 1e3
     print(
         f"Auto-detected coincidence window: window_start={ws}, window_stop={we} "
         f"(peak bin {peak}, FWHM {fwhm} bins, {res_ns:g} ns/bin)"
@@ -444,7 +444,7 @@ def _monitor_coincidence_hardware(args):
 
         stream = open(export_path, "w", newline="", encoding="utf-8", buffering=1)
         writer = csv.writer(stream)
-        writer.writerow(["TIME", "INTTIME", "PAIRS", "SINGLES1", "SINGLES2", "S1/S2"])
+        writer.writerow(["TIME", "SAMPLE", "INTTIME", "PAIRS", "SINGLES1", "SINGLES2", "S1/S2"])
         stream.flush()
 
     results = []
@@ -460,19 +460,19 @@ def _monitor_coincidence_hardware(args):
             timestamp = dt.datetime.now().strftime("%H%M%S")
             if iteration % 10 == 0:
                 print_fixedwidth("TIME", "ITIME", "PAIRS", "SINGLES1", "SINGLES2", "S1/S2")
-            ratio = _singles_ratio(result.channel1_rate, result.channel2_rate)
+            ratio = _singles_ratio(result.singles_start[0], result.singles_stop[0])
             print_fixedwidth(
                 timestamp,
-                f"{result.integration_time:.2f}",
-                style(f"{float(result.count):.1f}", fg="green"),
-                f"{result.channel1_rate:.1f}",
-                f"{result.channel2_rate:.1f}",
+                f"{result.integration_time[0]:.2f}",
+                style(f"{float(result.raw_counts[0]):.1f}", fg="green"),
+                f"{result.singles_start[0]:.1f}",
+                f"{result.singles_stop[0]:.1f}",
                 f"{ratio:.3f}",
             )
             if writer:
                 writer.writerow([
-                    timestamp, f"{result.integration_time:.2f}", f"{result.count:.6f}",
-                    f"{result.channel1_rate:.6f}", f"{result.channel2_rate:.6f}",
+                    timestamp, iteration + 1, f"{result.integration_time[0]:.2f}", f"{result.raw_counts[0]:.6f}",
+                    f"{result.singles_start[0]:.6f}", f"{result.singles_stop[0]:.6f}",
                     f"{ratio:.3f}",
                 ])
                 stream.flush()
@@ -481,6 +481,9 @@ def _monitor_coincidence_hardware(args):
     finally:
         if stream:
             stream.close()
+    if results:
+        combined = combine_samples(results)
+        print(f"Samples: {combined.samples}; raw pair rate: mean={combined.raw_pair_rate_mean:g} cps; std={combined.raw_pair_rate_std}")
     if getattr(args, "plot", False):
         _plot_coincidence_samples(args, results)
     return results
@@ -496,18 +499,18 @@ def _plot_coincidence_samples(args, results):
 
     sample_numbers = np.arange(1, len(results) + 1)
     if getattr(args, "hardware", False):
-        pairs = [float(result.count) for result in results]
+        pairs = [float(result.raw_counts[0]) for result in results]
         pairs_ylabel = "pair count"
     else:
         pairs = [float(result["net_pair_rate"]) for result in results]
         pairs_ylabel = "net pair rate (cps)"
     singles_start = [
-        float(result.channel1_rate) if getattr(args, "hardware", False)
+        float(result.singles_start[0]) if getattr(args, "hardware", False)
         else float(result["start_rate"])
         for result in results
     ]
     singles_stop = [
-        float(result.channel2_rate) if getattr(args, "hardware", False)
+        float(result.singles_stop[0]) if getattr(args, "hardware", False)
         else float(result["stop_rate"])
         for result in results
     ]
@@ -570,7 +573,7 @@ def _monitor_coincidence_stats(args):
         stream = open(export_path, "w", newline="", encoding="utf-8", buffering=1)
         writer = csv.writer(stream)
         writer.writerow([
-            "TIME", "INTTIME", "PAIRS", "ACC", "SINGLES1", "SINGLES2",
+            "TIME", "SAMPLE", "INTTIME", "PAIRS", "ACC", "SINGLES1", "SINGLES2",
             "S1/S2", "EFF1", "EFF2", "EFF_AVG",
         ])
         stream.flush()
@@ -609,7 +612,7 @@ def _monitor_coincidence_stats(args):
             )
             if writer:
                 writer.writerow([
-                    timestamp, f"{inttime:.2f}", f"{pairs:.6f}", f"{acc:.6f}",
+                    timestamp, iteration + 1, f"{inttime:.2f}", f"{pairs:.6f}", f"{acc:.6f}",
                     f"{s1:.6f}", f"{s2:.6f}", f"{ratio:.3f}",
                     f"{e1:.6f}", f"{e2:.6f}", f"{eavg:.6f}",
                 ])
@@ -619,6 +622,10 @@ def _monitor_coincidence_stats(args):
     finally:
         if stream:
             stream.close()
+    if results:
+        rates = [float(result["net_pair_rate"]) for result in results]
+        std = float(np.std(rates, ddof=1)) if len(rates) > 1 else None
+        print(f"Samples: {len(rates)}; net pair rate: mean={np.mean(rates):g} cps; std={std}")
     if getattr(args, "plot", False):
         _plot_coincidence_samples(args, results)
     return results
@@ -702,7 +709,7 @@ def make_parser(help_verbosity: int = 1):
     )
     pgroup.add_argument(
         "-b", "--backend", metavar="", default=DEFAULT_TDC1_BACKEND,
-        choices=[DEFAULT_TDC1_BACKEND, "s15_tdc2", "tdc1610", "idq"],
+        choices=sorted(list_backends()),
         help=f"TDC hardware backend to use (default: '{DEFAULT_TDC1_BACKEND}')",
     )
     pgroup.add_argument(

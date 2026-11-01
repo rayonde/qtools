@@ -19,9 +19,12 @@ import pytest
 import serial
 
 from qtools.tdc.backends.base import BackendCapability
-from qtools.tdc.backends.s15_tdc1.exp_backend import CHANNEL_COUNT, RESOLUTION_PS, ExpS15TDC1Backend
-from qtools.tdc.data import G2Result, SinglesResult, TimestampResult
-
+from qtools.tdc.backends.s15_tdc1.exp_backend import (
+    CHANNEL_COUNT,
+    RESOLUTION_PS,
+    ExpS15TDC1Backend,
+)
+from qtools.tdc.data import CoincidenceResult, SinglesResult, TimestampResult
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
@@ -697,7 +700,7 @@ class TestDataAcquisition:
     def test_get_timestamps_returns_correct_type(self) -> None:
         result = self.backend.get_timestamps(duration=0.1)
         assert isinstance(result, TimestampResult)
-        assert result.resolution_ps == RESOLUTION_PS
+        assert result.bin_width == RESOLUTION_PS
         assert result.timestamps.dtype == np.int64
         assert result.channels.dtype == np.uint8
         assert result.total_events == len(result.timestamps)
@@ -741,34 +744,34 @@ class TestDataAcquisition:
 
     def test_compute_g2_returns_correct_type(self) -> None:
         result = self.backend.get_g2(duration=0.1, bins=100)
-        assert isinstance(result, G2Result)
-        assert len(result.histogram) == 100
-        assert len(result.bin_edges) == 101
-        assert result.histogram.dtype == np.uint64
-        assert result.resolution_ps == RESOLUTION_PS
+        assert isinstance(result, CoincidenceResult)
+        assert len(result.histogram[0]) == 100
+        assert len(result.bin_edges[0]) == 101
+        assert result.histogram[0].dtype == np.uint64
+        assert result.bin_width == RESOLUTION_PS
 
     def test_compute_g2_bin_edges_linear(self) -> None:
         result = self.backend.get_g2(duration=0.1, bins=50, bin_offset=10)
-        diffs = np.diff(result.bin_edges)
+        diffs = np.diff(result.bin_edges[0])
         # Should be uniform (resolution_ps steps)
         assert np.allclose(diffs, diffs[0])
 
     def test_compute_g2_histogram_non_negative(self) -> None:
         result = self.backend.get_g2(duration=0.1, bins=100)
-        assert (result.histogram >= 0).all()
+        assert (result.histogram[0] >= 0).all()
 
     def test_compute_g2_with_delay(self) -> None:
         result = self.backend.get_g2(
             duration=0.1, bins=100, ch_stop_delay=5, unit="ns"
         )
-        assert isinstance(result, G2Result)
+        assert isinstance(result, CoincidenceResult)
 
     def test_compute_g2_empty_no_crash(self) -> None:
-        """Even with no events, compute_g2 should return a valid (empty) G2Result."""
+        """Even with no events, compute_g2 should return a valid (empty) CoincidenceResult."""
         # Use a very short acquisition to minimise event count
         result = self.backend.get_g2(duration=0.02, bins=10)
-        assert isinstance(result, G2Result)
-        assert len(result.histogram) == 10
+        assert isinstance(result, CoincidenceResult)
+        assert len(result.histogram[0]) == 10
 
     def test_compute_g2_invalid_unit_raises(self) -> None:
         with pytest.raises(ValueError, match="Unsupported unit"):

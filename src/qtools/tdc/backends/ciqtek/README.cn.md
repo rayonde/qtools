@@ -39,7 +39,7 @@
 |---|---|---|---|---|
 | `get_singles()` | `SinglesResult` | 支持 | `counts`（17, uint64）、`count_rates`（cps）、`integration_time` | `GetCpsByUser()` → 计数率 `[start, stop1..16]`；counts = `rate × 时长` |
 | `get_timestamps()` | `TimestampResult` | **不支持** | — | SDK 没有原始时间戳流 |
-| `compute_g2()` | `G2Result` | **不支持** | — | 软件 g² 需要原始时间戳 |
+| `compute_g2()` | `CoincidenceResult` | **不支持** | — | 软件 g² 需要原始时间戳 |
 
 ## Raw Timestamps vs. 直方图（重要）
 
@@ -87,7 +87,7 @@ accord = backend.get_accord_counts()
 ## 使用方法
 
 ```python
-from tdc.connection import get_backend
+from qtools.tdc.connection import get_backend
 
 backend_cls = get_backend("tdc1610")
 backend = backend_cls()

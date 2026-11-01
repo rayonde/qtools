@@ -5,19 +5,17 @@ import pytest
 
 from qtools.tdc.backends.ciqtek.backend import TDC1610Backend
 from qtools.tdc.backends.s15_tdc1.exp_backend import ExpS15TDC1Backend
-from qtools.tdc.data import G2Result, TimestampResult
+from qtools.tdc.data import CoincidenceResult, TimestampResult
 
 
 def fake_g2(histogram, resolution_ps=1000.0):
     histogram = np.asarray(histogram, dtype=np.uint64)
-    return G2Result(
-        histogram=histogram,
-        bin_edges=np.arange(len(histogram) + 1, dtype=np.float64),
-        singles_start=100.0,
-        singles_stop=200.0,
-        integration_time=1.0,
-        resolution_ps=resolution_ps,
-    )
+    return CoincidenceResult(mode="histogram", bin_width=int(resolution_ps), channel_start=1, channel_stop=2,
+            counts_start=[int(100.0 * 1.0)], counts_stop=[int(200.0 * 1.0)],
+            singles_start=[100.0], singles_stop=[200.0], integration_time=[1.0], stop_delay=[0],
+            n_bins=[len(histogram)], stop_offset=[0], histogram=[histogram],
+            bin_edges=[np.arange(len(histogram) + 1, dtype=np.int64) * int(resolution_ps)],
+            )
 
 
 def test_software_coincidence_counts_window_and_normalized_background(monkeypatch):
@@ -39,17 +37,17 @@ def test_software_coincidence_counts_window_and_normalized_background(monkeypatc
         window_stop=4,
     )
 
-    assert result.count == 13
-    assert result.acc_count_perbin == pytest.approx(1.5)
-    assert result.accidental_count == pytest.approx(3.0)
-    assert result.background_count == pytest.approx(3.0)
-    assert result.net_count == pytest.approx(10.0)
-    assert result.accidental_method == "sideband"
-    assert result.window_start_ps == pytest.approx(2000.0)
-    assert result.window_stop_ps == pytest.approx(4000.0)
+    assert result.raw_counts[0] == 13
+    assert result.accidental_counts_per_bin[0] == pytest.approx(1.5)
+    assert result.accidental_counts[0] == pytest.approx(3.0)
+    assert result.accidental_counts[0] == pytest.approx(3.0)
+    assert result.net_counts[0] == pytest.approx(10.0)
+    assert result.accidental_method[0] == "sideband"
+    assert result.window_start[0] == pytest.approx(2000.0)
+    assert result.window_stop[0] == pytest.approx(4000.0)
     assert result.method == "software"
     assert captured["bins"] > 4
-    assert "bin_offset" not in captured
+    assert captured["bin_offset"] == 0
 
 
 def test_software_coincidence_auto_detects_one_peak(monkeypatch, capsys):
@@ -64,24 +62,33 @@ def test_software_coincidence_auto_detects_one_peak(monkeypatch, capsys):
 
     result = backend.get_coincidence(duration=1.0)
 
-    assert result.count == 10
-    assert result.window_start_ps == pytest.approx(2000.0)
-    assert result.window_stop_ps == pytest.approx(3000.0)
+    assert result.raw_counts[0] == 10
+    assert result.window_start[0] == pytest.approx(2000.0)
+    assert result.window_stop[0] == pytest.approx(3000.0)
     assert "Recommended coincidence window: window_start=2 ns, window_stop=3 ns" in capsys.readouterr().out
     assert captured["bins"] == 500
-    assert "bin_offset" not in captured
+    assert captured["bin_offset"] == 0
 
 
-def test_software_coincidence_rejects_negative_window_start(monkeypatch):
+def test_software_coincidence_supports_negative_window_start(monkeypatch):
     backend = ExpS15TDC1Backend()
-    monkeypatch.setattr(backend, "get_g2", lambda **kwargs: fake_g2([0, 1, 10, 1, 0]))
+    captured = {}
 
-    with pytest.raises(ValueError, match="use ch_stop_delay"):
-        backend.get_coincidence(
-            duration=1.0,
-            window_start=-1,
-            window_stop=1,
+    def acquire(**kwargs):
+        captured.update(kwargs)
+        from qtools.tdc.analysis.g2 import compute_g2
+        return compute_g2(
+            timestamps_ps=np.array([5000, 4000], dtype=np.int64),
+            channels=np.array([1, 2], dtype=np.uint8), ch_start=1, ch_stop=2,
+            bins=kwargs["bins"], bin_offset=kwargs["bin_offset"],
+            resolution_ps=backend.resolution_ps, integration_time=1.0,
         )
+
+    monkeypatch.setattr(backend, "get_g2", acquire)
+    result = backend.get_coincidence(duration=1.0, window_start=-2, window_stop=2)
+    assert result.raw_counts == [1]
+    assert result.window_start == [-2000]
+    assert captured["bin_offset"] == -1
 
 
 def test_peak_width_bins_measures_fwhm():
@@ -105,9 +112,9 @@ def test_software_coincidence_selects_highest_of_multiple_peaks(monkeypatch, cap
 
     result = backend.get_coincidence(duration=1.0)
 
-    assert result.count == 5
-    assert result.window_start_ps == pytest.approx(2000.0)
-    assert result.window_stop_ps == pytest.approx(3000.0)
+    assert result.raw_counts[0] == 5
+    assert result.window_start[0] == pytest.approx(2000.0)
+    assert result.window_stop[0] == pytest.approx(3000.0)
     assert "Recommended coincidence window: window_start=2 ns, window_stop=3 ns" in capsys.readouterr().out
 
 
@@ -128,12 +135,12 @@ def test_tdc1_hardware_pairs_mapping(monkeypatch):
         method="hardware",
     )
 
-    assert result.count == 12
-    assert result.channel1_rate == pytest.approx(50.0)
-    assert result.channel2_rate == pytest.approx(200.0)
-    assert result.acc_count_perbin is None
-    assert result.accidental_count is None
-    assert result.background_count is None
+    assert result.raw_counts[0] == 12
+    assert result.singles_start[0] == pytest.approx(50.0)
+    assert result.singles_stop[0] == pytest.approx(200.0)
+    assert result.accidental_counts_per_bin is None
+    assert result.accidental_counts is None
+    assert result.accidental_counts is None
     assert result.method == "hardware"
 
 
@@ -185,15 +192,15 @@ def test_ciqtek_hardware_accord_mapping(monkeypatch):
         method="hardware",
     )
 
-    assert result.count == 17
-    assert result.channel1_rate == 101
-    assert result.channel2_rate == 202
-    assert result.window_ps == 8000
-    assert result.acc_count_perbin is None
-    assert result.accidental_count == pytest.approx(
-        101 * 202 * 8e-9 * result.integration_time
+    assert result.raw_counts[0] == 17
+    assert result.singles_start[0] == 101
+    assert result.singles_stop[0] == 202
+    assert result.window_width[0] == 8000
+    assert result.accidental_counts_per_bin is None
+    assert result.accidental_counts[0] == pytest.approx(
+        101 * 202 * 8e-9 * result.integration_time[0]
     )
-    assert result.accidental_method == "rate_product"
+    assert result.accidental_method[0] == "rate_product"
     assert ("algorithm", 2) in calls
     assert ("accord", (8000, 1, 2)) in calls
     assert ("channel", {"channels": [2], "delay": 4000}) in calls

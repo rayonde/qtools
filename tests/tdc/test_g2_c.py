@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from qtools.tdc.analysis.g2 import compute_g2, _compute_g2_python
+from qtools.tdc.analysis.g2 import _compute_g2_python, compute_g2
 
 
 def test_g2_c_int_based_computation():
@@ -59,10 +59,10 @@ def test_g2_c_int_based_computation():
     ref_hist = _compute_g2_python(t1_ref, t2_ref, bins)
 
     # Assert identical
-    np.testing.assert_array_equal(res.histogram, ref_hist,
+    np.testing.assert_array_equal(res.histogram[0], ref_hist,
                                   err_msg="C/native g2 output must match Python reference")
-    assert res.histogram.sum() > 0
-    assert res.n_bins == bins
+    assert res.histogram[0].sum() > 0
+    assert res.n_bins[0] == bins
 
 
 def test_g2_empty_input_returns_offset_histogram():
@@ -78,8 +78,8 @@ def test_g2_empty_input_returns_offset_histogram():
         integration_time=0.5,
     )
 
-    np.testing.assert_array_equal(res.histogram, np.zeros(4, dtype=np.uint64))
-    np.testing.assert_array_equal(res.bin_edges, np.arange(-3, 2, dtype=np.float64))
-    assert res.singles_start == 0.0
-    assert res.singles_stop == 0.0
-    assert res.integration_time == 0.5
+    np.testing.assert_array_equal(res.histogram[0], np.zeros(4, dtype=np.uint64))
+    np.testing.assert_array_equal(res.bin_edges[0], np.arange(-3, 2, dtype=np.int64) * 2)
+    assert res.singles_start[0] == 0.0
+    assert res.singles_stop[0] == 0.0
+    assert res.integration_time[0] == 0.5

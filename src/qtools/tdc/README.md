@@ -1,8 +1,8 @@
 # TDC Python Control Library
 
-A unified Python library and Command Line Interface (CLI) to interface with and control several common Time-to-Digital Converter (TDC) devices (including **S-Fifteen TDC1**, **S-Fifteen TDC2**, **Simulated devices**, and custom backends like **IDQ** and **CIQTEK TDC1610**).
+A unified Python library and Command Line Interface (CLI) to interface with and control several common Time-to-Digital Converter (TDC) devices (including **S-Fifteen TDC1**, **S-Fifteen TDC2**, custom backends like **IDQ** and **CIQTEK TDC1610**).
 
-本项目是一个统一的 Python 库和命令行工具（CLI），用于连接和控制多种常见的时间数字转换器（TDC）设备（包括 **S-Fifteen TDC1**、**S-Fifteen TDC2**、**仿真设备**以及 **IDQ** 和 **CIQTEK TDC1610** 驱动）。
+本项目是一个统一的 Python 库和命令行工具（CLI），用于连接和控制多种常见的时间数字转换器（TDC）设备（包括 **S-Fifteen TDC1**、**S-Fifteen TDC2**、**IDQ** 和 **CIQTEK TDC1610** 驱动）。
 
 ---
 
@@ -19,9 +19,9 @@ The C extension modules (for high-performance coincidences calculations) can be 
 ```bash
 # From the project root:
 mkdir -p build && cd build
-cmake ../csrc
+cmake ../src/qtools/tdc/csrc
 make
-cp libcoincidences.* ../src/tdc/_native/
+cp libcoincidences.* ../src/qtools/tdc/_native/
 ```
 
 ---
@@ -56,7 +56,7 @@ data export & raw options (available for all REPL commands):
   -r, --raw       Export raw timestamps (.ts/.h5)
 ```
 
-All timing parameters are in **bin units** (multiples of the backend's time resolution).
+CLI software windows and delays use **bin units** (multiples of the backend resolution). Python result objects use physical integer time values, in picoseconds by default.
 
 ---
 
@@ -91,10 +91,10 @@ Without `--samples` it runs continuously; with `--samples NUM` it prints NUM mea
 
 ```bash
 # Monitor singles for 3 iterations, only channels 1 and 2
-tdc singles --backend simulator -s 3 -c 1 2
+tdc singles --backend exp_s15_tdc1 -s 3 -c 1 2
 
 # Export singles data to CSV
-tdc singles --backend simulator -e --raw
+tdc singles --backend exp_s15_tdc1 -e --raw
 ```
 
 ---
@@ -118,10 +118,10 @@ Measures one start/stop g² histogram.
 
 ```bash
 # Measure coincidences between ch1 and ch4 with explicit window
-tdc pairs --backend simulator --ch_start 1 --ch_stop 4 --ws 50 --we 200
+tdc pairs --backend exp_s15_tdc1 --ch_start 1 --ch_stop 4 --ws 50 --we 200
 
 # With histogram display and data export
-tdc pairs --backend simulator -H --export data.csv
+tdc pairs --backend exp_s15_tdc1 -H --export data.csv
 ```
 
 ---
@@ -129,6 +129,7 @@ tdc pairs --backend simulator -H --export data.csv
 ### 5. `coincidences` Subcommand
 
 Measures coincidence statistics in a selected window. Without `--samples` it continuously prints one measurement at a time; with `--samples NUM` it prints NUM result rows.
+Finite runs also report the sample count, mean rate, and sample standard deviation (unavailable for a single sample). CSV exports include a `SAMPLE` column.
 
 | Option | Description |
 |--------|-------------|
@@ -143,10 +144,10 @@ Measures coincidence statistics in a selected window. Without `--samples` it con
 
 ```bash
 # Print one coincidence result
-tdc coincidences --backend simulator --ch_start 1 --ch_stop 4 --ws 50 --we 200
+tdc coincidences --backend exp_s15_tdc1 --ch_start 1 --ch_stop 4 --ws 50 --we 200
 
 # Print five coincidence results and export the result rows
-tdc coincidences --backend simulator -s 5 --ws 50 --we 200 --export results.csv
+tdc coincidences --backend exp_s15_tdc1 -s 5 --ws 50 --we 200 --export results.csv
 ```
 
 ---
@@ -163,116 +164,142 @@ Launches an IPC (Inter-Process Communication) network service.
 | `--secret` | Symmetric secret for authentication |
 
 ```bash
-tdc service --backend simulator --ip 0.0.0.0 --port 4440
+tdc service --backend exp_s15_tdc1 --ip 0.0.0.0 --port 4440
 ```
 
 ---
 
-## Python API Usage
+## Python API
 
-All timing parameters are in **bin units** (the backend's native resolution, e.g. 2 ps for S15 TDC2).
+Discover attached hardware and configure an analysis bin width in integer ps:
 
 ```python
-from tdc.connection import get_backend
-from tdc import TDC, discover_all, get_device
+from qtools.tdc import TDC, get_tdc, list_tdc
 
-# Ethernet devices expose their backend and endpoint in DeviceInfo. The
-# discovery result can be passed directly to get_device().
-for info in discover_all(method="ethernet"):
-    with get_device(info) as device:
-        print(info)
-        print(device.measure_singles(duration=1.0))
+devices = list_tdc()  # Scan attached hardware, print a table, return DeviceInfo records
 
-# 1. Retrieve the registered backend class
-backend_cls = get_backend("simulator")
-backend = backend_cls()
+tdc = TDC(backend="s15_tdc1", bin_width=2_000)
+# Equivalent factory form:
+tdc = get_tdc(backend="s15_tdc1", bin_width=2_000)
 
-# 2. Connect to hardware (supports context-manager protocol)
-with backend:
-    backend.connect(device_path="")  # Path is empty for simulator
-
-    # 3. Wrap in high-level TDC interface
-    device = TDC(backend)
-
-    # 4. Measure singles rates
-    duration, counts = device.measure_singles(duration=1.0)
-    print(f"Singles counts: {counts} counts/s over {duration}s")
-
-    # 5. Measure dual-channel coincidences (bin-based parameters)
-    res = device.measure_pairs(
-        duration=1.0,
-        ch_start=0,       # channel 1 (0-indexed)
-        ch_stop=3,        # channel 4 (0-indexed)
-        window_start=50,  # start in bins
-        window_stop=200,  # stop in bins
-        delay=10,         # 10 bins delay compensation
+with tdc:  # Open the connection; disconnect when leaving the context
+    result = tdc.measure_g2(duration=1.0, ch_start=1, ch_stop=2, bins=500)
+    print(result.bin_width)  # 2000 ps = 2 ns
+    finer = tdc.measure_g2(
+        duration=1.0, ch_start=1, ch_stop=2, bins=500, bin_width=1_000,
     )
-    # Result is a dict; net rates and efficiencies are per second.
-    print(f"Coincidences: {res['net_pair_rate']:.1f} cps, "
-          f"Accidental: {res['acc_pair_rate']:.1f} cps")
-    print(f"Heralding efficiency: {res['eff_avg']:.2%}")
 
-    # 6. Measure 3-fold triplet coincidence
-    triplet_res = device.measure_triplet(
-        duration=1.0,
-        ch_ref=0,      # reference channel
-        ch_sig1=1,     # first signal channel
-        ch_sig2=2,     # second signal channel
-        bins=500,
-    )
-    print(f"Triplet: hist_21 peaks at {triplet_res.hist_21.argmax()}")
-
-    # 7. Measure N-fold gate coincidence
-    gate_res = device.measure_gate(
-        duration=1.0,
-        ch_ref=0,
-        ch_signals=[1, 2, 3],  # N-1 signal channels
-        bins=500,
-    )
-    print(f"Gate: {len(gate_res.channels)}-fold count = {gate_res.n_fold_count}")
+if devices:
+    tdc = get_tdc(devices[0], bin_width=2_000)
 ```
 
----
+`get_tdc` replaces `get_device`. Both `TDC` and `get_tdc` accept a backend name or a discovered `DeviceInfo`, plus backend constructor options. `TDC` also accepts an existing backend instance. Construction leaves the hardware disconnected; the context opens and closes it. Explicit backend selection supports both `s15_tdc1` and `exp_s15_tdc1` regardless of the configured default.
+
+The width always uses ps, independently of `unit`. A per-measurement `bin_width` overrides the instance default for that call; when both are omitted, analysis uses the native timestamp resolution. It applies to g², coincidence, pair, triplet, gate, and heralding measurements, including repetitions and the one-shot functions. `bins` and `bin_offset` still count bins, so changing the width changes their physical span. Raw timestamps and their hardware `resolution_ps` are unaffected. For hardware scalar counters without a histogram, the width is analysis metadata; gate limits and timing still follow the device's hardware capabilities.
+
+Import the library as `qtools.tdc`. Channel IDs follow the selected backend; the S15 TDC1 examples below use channels 1–4. Repeated measurements keep the same result class and channel configuration:
+
+```python
+from qtools.tdc import get_tdc
+
+with get_tdc("exp_s15_tdc1") as device:
+    singles = device.measure_singles(duration=1.0, num=1)
+    duration, counts = singles[0]
+
+    result = device.measure_coincidence(
+        duration=1.0, ch_start=1, ch_stop=2,
+        window_start=0, window_stop=10, unit="ns", samples=5,
+    )
+    print(result.samples)                  # 5
+    print(result.raw_counts)               # One count per acquisition
+    print(result.raw_pair_rate)            # One rate per acquisition
+    print(result.raw_pair_rate_mean)       # Arithmetic mean in counts/s
+    print(result.raw_pair_rate_std)        # Sample standard deviation
+    print(result.net_pair_rate_mean)
+
+    histogram = device.measure_g2(
+        duration=1.0, ch_start=1, ch_stop=2, bins=500, samples=3,
+    )
+    print(histogram.histogram[0])          # First acquisition
+    print(histogram.bin_edges[0])          # Integer ps, length n_bins + 1
+    print(histogram.normalized[0])         # First normalized g² curve
+```
+
+`CoincidenceResult`, `MultiCoincidenceResult`, and `HeraldingGateResult` all use `samples=1` by default. Measurement values are lists even for one acquisition; `bin_width` is one shared integer. Rates divide each acquisition's counts by its actual live time in seconds. Means are arithmetic means of those rates, and standard deviations use `ddof=1`; a single sample has `std=None`. Net rates remain `None` when no accidental estimate is available.
+
+Delay and window inputs to `measure_g2`/`measure_coincidence` use `unit` (`ps`, `ns`, `us`, or `ms`). `bins` and `bin_offset` use bins. Returned axes, offsets, windows, and delays use integer ps; `convert_time_unit(result, "ns")` converts all physical time fields together and rejects fractional integers. Windows are half open, `[start, stop)`. Software coincidence windows are expanded outward to bin edges. Automatic window selection is fixed after the first repetition.
+
+For hardware counters, request `method="hardware"`. A device that supplies only singles rates reports `counts_start/counts_stop=None`. A fixed hardware gate with unavailable width reports both window boundaries as `None`. Counts are never reconstructed by rounding rates.
+
+### Multiple channels and heralding
+
+```python
+with get_tdc("exp_s15_tdc1") as device:
+    triplet = device.measure_triplet(
+        duration=1.0, ch_ref=1, ch_sig1=2, ch_sig2=3, samples=3,
+    )
+    print(triplet.channels)                # (1, 2, 3)
+    print(triplet.pair_hist(2, 3)[0])       # t_3 - t_2, first acquisition
+    print(triplet.raw_coincidence_rate_mean)
+
+    gate = device.measure_gate(
+        duration=1.0, ch_ref=1, ch_signals=[2, 3, 4], samples=3,
+    )
+    print(gate.raw_counts)                 # References with every signal present
+
+    heralded = device.measure_heralding_gate(
+        duration=1.0, heralding_channel=1, gated_channels=[2, 4],
+        bins=100, samples=3, store_events=True, detail_format="flat",
+    )
+    print(heralded.raw_counts[4])          # Channel 4 associations per acquisition
+    print(heralded.raw_pair_rate_mean[4])
+    print(heralded.n_gates)
+    if heralded.n_gates[0]:
+        print(heralded.gate_hits(0, 0))    # (relative delay in ps, actual channel ID)
+```
+
+`MultiCoincidenceResult` dictionaries use actual channel IDs or directed `(start, stop)` pairs. Triplets count signal combinations and retain four directed histograms; N-fold gates count successful reference events and retain reference-to-signal histograms. `HeraldingGateResult` opens a gate for every herald, including empty gates; it counts each gated channel independently. Overlapping gates can associate the same photon more than once.
+
+Event and photon details are omitted by default. `store_events=True` enables them. Heralding details use either `flat` arrays or `per_gate` lists, and `store_histogram=False` provides a summary without histograms. `combine_samples([first, second])` joins compatible result objects; different channels, delays, windows, or axes require separate objects.
+
+The convenience functions `g2`, `coincidence`, `triplet`, `gate`, and `heralding_gate` open and close the device automatically and accept `samples`. `measure_pairs` remains an independent efficiency analysis returning a dictionary with bin-based windows; `api.pairs()` returns its nine-value tuple.
+
+### Markers and raw acquisition storage
+
+```python
+from qtools.tdc import load_ts_binary, save_ts_binary
+
+with get_tdc("siminics") as device:
+    capture = device.backend.get_timestamps(1.0)
+    if capture.markers is not None:
+        for marker in capture.markers:
+            print(marker.mask, marker.photon_index, marker.timestamp_ps)
+    save_ts_binary("capture.ts", capture)
+
+restored = load_ts_binary("capture.ts")
+```
+
+`TimestampResult.markers` is `None` when markers are unavailable and `[]` when acquisition provided a marker stream with no markers. Each `MarkerEvent` stores its bit mask, the number of photons preceding it (`photon_index`), and optional timestamp and original `stream_index`. Siminics markers have no independent timestamp, so `timestamp_ps=None`. Their masks preserve simultaneous M1–M4 inputs, and markers remain separate from photon channels. Marker boundaries can segment the photon arrays; marker count does not determine `samples`.
+
+`save_ts_binary`/`load_ts_binary` use the TDC v2 format. `save_hdf5`/`load_hdf5` store equivalent metadata. Both save functions accept the entire `TimestampResult` and preserve live time, markers, and missing values.
 
 ## Project Structure
 
+```text
+src/qtools/tdc/
+├── __init__.py              # Public models, connection helpers, and convenience API
+├── api.py                   # Functions that manage device lifetime
+├── measurement.py           # TDC acquisition and repeated measurements
+├── data.py                  # Canonical results, validation, statistics, and storage
+├── cli.py                   # singles, pairs, coincidences, service, list
+├── connection.py            # Backend registry and device discovery
+├── analysis/
+│   ├── g2.py                # Correlation, multi-channel, and heralding algorithms
+│   └── efficiency.py        # Independent pair efficiency analysis
+├── backends/                # S15, IDQ, CIQTEK, Siminics
+├── _native/                 # Shared-library loader
+├── csrc/                    # Native correlation kernels
+└── docs/superpowers/specs/  # Data model design
 ```
-tdc/
-├── pyproject.toml
-├── CMakeLists.txt
-├── README.md
-├── requirements.txt
-├── csrc/
-│   ├── CMakeLists.txt
-│   ├── readevents/
-│   ├── coincidences/
-│   │   ├── coincidences.c          # g2 sliding-window (int64 bin units)
-│   │   ├── coincidences.h          # C API declarations
-│   │   └── multi_coincidences.c    # triplet, quadruplet, gate (N-fold)
-│   └── include/
-├── src/
-│   └── tdc/
-│       ├── __init__.py              # Facade exposing backend, connection, data, and api
-│       ├── api.py                   # TDC high-level user API class
-│       ├── cli.py                   # CLI tool (singles, pairs, coincidences, service, list)
-│       ├── connection.py            # Registry, auto_discover, discover_all, display_devices
-│       ├── data.py                  # DeviceInfo, SinglesResult, TimestampResult, G2Result,
-│       │                            #   TripletResult, GateResult, DataWriter, read_log, save_ts_binary, save_hdf5
-│       ├── _native/
-│       │   └── __init__.py          # ctypes loader for compiled C shared libraries
-│       ├── backends/                # Concrete device backends
-│       │   ├── __init__.py
-│       │   ├── base.py              # TDCBackend (ABC), BackendCapability (Flag)
-│       │   ├── simulator/
-│       │   ├── s15_tdc1/
-│       │   ├── s15_tdc2/
-│       │   ├── ciqtek/
-│       │   └── idq/
-│       └── analysis/                # Data analysis and calculations
-│           ├── __init__.py
-│           ├── efficiency.py
-│           └── g2.py
-└── tests/
-    ├── conftest.py
-    └── test_*.py
-```
+
+See [the data structure design](docs/superpowers/specs/2026-10-06-tdc-data-structures-unification.md) for field definitions and validation rules. Offline contract tests are in `tests/tdc/test_data_unification.py` at the repository root.

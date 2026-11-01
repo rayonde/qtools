@@ -11,10 +11,20 @@ from typing import List, Optional
 import numpy as np
 
 from qtools.tdc.backends.base import BackendCapability, TDCBackend
-from qtools.tdc.connection import register_backend
-from qtools.tdc.data import CoincidenceResult, DeviceInfo, SinglesResult, TimestampResult
-from qtools.tdc.backends.s15_tdc1.exp_backend import CHANNEL_COUNT, RESOLUTION_PS, find_tdc1_devices
 from qtools.tdc.backends.s15_common import decode_pattern_channels
+from qtools.tdc.backends.s15_tdc1.exp_backend import (
+    CHANNEL_COUNT,
+    RESOLUTION_PS,
+    find_tdc1_devices,
+)
+from qtools.tdc.connection import register_backend
+from qtools.tdc.data import (
+    CoincidenceResult,
+    DeviceInfo,
+    SinglesResult,
+    TimestampResult,
+)
+
 logger = logging.getLogger(__name__)
 
 @register_backend("s15_tdc1")
@@ -25,6 +35,7 @@ class S15TDC1Backend(TDCBackend):
         self._device_path = device_path
         self._dev = None
         self._connected = False
+        self._threshold_v = 0.6
 
     @property
     def name(self) -> str:
@@ -88,6 +99,8 @@ class S15TDC1Backend(TDCBackend):
             self._dev = timestamp
             self._device_path = target_path
             self._connected = True
+            if "threshold" in kwargs:
+                self.set_threshold(float(kwargs["threshold"]))
 
         except Exception as e:
             self._connected = False
@@ -177,8 +190,10 @@ class S15TDC1Backend(TDCBackend):
         window_start: int | float | None = None,
         window_stop: int | float | None = None,
         method: str = "software",
+        bin_width: int | None = None,
     ) -> CoincidenceResult:
         """Use TDC1's fixed ``pairs`` counter for hardware coincidence."""
+        width = self._bin_width(bin_width)
         if method != "hardware":
             return super().get_coincidence(
                 duration=duration,
@@ -189,6 +204,7 @@ class S15TDC1Backend(TDCBackend):
                 window_start=window_start,
                 window_stop=window_stop,
                 method=method,
+                bin_width=bin_width,
             )
         if duration <= 0:
             raise ValueError("duration must be positive")
@@ -210,15 +226,12 @@ class S15TDC1Backend(TDCBackend):
         pair_index = {(1, 3): 4, (1, 4): 5, (2, 3): 6, (2, 4): 7}[(ch_start, ch_stop)]
         counts = np.asarray(values[:4], dtype=np.float64)
         return CoincidenceResult(
-            count=int(values[pair_index]),
-            acc_count_perbin=None,
-            accidental_count=None,
-            channel1_rate=float(counts[ch_start - 1] / duration),
-            channel2_rate=float(counts[ch_stop - 1] / duration),
-            integration_time=duration,
-            order=2,
-            accidental_method=None,
-            method="hardware",
+            mode="window_count", bin_width=width, method="hardware",
+            channel_start=ch_start, channel_stop=ch_stop,
+            counts_start=[int(counts[ch_start - 1])], counts_stop=[int(counts[ch_stop - 1])],
+            singles_start=[float(counts[ch_start - 1] / duration)],
+            singles_stop=[float(counts[ch_stop - 1] / duration)],
+            integration_time=[duration], stop_delay=[0], raw_counts=[int(values[pair_index])],
         )
 
     def set_threshold(self, threshold: float, channel: int | None = None) -> None:
@@ -226,6 +239,7 @@ class S15TDC1Backend(TDCBackend):
             raise RuntimeError("Device not connected")
 
         # TDC1 hardware uses one threshold for all channels.
+        self._threshold_v = float(threshold)
         self._dev.threshold = float(threshold)
 
         # S15lib threshold setter writes "time ..." to serial and

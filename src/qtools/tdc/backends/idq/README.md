@@ -154,10 +154,10 @@ src/qtools/tdc/backends/idq/
 ### 4.1 使用高层统一接口 `TDC` 控制 ID1000
 
 ```python
-from qtools.tdc import get_device
+from qtools.tdc import get_tdc
 
 # 1. 连接设备 (指定 IP 地址)
-tdc = get_device("id1000", port="169.254.99.100")
+tdc = get_tdc("id1000", port="169.254.99.100")
 
 # 2. 设置通道 1 和 2 的鉴别阈值与边沿
 tdc.backend.set_threshold(-0.2, channel=1)

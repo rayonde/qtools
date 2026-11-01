@@ -1,7 +1,7 @@
 """CIQTEK TDC1610 Backend implementation.
 
 Wraps the vendor ``Tdc1610`` SDK (kept unmodified under ``libs/``) to
-integrate the CIQTEK (国仪量子) TDC1610 time-to-digital converter into the
+integrate the CIQTEK TDC1610 time-to-digital converter into the
 ``tdc`` framework.
 
 Hardware / SDK notes
@@ -40,7 +40,13 @@ import numpy as np
 
 from qtools.tdc.backends.base import BackendCapability, TDCBackend
 from qtools.tdc.connection import register_backend
-from qtools.tdc.data import CoincidenceResult, DeviceInfo, G2Result, SinglesResult, TimestampResult
+from qtools.tdc.data import (
+    CoincidenceResult,
+    DeviceInfo,
+    SinglesResult,
+    TimestampResult,
+    time_to_ps,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +57,7 @@ logger = logging.getLogger(__name__)
 CHANNEL_COUNT = 17  # 1 start + 16 stop inputs
 DEFAULT_RESOLUTION_PS = 8  # allowed: 8, 16, 32, 64, 128, 256, 1024 ps
 DEFAULT_DYNAMIC_RANGE_PS = 100_000  # collection window (vendor example uses 100 ns)
-DEFAULT_DRAW_WINDOW_PS = 4_000_000  # draw window (must be <= dynamic range)
+DEFAULT_DRAW_WINDOW_PS = 100_000  # draw window (must be <= dynamic range)
 DEFAULT_CLOCK_PERIOD_NS = 100_000_000  # internal trigger period (ns), multiple of 4
 DEFAULT_THRESHOLD_MV = 500.0
 
@@ -105,6 +111,7 @@ class TDC1610Backend(TDCBackend):
         self._resolution_ps = float(DEFAULT_RESOLUTION_PS)
         self._dynamic_range_ps = DEFAULT_DYNAMIC_RANGE_PS
         self._draw_window_ps = DEFAULT_DRAW_WINDOW_PS
+        self._threshold_v = DEFAULT_THRESHOLD_MV / 1000.0
 
         # Per-channel config, SDK channel order: index 0 = start, 1..16 = stop1..16.
         self._channel_enable = [1] * CHANNEL_COUNT
@@ -286,6 +293,13 @@ class TDC1610Backend(TDCBackend):
         try:
             self.set_trigger_mode(kwargs.get("trigger_mode", self._trigger_mode))
             self.set_clock_period(kwargs.get("clock_period_ns", self._clock_period_ns))
+            if "threshold" in kwargs:
+                threshold_v = float(kwargs["threshold"])
+                if not -5.0 <= threshold_v <= 5.0:
+                    raise ValueError("threshold must be within -5..5 V for TDC1610")
+                self._threshold_v = threshold_v
+                threshold_mv = threshold_v * 1000.0
+                self._channel_range = [threshold_mv] * CHANNEL_COUNT
             self._apply_channel_config()
             self.set_time_resolution(kwargs.get("resolution_ps", self._resolution_ps))
             self.set_dynamic_range(kwargs.get("dynamic_range_ps", self._dynamic_range_ps))
@@ -382,6 +396,7 @@ class TDC1610Backend(TDCBackend):
         counts = (rates * actual_duration).astype(np.uint64)
         return SinglesResult(
             integration_time=actual_duration,
+            channels=np.arange(1, len(counts) + 1, dtype=np.uint8),
             counts=counts,
             count_rates=rates,
         )
@@ -418,7 +433,8 @@ class TDC1610Backend(TDCBackend):
         bin_offset: int = 0,
         unit: str = "ns",
         method: str = "software",
-    ) -> G2Result:
+        bin_width: int | None = None,
+    ) -> CoincidenceResult:
         """Software g² correlation is not supported by the TDC1610 backend.
 
         Software correlation requires raw per-event timestamps, which the
@@ -450,6 +466,7 @@ class TDC1610Backend(TDCBackend):
         window_start: int | float | None = None,
         window_stop: int | float | None = None,
         method: str = "software",
+        bin_width: int | None = None,
     ) -> CoincidenceResult:
         """Acquire CIQTEK's hardware accord counter.
 
@@ -458,6 +475,7 @@ class TDC1610Backend(TDCBackend):
         stop-channel delay positions the stop signal, and ``window_stop`` is
         the gate width. ``window_start`` is accepted only as an explicit zero.
         """
+        width = self._bin_width(bin_width)
         if method != "hardware":
             return super().get_coincidence(
                 duration=duration,
@@ -468,6 +486,7 @@ class TDC1610Backend(TDCBackend):
                 window_start=window_start,
                 window_stop=window_stop,
                 method=method,
+                bin_width=bin_width,
             )
         if duration <= 0:
             raise ValueError("duration must be positive")
@@ -480,13 +499,8 @@ class TDC1610Backend(TDCBackend):
         if window_start is not None and float(window_start) != 0:
             raise ValueError("TDC1610 hardware coincidence window_start is fixed at 0")
 
-        unit_to_ps = {"ps": 1.0, "ns": 1e3, "ms": 1e6}
-        if unit not in unit_to_ps:
-            raise ValueError(f"Unsupported unit: {unit!r}. Expected 'ps', 'ns', or 'ms'.")
-        factor = unit_to_ps[unit]
-        start_ps = 0.0
-        stop_ps = float(window_stop) * factor
-        width_ps = int(round(stop_ps))
+        start_ps = 0
+        width_ps = time_to_ps(window_stop, unit)
         if width_ps <= 0:
             raise ValueError("window_stop must be positive")
         if width_ps % int(self.resolution_ps) != 0:
@@ -495,7 +509,7 @@ class TDC1610Backend(TDCBackend):
             )
 
         stop_channels = [ch_stop]
-        delay_ps = int(round(float(ch_stop_delay) * factor))
+        delay_ps = time_to_ps(ch_stop_delay, unit)
         if not -200_000 <= delay_ps <= 200_000:
             raise ValueError("TDC1610 channel delay must be within [-200000, 200000] ps")
         self._ensure_connected()
@@ -523,19 +537,13 @@ class TDC1610Backend(TDCBackend):
             * actual_duration
         )
         return CoincidenceResult(
-            count=int(values[0]),
-            acc_count_perbin=None,
-            accidental_count=accidental_count,
-            accidental_method="rate_product",
-            channel1_rate=float(values[1]),
-            channel2_rate=float(values[2]),
-            channel3_rate=None,
-            integration_time=actual_duration,
-            order=2,
-            window_ps=width_ps,
-            window_start_ps=start_ps,
-            window_stop_ps=stop_ps,
-            method="hardware",
+            mode="window_count", bin_width=width, method="hardware",
+            channel_start=ch_start, channel_stop=ch_stop,
+            counts_start=None, counts_stop=None,
+            singles_start=[float(values[1])], singles_stop=[float(values[2])],
+            integration_time=[actual_duration], stop_delay=[delay_ps], raw_counts=[int(values[0])],
+            window_start=[start_ps], window_stop=[width_ps],
+            accidental_counts=[accidental_count], accidental_method=["rate_product"],
         )
 
     # -- threshold control --------------------------------------------------
@@ -547,15 +555,20 @@ class TDC1610Backend(TDCBackend):
     ) -> None:
         """Set the channel threshold voltage.
 
-        Note: TDC1610 thresholds are in **millivolts** (range ``-5000..5000``).
-        ``channel=None`` applies the value to every channel.
+        The common backend API accepts volts; the TDC1610 SDK receives
+        millivolts. ``channel=None`` applies the value to every channel.
         """
         self._ensure_connected()
+        threshold_v = float(threshold)
+        threshold_mv = threshold_v * 1000.0
+        if not -5000.0 <= threshold_mv <= 5000.0:
+            raise ValueError("threshold must be within -5..5 V for TDC1610")
+        self._threshold_v = threshold_v
         channels = range(1, self.channel_count + 1) if channel is None else [channel]
         for ch in channels:
             if not (1 <= ch <= self.channel_count):
                 raise ValueError(f"Invalid channel index: {ch}")
-            self._channel_range[ch - 1] = float(threshold)
+            self._channel_range[ch - 1] = threshold_mv
         self._apply_channel_config()
 
     # -- device discovery ---------------------------------------------------
@@ -658,13 +671,21 @@ class TDC1610Backend(TDCBackend):
     def set_dynamic_range(self, dynamic_range_ps: int) -> None:
         """Set collection window in ps (max ``resolution x (2^32 - 1) - 4000`` ps)."""
         self._ensure_connected()
-        self._dynamic_range_ps = int(dynamic_range_ps)
+        dynamic_range_ps = int(dynamic_range_ps)
+        if dynamic_range_ps <= 0:
+            raise ValueError("dynamic_range_ps must be positive")
+        if self._draw_window_ps > dynamic_range_ps:
+            raise ValueError("draw_window_ps must not exceed dynamic_range_ps")
+        self._dynamic_range_ps = dynamic_range_ps
         self._check(self._dev.ConfigDynamicRange(self._dynamic_range_ps), "ConfigDynamicRange")
 
     def set_draw_window(self, draw_window_ps: int) -> None:
         """Set draw window in ps (<= dynamic range; max 12,500,000 points x resolution)."""
         self._ensure_connected()
-        self._draw_window_ps = int(draw_window_ps)
+        draw_window_ps = int(draw_window_ps)
+        if draw_window_ps <= 0 or draw_window_ps > self._dynamic_range_ps:
+            raise ValueError("draw_window_ps must be positive and <= dynamic_range_ps")
+        self._draw_window_ps = draw_window_ps
         self._check(self._dev.ConfigDrawWindowRange(self._draw_window_ps), "ConfigDrawWindowRange")
 
     def set_clock(self, input_type: int = 0, input_value: int = 1, output: int = 0) -> None:

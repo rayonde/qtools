@@ -47,7 +47,7 @@ Units follow the vendor SDK: thresholds are in **millivolts (mV)**
 |---|---|---|---|---|
 | `get_singles()` | `SinglesResult` | supported | `counts` (17, uint64), `count_rates` (cps), `integration_time` | `GetCpsByUser()` → rates `[start, stop1..16]`; counts = `rate × duration` |
 | `get_timestamps()` | `TimestampResult` | **unsupported** | — | SDK has no raw timestamp stream |
-| `compute_g2()` | `G2Result` | **unsupported** | — | software g² needs raw timestamps |
+| `compute_g2()` | `CoincidenceResult` | **unsupported** | — | software g² needs raw timestamps |
 
 ## Raw Timestamps vs. Histogram (important)
 
@@ -123,7 +123,7 @@ Notes:
 ## Usage
 
 ```python
-from tdc.connection import get_backend
+from qtools.tdc.connection import get_backend
 
 backend_cls = get_backend("tdc1610")
 backend = backend_cls()
