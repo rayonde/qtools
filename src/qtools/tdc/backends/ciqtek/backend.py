@@ -18,9 +18,9 @@ Hardware / SDK notes
       ...
       physical channel 17 -> SDK stop   channel 16
 
-* Thresholds are expressed in **millivolts** (mV, range ``-5000..5000``) and
-  delays in **picoseconds** (ps, range ``-200000..200000``), i.e. the native
-  units of the vendor SDK.
+* The common ``set_threshold`` API accepts volts (V) and converts to the SDK's
+  millivolt (mV) representation. Vendor-specific low-level helpers retain
+  their native mV arguments; delays use picoseconds (ps).
 * ``GetCollectDataByUserEx`` only returns per-channel **histogram** data
   (non-zero bins); the SDK has no raw per-event timestamp stream.  The
   histogram of every stop channel is measured **relative to the start

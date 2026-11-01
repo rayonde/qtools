@@ -45,7 +45,7 @@ repl:
   list          - List available TDC devices
 
 global options:
-  -b, --backend   TDC hardware backend (default: 's15_tdc2')
+  -b, --backend   TDC hardware backend (default: 'exp_s15_tdc1')
   -U, --device    Device identifier or serial port (default: auto)
   -t, --time      Integration time in seconds (default: 1.0)
   --threshvolt    Pulse trigger level in Volts (default: 0.6)

@@ -24,7 +24,7 @@ the `tdc` framework.
 2. `ConnectDevice(local_ip, des_ip, dst_mac)` — establish the Ethernet link.
 3. Code-density calibration is run automatically if the device reports it is
    required (`calibrate=True` by default).
-4. Configuration: trigger mode, clock, per-channel enable/mode/threshold(mV)/
+4. Configuration: trigger mode, clock, per-channel enable/mode/threshold(V)/
    delay(ps), time resolution, dynamic range, draw window.
 5. Acquisition loop: `StartCollect()` → read data → `StopCollect()`.
 6. `DisConnectDevice()` — release the firmware's IP lock.
@@ -38,8 +38,9 @@ The unified 1-based channel model maps onto the SDK channels as:
 | 1                | 0           | start (trigger) |
 | 2 … 17           | 1 … 16      | stop1 … stop16 |
 
-Units follow the vendor SDK: thresholds are in **millivolts (mV)**
-(`-5000..5000`) and delays in **picoseconds (ps)** (`-200000..200000`).
+The common threshold API uses **volts (V)** and converts to the SDK's
+millivolts internally. Vendor-specific low-level helpers use their documented
+native units. Delays are in **picoseconds (ps)** (`-200000..200000`).
 
 ## Data Formats
 
