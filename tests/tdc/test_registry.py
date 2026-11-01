@@ -9,7 +9,9 @@ import pytest
 import qtools.tdc.api
 from qtools.tdc.backends.base import TDCBackend
 from qtools.tdc.backends.s15_tdc1.config import DEFAULT_TDC1_BACKEND
-from qtools.tdc.connection import get_backend, list_backends, auto_discover
+import qtools.tdc.connection as connection
+from qtools.tdc.connection import get_backend, list_backends
+from qtools.tdc.data import DeviceInfo
 
 
 def test_registry_lookup():
@@ -41,8 +43,20 @@ def test_cli_default_backend_matches_selection():
     assert make_parser().parse_args([]).backend == DEFAULT_TDC1_BACKEND
 
 
-def test_auto_discover():
-    """Verify device discovery returns empty list when no hardware is connected."""
-    devices = auto_discover()
-    # Without simulator, expect 0 devices when hardware is not connected
-    assert isinstance(devices, list)
+def test_auto_discover(monkeypatch):
+    """Verify auto-discovery aggregates backend results without probing hardware."""
+    expected = DeviceInfo(
+        backend_name="fake_tdc",
+        device_path="fake://tdc-1",
+        serial_number="TEST-001",
+        description="Fake TDC for registry tests",
+    )
+
+    class FakeBackend:
+        @classmethod
+        def discover_devices(cls):
+            return [expected]
+
+    monkeypatch.setattr(connection, "_REGISTRY", {"fake_tdc": FakeBackend})
+    devices = connection.auto_discover()
+    assert devices == [expected]

@@ -310,17 +310,17 @@ def _compute_gate_python(
                 sig_vals = tuple(int(signals[k][per_ch_matches[k][cursors[k]]])
                                  for k in range(n_signals))
                 events.append(((int(ref),) + sig_vals, i))
-                # Advance odometer
+                # Advance odometer and stop after the final Cartesian product.
+                carry = True
                 for k in range(n_signals - 1, -1, -1):
                     cursors[k] += 1
                     if cursors[k] >= len(per_ch_matches[k]):
                         cursors[k] = 0
-                        if k == 0:
-                            break  # wrapped — done
                     else:
+                        carry = False
                         break
-                else:
-                    break  # all wrapped
+                if carry:
+                    break
 
     return hists, n_fold, events
 

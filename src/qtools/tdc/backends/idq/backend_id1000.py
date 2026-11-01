@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as npw
+import numpy as np
 
 from qtools.tdc.backends.base import BackendCapability, TDCBackend
 from qtools.tdc.connection import register_backend
@@ -316,6 +316,7 @@ class ID1000Backend(TDCBackend):
 
         return SinglesResult(
             integration_time=integration_time,
+            channels=np.arange(1, self.channel_count + 1, dtype=np.uint8),
             counts=counts,
             count_rates=count_rates,
         )

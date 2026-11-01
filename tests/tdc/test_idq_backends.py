@@ -117,6 +117,7 @@ def test_id1000_get_singles(mock_zmq_ctx, mock_socket):
     singles = dev.get_singles(integration_time=0.1)
     assert isinstance(singles, SinglesResult)
     assert singles.integration_time == 0.1
+    np.testing.assert_array_equal(singles.channels, [1, 2, 3, 4, 5])
     np.testing.assert_array_equal(singles.counts, [1000, 2000, 3000, 4000, 50000])
     assert singles.count_rates[0] == 10000.0
 

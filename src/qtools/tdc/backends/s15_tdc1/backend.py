@@ -126,6 +126,7 @@ class S15TDC1Backend(TDCBackend):
 
         return SinglesResult(
             integration_time=integration_time,
+            channels=np.arange(1, CHANNEL_COUNT + 1, dtype=np.uint8),
             counts=counts,
             count_rates=count_rates,
         )

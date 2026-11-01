@@ -416,6 +416,7 @@ class TestCountAcquisition:
         backend = self._make_backend(fake)
         result = backend.get_singles(integration_time=1.0)
         assert isinstance(result, SinglesResult)
+        assert result.channels.tolist() == [1, 2, 3, 4]
         assert result.counts.tolist() == [1, 2, 3, 4]
         assert result.count_rates.tolist() == [1.0, 2.0, 3.0, 4.0]
 

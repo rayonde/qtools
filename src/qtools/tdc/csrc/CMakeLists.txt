@@ -32,6 +32,17 @@ add_library(coincidences SHARED
     coincidences/multi_coincidences.c
 )
 
+# Keep the Windows output consistent with Unix: libcoincidences.dll instead of
+# coincidences.dll.  The ctypes loader accepts both names for compatibility.
+set_target_properties(coincidences PROPERTIES PREFIX "lib")
+
+# Bundle the MSVC runtime statically so the packaged DLL does not require the
+# Visual C++ Redistributable on the target Windows machine.
+if(MSVC)
+    set_property(TARGET coincidences PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 target_include_directories(coincidences
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/coincidences
 )

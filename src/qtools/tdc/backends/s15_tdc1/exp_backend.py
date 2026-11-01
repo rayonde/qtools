@@ -467,6 +467,7 @@ class ExpS15TDC1Backend(TDCBackend):
         self._flush_serial_buffers()
         return SinglesResult(
             integration_time=integration_time,
+            channels=np.arange(1, CHANNEL_COUNT + 1, dtype=np.uint8),
             counts=counts,
             count_rates=counts.astype(np.float64) / integration_time,
         )
