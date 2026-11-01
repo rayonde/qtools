@@ -4,6 +4,25 @@
 bundled backends are FLIR through Spinnaker/`PySpin` and Daheng Imaging through
 the Galaxy SDK/`gxipy`.
 
+## Backend layout
+
+Vendor implementations and their SDK adapters live under `qtools.camera.backends`:
+
+```text
+qtools/camera/
+|-- base.py                 # CameraBackend contract
+|-- camera.py               # Facade and backend registry
+|-- bridge.py               # Optional out-of-process camera runtime
+`-- backends/
+    |-- flir/
+    |   |-- backend.py      # FLIR CameraBackend
+    |   |-- spinnaker_c.py  # Spinnaker C SDK adapter
+    |   `-- refs/           # PySpin wheel/SDK references
+    `-- daheng/
+        |-- backend.py      # Daheng CameraBackend
+        `-- gxipy.py        # Galaxy/gxipy SDK adapter
+```
+
 Camera discovery is a module-level operation because it does not operate on an
 already opened camera:
 
@@ -102,7 +121,8 @@ Daheng Imaging's IndustryCam/Galaxy viewer is a user interface on top of the
 Galaxy SDK. Its C API is `GxIAPI.dll`; the installer also ships the official
 Python binding `gxipy` under `Development/Samples/Python`. The backend uses that
 binding rather than trying to control `Viewer.exe`. All official `gxipy`
-objects are normalized by the internal adapter in `qtools.camera._gxipy`, so the
+objects are normalized by the internal adapter in
+`qtools.camera.backends.daheng.gxipy`, so the
 camera backend only sees typed device, feature, acquisition, and lifecycle APIs.
 
 The backend locates `gxipy` from `GALAXY_SDK_DEVELOPMENT` or the standard
@@ -161,7 +181,7 @@ Constructing `RemoteCamera` is the operation that prepares the Python worker.
 When PySpin is unavailable in the main interpreter, it:
 
 1. Selects `spinnaker_python-4.4.0.246-cp312-cp312-win_amd64.whl` from
-   `backends/refs`.
+   `backends/flir/refs`.
 2. Determines the Python version from the wheel's `cp3xx` tag.
 3. On Windows, uses `winget` to install that Python version if it is missing.
 4. Creates or repairs `.venv-camera`, installing `numpy<2` and the bundled wheel.

@@ -141,7 +141,7 @@ class RemoteCamera:
     python_executable:
         Interpreter that has both ``qtools`` and the matching PySpin wheel.
         When omitted for the FLIR backend, a managed camera venv is created or
-        repaired automatically from the wheels in ``backends/refs``.
+        repaired automatically from the wheels in ``backends/flir/refs``.
     backend:
         Backend name passed to :class:`qtools.camera.Camera` in the worker.
     target:

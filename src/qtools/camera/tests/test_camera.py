@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import sys
@@ -17,10 +17,10 @@ from qtools.camera import (
     list_camera,
     register_backend,
 )
-import qtools.camera._spinnaker_c as spinnaker_c_module
+import qtools.camera.backends.flir.spinnaker_c as spinnaker_c_module
 from qtools.camera.base import CameraInfo
 from qtools.camera import camera as camera_module
-from qtools.camera.backends import flir as flir_module
+from qtools.camera.backends.flir import backend as flir_module
 
 
 class FakeNode:

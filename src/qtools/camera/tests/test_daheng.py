@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from qtools.camera import DAHENG, Camera, CameraDiscoveryError, get_backend
-from qtools.camera import _gxipy as gxipy_module
-from qtools.camera._gxipy import GalaxyFeatureControl, discover_devices
+from qtools.camera.backends.daheng import gxipy as gxipy_module
+from qtools.camera.backends.daheng.gxipy import GalaxyFeatureControl, discover_devices
 
 
 ROWS = [

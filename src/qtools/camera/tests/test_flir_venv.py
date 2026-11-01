@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from qtools.camera import CameraDependencyError, FLIR
-from qtools.camera.backends import flir as flir_module
+from qtools.camera.backends.flir import backend as flir_module
 
 
 def test_finds_bundled_pyspin_wheel() -> None:

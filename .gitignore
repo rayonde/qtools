@@ -223,3 +223,13 @@ __marimo__/
 
 # Imported motor experiment output
 /src/qtools/motor/output/
+
+# Local runtime artifacts created by CLI/tests (must not be committed)
+/data/
+/pctrl_config/
+/pctrl_calibration_data/
+/pctrl_optimize_data/
+/output/
+/cal_data/
+/cal_output/
+/achromatic_cal_data/

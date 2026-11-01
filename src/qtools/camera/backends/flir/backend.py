@@ -29,7 +29,7 @@ from typing import Any, ClassVar
 import numpy as np
 import numpy.typing as npt
 
-from qtools.camera._spinnaker_c import discover_spinnaker_cameras
+from .spinnaker_c import discover_spinnaker_cameras
 from qtools.camera.base import CameraBackend, CameraInfo, print_camera_list
 from qtools.camera.exceptions import (
     CameraAcquisitionError,

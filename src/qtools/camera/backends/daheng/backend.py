@@ -1,4 +1,4 @@
-﻿"""Daheng Imaging camera backend using the wrapped Galaxy SDK binding."""
+"""Daheng Imaging camera backend using the wrapped Galaxy SDK binding."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 import numpy as np
 import numpy.typing as npt
 
-from qtools.camera._gxipy import (
+from .gxipy import (
     GalaxyCamera,
     GalaxyDeviceInfo,
     GalaxyDeviceManager,
