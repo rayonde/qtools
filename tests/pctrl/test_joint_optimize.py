@@ -1,123 +1,39 @@
-import csv
+from unittest.mock import MagicMock
 
-import pytest
-
-from qtools.pctrl import joint_optimize as joint
-
-
-@pytest.fixture(autouse=True)
-def _restore_target():
-    original = joint.ACTIVE_TARGET
-    yield
-    joint.apply_target(original)
+from qtools.pctrl.joint_optimize import joint_optimize, optimize_joint
+from qtools.pctrl.optimize import compose_basis_loss
 
 
-def test_product_target_uses_single_linear_plane():
-    joint.apply_target("HH")
+def test_joint_optimize_delegates_to_two_channel_controller():
+    controller = MagicMock()
+    controller.optimize.return_value = "result"
 
-    assert joint.MEASUREMENT_KEYS == [
-        ("H", "H"), ("V", "V"), ("H", "V"), ("V", "H")
-    ]
-    assert joint.figure_of_merit({("H", "H"): 100.0}) == 1.0
-    assert joint.figure_of_merit({("V", "V"): 100.0}) == -1.0
+    result = joint_optimize(controller, maxiter=12, minimize=True)
 
-
-def test_hh_vv_uses_equal_linear_and_diagonal_weights():
-    joint.apply_target("HH+VV")
-
-    ideal = {
-        ("H", "H"): 100.0,
-        ("V", "V"): 100.0,
-        ("D", "D"): 100.0,
-        ("A", "A"): 100.0,
-    }
-    linear_only = {
-        ("H", "H"): 100.0,
-        ("V", "V"): 100.0,
-        ("D", "D"): 50.0,
-        ("A", "A"): 50.0,
-        ("D", "A"): 50.0,
-        ("A", "D"): 50.0,
-    }
-
-    assert joint.figure_of_merit(ideal) == 1.0
-    assert joint.figure_of_merit(linear_only) == pytest.approx(0.5)
-
-
-def test_hv_vh_flips_linear_target_but_keeps_diagonal_target():
-    joint.apply_target("HV+VH")
-
-    ideal = {
-        ("H", "V"): 100.0,
-        ("V", "H"): 100.0,
-        ("D", "D"): 100.0,
-        ("A", "A"): 100.0,
-    }
-    assert joint.figure_of_merit(ideal) == 1.0
-
-    correlations = joint.plane_correlations(ideal)
-    assert correlations == {"linear": 1.0, "diagonal": 1.0}
-
-
-def test_save_counts_includes_plane_correlations(tmp_path):
-    joint.apply_target("HH+VV")
-    path = tmp_path / "counts.csv"
-    counts = {
-        ("H", "H"): 10.0,
-        ("V", "V"): 10.0,
-        ("D", "D"): 10.0,
-        ("A", "A"): 10.0,
-    }
-
-    joint.save_counts(path, [(1, counts, 1.0)])
-    with path.open(newline="", encoding="utf-8") as handle:
-        rows = list(csv.reader(handle))
-
-    assert rows[0][:6] == ["evaluation", "J", "E_linear", "E_diagonal", "H,H", "V,V"]
-    assert rows[1][:6] == ["1", "1.0", "1.0", "1.0", "10.0", "10.0"]
-
-
-def test_composite_measurement_accepts_custom_keys_and_loss():
-    class FakeStage:
-        def move_to(self, angle):
-            pass
-
-        def wait_move(self):
-            pass
-
-    class FakeMotorManager:
-        def get_motor(self, side):
-            return FakeStage()
-
-    class FakeMeasurement:
-        def measure(self, **kwargs):
-            return [(2.0, 0.1)]
-
-    seen = []
-
-    def loss(counts):
-        seen.append(counts)
-        return sum(counts.values())
-
-    composite = joint.CompositeMeasurement(
-        FakeMeasurement(),
-        polmeas_cfg=None,
-        motor_mgr=FakeMotorManager(),
-        measurement_keys=[("H", "V"), ("D", "A")],
-        loss_fn=loss,
+    assert result == "result"
+    controller.optimize.assert_called_once_with(
+        target=["alice", "bob"], maxiter=12, minimize=True
     )
 
-    result = composite.measure(
-        duration=0.1,
-        samples=1,
-        measure_type="pairs",
-        ch_start=1,
-        ch_stop=2,
-        delay=0,
-        window_start=1,
-        window_stop=2,
-        threshvolt=0.6,
+
+def test_joint_optimize_accepts_custom_targets():
+    controller = MagicMock()
+
+    joint_optimize(controller, targets=("left", "right"), verbose=False)
+
+    controller.optimize.assert_called_once_with(
+        target=["left", "right"], verbose=False
     )
 
-    assert result == [(4.0, 0.0)]
-    assert list(seen[0]) == [("H", "V"), ("D", "A")]
+
+def test_optimize_joint_is_an_alias():
+    assert optimize_joint is joint_optimize
+
+
+def test_basis_loss_squares_minimized_and_maximized_rates():
+    loss = compose_basis_loss(
+        minimization_basis=[("h", "v"), ("V", "H")],
+        maximization_basis=[("D", "D")],
+    )
+
+    assert loss({("H", "V"): 2, ("V", "H"): 3, ("D", "D"): 5}) == -12.0

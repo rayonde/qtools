@@ -336,78 +336,47 @@ class MeasManager:
                     if isinstance(channels, (tuple, list)) and len(channels) >= 2:
                         ch_start, ch_stop = channels[0], channels[1]
                     delay = delay if delay is not None else task_cfg.get("delay_bin", 0)  # bins; TDC converts to ns/ps via `unit` internally
-                    bins = task_cfg.get("bins", 500)
-                    peak = task_cfg.get("peak", 0)
-                    loffset = task_cfg.get("loffset", 0)
-                    roffset = task_cfg.get("roffset", 0)
                     window_start = window_start if window_start is not None else task_cfg.get("window_start", None)
                     window_stop = window_stop if window_stop is not None else task_cfg.get("window_stop", None)
-                    bin_offset = task_cfg.get("bin_offset", 0)
                     unit = task_cfg.get("unit", "ns")
 
-                    if hasattr(tdc, "measure_coincidence"):
-                        # Config files historically store delay/window in
-                        # backend bins.  CoincidenceResult uses physical time
-                        # at the public TDC API boundary.
-                        width_ps = float(
-                            getattr(tdc, "bin_width", None)
-                            or getattr(tdc.backend, "resolution_ps", 1_000.0)
-                        )
-                        unit_scale = {
-                            "ps": 1.0,
-                            "ns": 1e-3,
-                            "us": 1e-6,
-                            "ms": 1e-9,
-                        }
-                        if unit not in unit_scale:
-                            raise ValueError(f"Unsupported TDC time unit: {unit!r}")
-                        to_unit = width_ps * unit_scale[unit]
-                        coincidence = tdc.measure_coincidence(
-                            duration=duration,
-                            ch_start=ch_start,
-                            ch_stop=ch_stop,
-                            ch_stop_delay=float(delay) * to_unit,
-                            unit=unit,
-                            window_start=(None if window_start is None else float(window_start) * to_unit),
-                            window_stop=(None if window_stop is None else float(window_stop) * to_unit),
-                            samples=samples,
-                        )
-                        raw_mean = coincidence.raw_pair_rate_mean or 0.0
-                        raw_std = coincidence.raw_pair_rate_std or 0.0
-                        acc_mean = coincidence.acc_pair_rate_mean or 0.0
-                        acc_std = coincidence.acc_pair_rate_std or 0.0
-                        net_mean = coincidence.net_pair_rate_mean
-                        net_std = coincidence.net_pair_rate_std
-                        net_mean = raw_mean - acc_mean if net_mean is None else net_mean
-                        net_std = raw_std if net_std is None else net_std
-                        metrics = {
-                            "result": coincidence,
-                            "raw_pair_rate": float(raw_mean),
-                            "raw_pair_rate_std": float(raw_std),
-                            "acc_pair_rate": float(acc_mean),
-                            "acc_pair_rate_std": float(acc_std),
-                            "net_pair_rate": float(net_mean),
-                            "net_pair_rate_std": float(net_std),
-                        }
-                        return MeasurementResult(
-                            value=float(net_mean), error=float(net_std), unit="cps",
-                            metrics=metrics,
-                            metadata={"detector": detector, "meas_type": meas_type,
-                                      "duration": duration, "samples": samples, "task": task},
-                        )
-
-                    # Compatibility for an older TDC wrapper.
-                    res = tdc.measure_pairs_samples(
-                        duration=duration, ch_start=ch_start, ch_stop=ch_stop,
-                        delay=delay, bins=bins, peak=peak, loffset=loffset,
-                        roffset=roffset, window_start=window_start,
-                        window_stop=window_stop, bin_offset=bin_offset,
-                        unit=unit, num=samples,
+                    # Config files store delay/window in backend bins.  The
+                    # public CoincidenceResult API uses physical time.
+                    width_ps = float(
+                        getattr(tdc, "bin_width", None)
+                        or getattr(tdc.backend, "resolution_ps", 1_000.0)
                     )
+                    unit_scale = {"ps": 1.0, "ns": 1e-3, "us": 1e-6, "ms": 1e-9}
+                    if unit not in unit_scale:
+                        raise ValueError(f"Unsupported TDC time unit: {unit!r}")
+                    to_unit = width_ps * unit_scale[unit]
+                    coincidence = tdc.measure_coincidence(
+                        duration=duration,
+                        ch_start=ch_start,
+                        ch_stop=ch_stop,
+                        ch_stop_delay=float(delay) * to_unit,
+                        unit=unit,
+                        window_start=(None if window_start is None else float(window_start) * to_unit),
+                        window_stop=(None if window_stop is None else float(window_stop) * to_unit),
+                        samples=samples,
+                    )
+                    raw_mean = coincidence.raw_pair_rate_mean or 0.0
+                    raw_std = coincidence.raw_pair_rate_std or 0.0
+                    acc_mean = coincidence.acc_pair_rate_mean or 0.0
+                    acc_std = coincidence.acc_pair_rate_std or 0.0
+                    net_mean = coincidence.net_pair_rate_mean
+                    net_std = coincidence.net_pair_rate_std
+                    net_mean = raw_mean - acc_mean if net_mean is None else net_mean
+                    net_std = raw_std if net_std is None else net_std
+                    metrics = {
+                        "result": coincidence,
+                        "raw_pair_rate": float(raw_mean), "raw_pair_rate_std": float(raw_std),
+                        "acc_pair_rate": float(acc_mean), "acc_pair_rate_std": float(acc_std),
+                        "net_pair_rate": float(net_mean), "net_pair_rate_std": float(net_std),
+                    }
                     return MeasurementResult(
-                        value=float(res["net_pair_rate"]),
-                        error=float(res["net_pair_rate_std"]), unit="cps",
-                        metrics=res,
+                        value=float(net_mean), error=float(net_std), unit="cps",
+                        metrics=metrics,
                         metadata={"detector": detector, "meas_type": meas_type,
                                   "duration": duration, "samples": samples, "task": task},
                     )

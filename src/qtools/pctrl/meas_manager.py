@@ -272,43 +272,31 @@ class MeasManager:
         """Read coincidence pairs through the public tdc package API."""
         with self.tdc:
             self.tdc.set_threshold(threshvolt)
-            if hasattr(self.tdc, "measure_coincidence"):
-                # pctrl's public options are kept in TDC bins.  The new TDC
-                # result API accepts physical times, so convert using the
-                # configured analysis width (or native backend resolution).
-                width_ps = float(
-                    getattr(self.tdc, "bin_width", None)
-                    or getattr(self.tdc.backend, "resolution_ps", 1_000.0)
-                )
-                to_ns = width_ps / 1_000.0
-                result = self.tdc.measure_coincidence(
-                    duration=duration,
-                    ch_start=ch_start,
-                    ch_stop=ch_stop,
-                    ch_stop_delay=float(delay) * to_ns,
-                    unit="ns",
-                    window_start=float(window_start) * to_ns,
-                    window_stop=float(window_stop) * to_ns,
-                    samples=samples,
-                )
-                mean = result.net_pair_rate_mean
-                std = result.net_pair_rate_std
-                if mean is None:
-                    mean = result.raw_pair_rate_mean or 0.0
-                if std is None:
-                    std = result.raw_pair_rate_std or 0.0
-                return [(float(mean), float(std))]
-
-            # Compatibility for older third-party TDC wrappers.
-            result = self.tdc.measure_pairs_samples(
-                duration=duration, ch_start=ch_start, ch_stop=ch_stop,
-                delay=delay, window_start=window_start,
-                window_stop=window_stop, num=samples,
+            # pctrl's public options are kept in TDC bins.  The new TDC
+            # result API accepts physical times, so convert using the
+            # configured analysis width (or native backend resolution).
+            width_ps = float(
+                getattr(self.tdc, "bin_width", None)
+                or getattr(self.tdc.backend, "resolution_ps", 1_000.0)
             )
-        return [(
-            float(result["net_pair_rate"]),
-            float(result["net_pair_rate_std"]),
-        )]
+            to_ns = width_ps / 1_000.0
+            result = self.tdc.measure_coincidence(
+                duration=duration,
+                ch_start=ch_start,
+                ch_stop=ch_stop,
+                ch_stop_delay=float(delay) * to_ns,
+                unit="ns",
+                window_start=float(window_start) * to_ns,
+                window_stop=float(window_stop) * to_ns,
+                samples=samples,
+            )
+            mean = result.net_pair_rate_mean
+            std = result.net_pair_rate_std
+            if mean is None:
+                mean = result.raw_pair_rate_mean or 0.0
+            if std is None:
+                std = result.raw_pair_rate_std or 0.0
+            return [(float(mean), float(std))]
 
     def measure(self,
                 duration: float | None = None,

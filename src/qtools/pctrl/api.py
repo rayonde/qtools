@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Sequence
 from qtools.pctrl.servo_manager import ServoManager
 from qtools.pctrl.meas_manager import MeasManager
 from qtools.pctrl.config import ConfigManager, channel_key_string, resolve_target
@@ -134,7 +134,7 @@ class PolarizationController:
 
     def optimize(
         self,
-        target: str = "all",
+        target: str | Sequence[str] = "all",
         metric_fn: Any = None,
         *,
         minimize: bool = False,
@@ -197,15 +197,52 @@ class PolarizationController:
                 "Run 'pctrl device tdc <COM_PORT>' first."
             )
 
-        # Resolve target channels
-        resolution = resolve_target(self.cfg, target)
-        target_channels = resolution.channels
-        target_servo_name = resolution.target_servo_name
+        # A sequence (or comma-separated string) is one joint optimization
+        # over all listed channels.  A scalar target keeps the historical
+        # single-channel behavior.
+        if isinstance(target, (list, tuple, set)):
+            target_channels = []
+            target_servo_name = None
+            seen_channels = set()
+            for item in target:
+                for channel in resolve_target(self.cfg, item).channels:
+                    if id(channel) not in seen_channels:
+                        target_channels.append(channel)
+                        seen_channels.add(id(channel))
+        elif isinstance(target, str) and "," in target:
+            return self.optimize(
+                target=[part.strip() for part in target.split(",") if part.strip()],
+                metric_fn=metric_fn, minimize=minimize, method=method,
+                maxiter=maxiter, tol=tol, step_size_deg=step_size_deg,
+                speed_deg_s=speed_deg_s, settle_time=settle_time, duration=duration,
+                samples=samples, measure_type=measure_type, channels=channels,
+                ch_start=ch_start, ch_stop=ch_stop, delay=delay,
+                window_start=window_start, window_stop=window_stop,
+                threshvolt=threshvolt, measurement_adapter=measurement_adapter,
+                verbose=verbose, callback=callback, save_config=save_config,
+                save_process=save_process, save=save, plot=plot,
+            )
+        else:
+            resolution = resolve_target(self.cfg, target)
+            target_channels = resolution.channels
+            target_servo_name = resolution.target_servo_name
 
         if not target_channels:
             raise ValueError(
                 f"Target '{target}' not recognized as a channel, servo, or 'all'."
             )
+
+        if len(target_channels) > 1:
+            merged_channel = {
+                "path": "+".join(str(ch["path"]) for ch in target_channels),
+                "wavelength": target_channels[0]["wavelength"],
+                "servos": [
+                    servo
+                    for channel in target_channels
+                    for servo in sorted(channel["servos"], key=lambda item: item["order"])
+                ],
+            }
+            target_channels = [merged_channel]
 
         results = {}
         for ch in target_channels:

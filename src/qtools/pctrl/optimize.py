@@ -112,27 +112,10 @@ class BasisMeasurement:
         self.loss_fn = loss_fn or compose_basis_loss(
             self.minimization_basis, self.maximization_basis
         )
-        self.servo_mgr = None
-        self.servo_names: list[str] = []
-        self.limits = None
         self.basis_now: dict[str, str] = {}
         self.last_counts: dict[BasisPair, float] = {}
+        # Notebook consumers can append evaluation snapshots here.
         self.history_rows: list = []
-        self.last_elapsed = 0.0
-
-    def set_tracking(self, servo_mgr, servo_names: list[str], start: list[float], half_width_deg: float) -> None:
-        self.servo_mgr = servo_mgr
-        self.servo_names = list(servo_names)
-        self.limits = (list(start), float(half_width_deg))
-
-    def out_of_range(self) -> bool:
-        if self.limits is None:
-            return False
-        start, half_width = self.limits
-        return any(
-            abs(self.servo_mgr.get_angle(name) - self.servo_mgr.get_servo_center(name) - ref) > half_width
-            for name, ref in zip(self.servo_names, start)
-        )
 
     def _basis_angle(self, side: str, basis: str) -> float:
         from qtools.pmeas.entanglement import _get_basis_angle
@@ -163,11 +146,6 @@ class BasisMeasurement:
     def measure(self, duration=None, samples=None, channels=None, measure_type="singles",
                 ch_start=None, ch_stop=None, delay=None, window_start=None,
                 window_stop=None, threshvolt=None) -> list:
-        started = time.time()
-        if self.out_of_range():
-            self.last_counts = {}
-            self.last_elapsed = time.time() - started
-            return [(float("inf"), 0.0)]
         counts = {}
         for basis_a, basis_b in self.measurement_keys:
             self._move_basis(self.basis_sides[0], basis_a)
@@ -177,15 +155,7 @@ class BasisMeasurement:
                 delay, window_start, window_stop, threshvolt,
             )
         self.last_counts = counts
-        self.last_elapsed = time.time() - started
         return [(float(self.loss_fn(counts)), 0.0)]
-
-    def log_evaluation(self, eval_count, angles, value, raw) -> None:
-        self.history_rows.append((eval_count, dict(self.last_counts), float(value)))
-        parts = " ".join(
-            f"{a}{b.lower()}={c:9.2f}" for (a, b), c in self.last_counts.items()
-        )
-        print(f"      {parts}   loss={float(value):+.4f} ({self.last_elapsed:.1f}s)", flush=True)
 
 
 class OptimizeResult(list):

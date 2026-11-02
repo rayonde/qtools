@@ -6,7 +6,7 @@
 
 ## 方案
 
-- 将 basis 测量适配器放入 `qtools.pctrl.optimize.BasisMeasurement`；`joint_optimize` 只保留旧导入和相关性函数兼容层。
+- 将 basis 测量适配器放入 `qtools.pctrl.optimize.BasisMeasurement`；`joint_optimize` 只保留双侧优化的薄封装，调用统一的 `PolarizationController.optimize`。
 - Notebook 使用 `qtools.motor.MotorConfigManager` 从独立的 `motor_config.yaml` 读取电机端口和 backend 参数；使用 `polmeas_config.yaml` 保存 optical path 的 basis 校准角度。
 - Notebook 只创建 `BasisMeasurement`，注入 `HV`、`VH`、`DA`、`AD` 四组 key 以及平方和 loss，然后调用唯一的 `PolarizationController.optimize`。
 - 优化历史和 basis 切换由 pctrl 现有实现负责；Notebook 仅展示收敛曲线。

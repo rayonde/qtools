@@ -19,7 +19,7 @@ src/qtools/pctrl/
 ├── calibration.py
 ├── cli.py                      # pctrl command
 ├── config.py                   # YAML configuration management
-├── joint_optimize.py           # Backward-compatible helpers; optimizer is in optimize.py
+├── joint_optimize.py           # Thin two-channel wrapper around optimize.py
 ├── loops.py
 ├── meas_manager.py             # qtools.powermeter / qtools.tdc integration
 ├── optimize.py
@@ -462,4 +462,4 @@ All sweep data is fed into a single optimization loop:
 
 ## Joint Optimization
 
-For basis-dependent optimization, use `BasisMeasurement` from `qtools.pctrl.optimize` with `PolarizationController.optimize`. The former `joint_optimize` module remains only as a compatibility import for legacy correlation helpers.
+`PolarizationController.optimize(target="alice")` optimizes one channel. Pass a target sequence such as `target=["alice", "bob"]` to merge both servo groups into one optimization. `qtools.pctrl.joint_optimize.joint_optimize()` is the explicit two-channel wrapper; `optimize_joint` is its direct alias. Basis-dependent measurements use `BasisMeasurement` from `qtools.pctrl.optimize`.
