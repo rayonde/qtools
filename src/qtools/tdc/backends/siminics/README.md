@@ -81,3 +81,17 @@ example `02 00 6A AB` for a CH2 event and `82 00 00 00` for M1. The parser
 therefore defaults to `byteorder="big"`. If an application has already
 converted the memory buffer to host-order integers, use `parse_words()`
 directly or pass `byteorder="little"` to `parse_bytes()`.
+
+
+## Automatic discovery
+
+Some Siminics SDK versions block indefinitely in `InitDll()` when no board is
+connected. For that reason, Siminics is excluded from automatic `list_tdc()`
+scans unless explicitly enabled:
+
+```powershell
+$env:QTOOLS_TDC_SCAN_SIMINICS = "1"
+tdc list
+```
+
+Explicit connection through `get_tdc("siminics", port=...)` is unaffected.

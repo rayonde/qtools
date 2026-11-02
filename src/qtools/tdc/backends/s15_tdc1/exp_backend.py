@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import platform
+import threading
 import time
 from dataclasses import replace
 from struct import unpack
@@ -38,6 +39,8 @@ USB_SERIAL_PATTERNS = ["TDC1", "FT232"]
 # makes readline() time out mid-line on the first acquisition.
 _COUNTS_READ_TIMEOUT = 0.5
 DEVICE_IDENTIFIER = "TDC1"
+_TDC1_PROBE_TIMEOUT = 0.25
+_TDC1_PROBE_MAX_BYTES = 4096
 TTL_LEVEL = "TTL"
 NIM_LEVEL = "NIM"
 
@@ -45,12 +48,79 @@ NIM_LEVEL = "NIM"
 # Device discovery
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def find_tdc1_devices() -> List[DeviceInfo]:
+def _probe_tdc1_serial(dev_path: str, timeout: float = _TDC1_PROBE_TIMEOUT) -> bool:
+    """Probe one serial port under a hard wall-clock deadline.
+
+    Some Windows virtual-COM drivers ignore pyserial read timeouts. Running the
+    probe in a daemon thread ensures discovery can always move on to the next
+    port instead of hanging the entire ``list_tdc`` command.
+    """
+    timeout = max(0.05, float(timeout))
+    state: dict[str, object] = {"matched": False, "serial": None}
+
+    def worker() -> None:
+        ser = None
+        try:
+            ser = serial.Serial(
+                dev_path,
+                baudrate=DEFAULT_BAUD_RATE,
+                timeout=min(0.1, timeout),
+                write_timeout=min(0.1, timeout),
+            )
+            state["serial"] = ser
+            ser.reset_input_buffer()
+            ser.write(b"*IDN?\n")
+            if hasattr(ser, "flush"):
+                ser.flush()
+
+            deadline = time.monotonic() + timeout
+            response = bytearray()
+            while (
+                time.monotonic() < deadline
+                and len(response) < _TDC1_PROBE_MAX_BYTES
+            ):
+                waiting = int(getattr(ser, "in_waiting", 0) or 0)
+                chunk = ser.read(min(256, waiting) if waiting > 0 else 1)
+                if not chunk:
+                    break
+                response.extend(chunk)
+                if b"\n" in chunk or b"\r" in chunk:
+                    break
+            state["matched"] = b"TDC" in bytes(response).upper()
+        except Exception as exc:
+            logger.debug("TDC1 probe failed on %s: %s", dev_path, exc)
+        finally:
+            if ser is not None:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+
+    thread = threading.Thread(
+        target=worker,
+        name=f"tdc1-probe-{dev_path}",
+        daemon=True,
+    )
+    thread.start()
+    thread.join(timeout + 0.2)
+    if thread.is_alive():
+        logger.warning("TDC1 probe timed out while scanning %s", dev_path)
+        ser = state.get("serial")
+        if ser is not None:
+            try:
+                ser.close()
+            except Exception:
+                pass
+        return False
+    return bool(state["matched"])
+
+
+def find_tdc1_devices(probe_timeout: float = _TDC1_PROBE_TIMEOUT) -> List[DeviceInfo]:
     """Scan and find S-Fifteen TDC1 devices on Linux, macOS, and Windows.
 
-    Uses active probe (like powermeter's list_devices): opens each serial
-    port, sends ``*IDN?``, and checks for a TDC response.  Falls back to
-    ``/dev/serial/by-id/`` on Linux and ``/dev/cu.*`` globs on macOS.
+    Uses a bounded active probe: opens each serial port, sends ``*IDN?``,
+    and checks for a TDC response. Falls back to ``/dev/serial/by-id/`` on
+    Linux and ``/dev/cu.*`` globs on macOS.
     """
     devices: List[DeviceInfo] = []
 
@@ -70,19 +140,9 @@ def find_tdc1_devices() -> List[DeviceInfo]:
                    for k in ["k10cr1", "thorlabs", "apt", "bluetooth", "bt-ecu", "wireless"]):
                 continue
 
-            # Active probe: open port and send *IDN? to verify it's an S15 TDC
-            matched = False
-            try:
-                ser = serial.Serial(dev_path, baudrate=115200, timeout=0.15)
-                ser.write(b"*IDN?\n")
-                resp = ser.readline().decode("ascii", errors="ignore").strip()
-                ser.close()
-                if "TDC" in resp.upper():
-                    matched = True
-            except Exception:
-                pass
-
-            if matched:
+            if not dev_path:
+                continue
+            if _probe_tdc1_serial(dev_path, timeout=probe_timeout):
                 devices.append(
                     DeviceInfo(
                         backend_name="s15_tdc1",

@@ -230,7 +230,7 @@ def test_list_tdc_scans_prints_and_returns_device_records(monkeypatch, capsys):
     discover = MagicMock(return_value=devices)
     monkeypatch.setattr(connection, "discover_all", discover)
     assert list_tdc(method="usb") is devices
-    discover.assert_called_once_with(method="usb", timeout=1.0)
+    discover.assert_called_once_with(method="usb", timeout=2.0)
     output = capsys.readouterr().out
     for text in ["Discovered devices (1)", "fake://tdc", "SN-001", "Test TDC"]:
         assert text in output

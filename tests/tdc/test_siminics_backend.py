@@ -10,6 +10,18 @@ from qtools.tdc.backends.siminics import (
 from qtools.tdc.connection import get_backend
 
 
+def test_siminics_discovery_requires_explicit_opt_in(monkeypatch):
+    import qtools.tdc.backends.siminics.backend as siminics_backend
+
+    monkeypatch.delenv(siminics_backend.SIMINICS_DISCOVERY_ENV, raising=False)
+
+    def unexpected_sdk():
+        raise AssertionError("Siminics SDK must not be initialized during default discovery")
+
+    monkeypatch.setattr(siminics_backend, "SiminicsSDK", unexpected_sdk)
+    assert SiminicsBackend.discover_devices() == []
+
+
 def test_siminics_is_registered_and_marker_words_are_sideband_events():
     assert get_backend("siminics") is SiminicsBackend
 

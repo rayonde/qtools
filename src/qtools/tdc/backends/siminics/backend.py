@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import os
 import sys
 import time
 from collections.abc import Iterable
@@ -43,6 +44,7 @@ MODE_ITTR_M = 0x07
 DEFAULT_RESOLUTION_PS = 64.0
 DEFAULT_TTTR_MODE = "T2"
 DEFAULT_BINS = 65_536
+SIMINICS_DISCOVERY_ENV = "QTOOLS_TDC_SCAN_SIMINICS"
 
 
 def _check_positive(value: float, name: str) -> float:
@@ -623,6 +625,19 @@ class SiminicsBackend(TDCBackend):
     @classmethod
     def discover_devices(cls) -> list[DeviceInfo]:
         if sys.platform != "win32":
+            return []
+        # Some Siminics SDK versions block indefinitely in InitDll() when no
+        # board is present. Requiring explicit opt-in keeps list_tdc bounded.
+        if os.environ.get(SIMINICS_DISCOVERY_ENV, "").lower() not in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            logger.debug(
+                "Skipping Siminics discovery; set %s=1 to enable it",
+                SIMINICS_DISCOVERY_ENV,
+            )
             return []
         sdk = SiminicsSDK()
         found: list[DeviceInfo] = []

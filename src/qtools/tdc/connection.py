@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 import select
 import socket
+import threading
+import time
 from importlib import import_module
 from typing import Callable, Dict, List, Optional, Type
 
@@ -118,33 +120,69 @@ def list_backends() -> Dict[str, Type[TDCBackend]]:
     return dict(_REGISTRY)
 
 
-def auto_discover() -> List[DeviceInfo]:
-    """Run device discovery on all registered backends.
+def _discover_backend_with_timeout(
+    name: str,
+    backend_cls: Type[TDCBackend],
+    timeout: float,
+) -> List[DeviceInfo]:
+    """Run one backend discovery in a daemon thread with a hard deadline."""
+    state: dict[str, object] = {"devices": [], "error": None}
 
-    Iterates through every registered backend, calls its ``discover_devices()``
-    classmethod, and aggregates all discovered device information.
+    def worker() -> None:
+        try:
+            state["devices"] = list(backend_cls.discover_devices())
+        except Exception as exc:  # noqa: BLE001 - surfaced through state
+            state["error"] = exc
 
-    Returns:
-        A list of ``DeviceInfo`` for all discovered devices.
+    thread = threading.Thread(
+        target=worker,
+        name=f"tdc-discover-{name}",
+        daemon=True,
+    )
+    thread.start()
+    thread.join(max(0.05, float(timeout)))
+
+    if thread.is_alive():
+        logger.warning(
+            "Backend '%s' discovery exceeded %.2fs; skipping it",
+            name,
+            timeout,
+        )
+        return []
+
+    error = state.get("error")
+    if error is not None:
+        logger.warning("Backend '%s' discovery failed: %s", name, error)
+        return []
+
+    devices = state.get("devices", [])
+    return list(devices) if isinstance(devices, list) else []
+
+
+def auto_discover(timeout: float = 2.0) -> List[DeviceInfo]:
+    """Run bounded device discovery on all registered backends.
+
+    Duplicate registrations of the same backend class are scanned once. Each
+    backend gets at most *timeout* seconds, so a blocking vendor SDK or serial
+    driver cannot make ``list_tdc`` hang indefinitely.
     """
     all_devices: List[DeviceInfo] = []
+    seen_backends: set[Type[TDCBackend]] = set()
 
     for name, backend_cls in sorted(_REGISTRY.items()):
+        if backend_cls in seen_backends:
+            continue
+        seen_backends.add(backend_cls)
         logger.info("Scanning backend: %s (%s)", name, backend_cls.__name__)
-        try:
-            devices = backend_cls.discover_devices()
-            all_devices.extend(devices)
-            logger.info(
-                "Backend '%s' found %d device(s)",
-                name,
-                len(devices),
-            )
-        except Exception:
-            logger.warning(
-                "Backend '%s' discovery failed",
-                name,
-                exc_info=True,
-            )
+        started = time.monotonic()
+        devices = _discover_backend_with_timeout(name, backend_cls, timeout)
+        all_devices.extend(devices)
+        logger.info(
+            "Backend '%s' found %d device(s) in %.2fs",
+            name,
+            len(devices),
+            time.monotonic() - started,
+        )
 
     return all_devices
 
@@ -212,24 +250,18 @@ def discover_network_devices(timeout: float = 1.0) -> List[DeviceInfo]:
     return devices
 
 
-def discover_all(method: str = "all", timeout: float = 1.0) -> List[DeviceInfo]:
+def discover_all(method: str = "all", timeout: float = 2.0) -> List[DeviceInfo]:
     """Import backends dynamically and perform device discovery (USB and/or Ethernet).
 
     Args:
         method:  The discovery method, either "usb", "ethernet", or "all".
-        timeout: Retained for API compatibility. Backend-specific discovery
-            routines control their own network probe timeouts.
+        timeout: Maximum seconds allowed for each backend discovery routine.
 
     Returns:
         A list of DeviceInfo for all discovered devices.
     """
     if method not in {"usb", "ethernet", "all"}:
         raise ValueError("method must be 'usb', 'ethernet', or 'all'")
-
-    # The previous implementation used this value only for the generic UDP
-    # broadcast helper. Known Ethernet backends now perform their own
-    # protocol-aware discovery, so retain the argument without broad scans.
-    del timeout
 
     # Import all backends before discovery. Each backend reports its own
     # transport and produces a path that its connector understands.
@@ -238,7 +270,7 @@ def discover_all(method: str = "all", timeout: float = 1.0) -> List[DeviceInfo]:
     except Exception as e:
         logger.warning("Error dynamically importing backend modules: %s", e)
 
-    devices = auto_discover()
+    devices = auto_discover(timeout=timeout)
     if method == "all":
         return devices
 
@@ -270,7 +302,7 @@ def display_devices(devices: Optional[List[DeviceInfo]] = None) -> None:
     print(f"\nRegistered backends ({len(registered)}):")
     if registered:
         for name, cls in sorted(registered.items()):
-            print(f"  • {name:20s} -> {cls.__name__}")
+            print(f"  - {name:20s} -> {cls.__name__}")
     else:
         print("  (none)")
 
@@ -282,8 +314,8 @@ def display_devices(devices: Optional[List[DeviceInfo]] = None) -> None:
             f"{'Endpoint':<24} {'S/N':<16} {'Desc'}"
         )
         print(
-            f"  {'─' * 4} {'─' * 16} {'─' * 12} {'─' * 28} "
-            f"{'─' * 24} {'─' * 16} {'─' * 20}"
+            f"  {'-' * 4} {'-' * 16} {'-' * 12} {'-' * 28} "
+            f"{'-' * 24} {'-' * 16} {'-' * 20}"
         )
         for i, dev in enumerate(devices, 1):
             sn = dev.serial_number or "N/A"
@@ -304,7 +336,7 @@ def display_devices(devices: Optional[List[DeviceInfo]] = None) -> None:
     print("=" * 72)
 
 
-def list_tdc(method: str = "all", timeout: float = 1.0) -> List[DeviceInfo]:
+def list_tdc(method: str = "all", timeout: float = 2.0) -> List[DeviceInfo]:
     """Discover attached TDC hardware, print its details, and return device records.
 
     Returned records can be passed directly to ``get_tdc`` or ``TDC``.

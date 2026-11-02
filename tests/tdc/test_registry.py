@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import time
 
 import pytest
 
@@ -56,3 +57,39 @@ def test_auto_discover(monkeypatch):
     monkeypatch.setattr(connection, "_REGISTRY", {"fake_tdc": FakeBackend})
     devices = connection.auto_discover()
     assert devices == [expected]
+
+
+def test_auto_discover_skips_blocking_backend(monkeypatch):
+    class HangingBackend:
+        @classmethod
+        def discover_devices(cls):
+            time.sleep(0.5)
+            return []
+
+    monkeypatch.setattr(connection, "_REGISTRY", {"hanging": HangingBackend})
+    started = time.monotonic()
+    devices = connection.auto_discover(timeout=0.05)
+    elapsed = time.monotonic() - started
+
+    assert devices == []
+    assert elapsed < 0.3
+
+
+def test_auto_discover_scans_duplicate_class_once(monkeypatch):
+    calls = 0
+
+    class FakeBackend:
+        @classmethod
+        def discover_devices(cls):
+            nonlocal calls
+            calls += 1
+            return []
+
+    monkeypatch.setattr(
+        connection,
+        "_REGISTRY",
+        {"fake_a": FakeBackend, "fake_b": FakeBackend},
+    )
+
+    assert connection.auto_discover(timeout=0.1) == []
+    assert calls == 1

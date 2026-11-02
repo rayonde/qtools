@@ -145,19 +145,34 @@ def test_kdc101_backend_uses_shared_motor_api(fake_low_level, config_mgr):
     assert not backend.is_connected
 
 
-def test_kdc101_backend_rejects_non_rotational_stage(fake_low_level, config_mgr):
+def test_kdc101_backend_rejects_explicit_linear_mode(fake_low_level, config_mgr):
+    backend = KDC101Backend(
+        port="27000001",
+        config_mgr=config_mgr,
+        travel_mode=1,
+    )
+
+    assert not backend.connect()
+
+
+def test_kdc101_backend_defaults_to_prm1_z8(fake_low_level, config_mgr):
     backend = KDC101Backend(port="27000001", config_mgr=config_mgr)
-    original_init = fake_low_level.__init__
 
-    def linear_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        self.travel_mode = 1
+    assert backend.connect()
+    low_level = fake_low_level.instances[-1]
+    assert low_level.loaded_settings == "PRM1-Z8"
+    assert low_level.travel_mode == 2
 
-    fake_low_level.__init__ = linear_init
-    try:
-        assert not backend.connect()
-    finally:
-        fake_low_level.__init__ = original_init
+
+def test_kdc101_stage_settings_alias_is_normalized(fake_low_level, config_mgr):
+    backend = KDC101Backend(
+        port="27000001",
+        config_mgr=config_mgr,
+        stage_settings="PRM1/M-Z8",
+    )
+
+    assert backend.connect()
+    assert fake_low_level.instances[-1].loaded_settings == "PRM1-Z8"
 
 
 def test_kdc101_zero_offset_is_persisted(fake_low_level, config_mgr):

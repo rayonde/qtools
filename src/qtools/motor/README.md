@@ -337,9 +337,9 @@ Requirements and behavior:
   in degrees.
 - Only rotational KDC101 configurations are accepted. Linear stages need a
   different API contract and are intentionally rejected.
-- If the stage is already configured in Kinesis, `stage_settings` may be
-  omitted and the persisted settings are loaded. Explicit stage settings are
-  recommended for reproducible setups.
+- The backend defaults to Kinesis stage settings `PRM1-Z8` and rotational
+  travel mode `2`. `PRM1/M-Z8` is accepted as an alias. Pass an explicit
+  `stage_settings` only when using a different Thorlabs stage.
 - If two or more controllers are connected, always pass a serial number or
   index; the CLI cannot auto-select a device.
 

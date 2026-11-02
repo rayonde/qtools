@@ -18,7 +18,11 @@ from qtools.motor.backends.motor import (
 from qtools.motor.backends.k10cr1.k10cr1 import ThorlabsK10CR1
 from qtools.motor.backends.k10cr1.stage import K10CR1Backend
 from qtools.motor.backends.kdc101.kdc101 import KDC101Error, ThorlabsKDC101
-from qtools.motor.backends.kdc101.stage import KDC101Backend
+from qtools.motor.backends.kdc101.stage import (
+    DEFAULT_KDC101_STAGE_SETTINGS,
+    DEFAULT_KDC101_TRAVEL_MODE,
+    KDC101Backend,
+)
 from qtools.motor.connection import get_motor
 from qtools.motor.config import MotorConfigManager
 
@@ -26,6 +30,8 @@ __all__ = [
     "MotorBackend",
     "K10CR1Backend",
     "KDC101Backend",
+    "DEFAULT_KDC101_STAGE_SETTINGS",
+    "DEFAULT_KDC101_TRAVEL_MODE",
     "ThorlabsK10CR1",
     "ThorlabsKDC101",
     "KDC101Error",

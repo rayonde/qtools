@@ -830,8 +830,8 @@ def make_parser(help_verbosity: int = 1):
         help="Scanning method: 'usb', 'ethernet', or 'all' (default: 'all')",
     )
     pgroup.add_argument(
-        "--timeout", type=float, default=1.0,
-        help="Compatibility timeout for network discovery (default: 1.0)",
+        "--timeout", type=float, default=2.0,
+        help="Per-backend discovery deadline in seconds (default: 2.0)",
     )
 
     # Show the options shared with coincidences under [pairs] as well. argparse

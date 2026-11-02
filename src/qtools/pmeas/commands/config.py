@@ -165,6 +165,10 @@ def _do_config_init(cfg: ConfigManager, args: argparse.Namespace) -> None:
 
     print("\n--- Scan for motors ---")
     try:
+        from qtools.motor.backends.kdc101.stage import (
+            DEFAULT_KDC101_STAGE_SETTINGS,
+            DEFAULT_KDC101_TRAVEL_MODE,
+        )
         from qtools.motor.backends.motor import list_motors
 
         motors = list_motors()
@@ -203,6 +207,12 @@ def _do_config_init(cfg: ConfigManager, args: argparse.Namespace) -> None:
                 zero_off = float(existing.get("zero_offset", "0.0") or "0.0")
 
                 name = f"{optical_path}_{wl}_{role}_{wp}"
+                backend_fields: dict[str, object] = {}
+                if device.backend == "kdc101":
+                    backend_fields.update(
+                        stage_settings=DEFAULT_KDC101_STAGE_SETTINGS,
+                        travel_mode=DEFAULT_KDC101_TRAVEL_MODE,
+                    )
                 cfg.upsert_device(
                     key=sn,
                     id=optical_path,
@@ -215,6 +225,7 @@ def _do_config_init(cfg: ConfigManager, args: argparse.Namespace) -> None:
                     waveplate=wp,
                     wavelength=wl,
                     zero_offset=zero_off,
+                    **backend_fields,
                 )
 
     except ImportError:

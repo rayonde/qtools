@@ -10,6 +10,9 @@ from qtools.motor.backends.motor import register_backend
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_KDC101_STAGE_SETTINGS = "PRM1-Z8"
+DEFAULT_KDC101_TRAVEL_MODE = 2
+
 
 @register_backend("kdc101")
 class KDC101Backend:
@@ -22,7 +25,8 @@ class KDC101Backend:
         name, Kinesis addresses KDC101 devices by serial number rather than
         COM port.
     stage_settings:
-        Optional Kinesis stage settings name, for example ``"PRM1-Z8"``.
+        Kinesis stage settings name. Defaults to ``"PRM1-Z8"``, the
+        canonical Kinesis settings name for the PRM1/M-Z8 rotation stage.
         When supplied it is loaded with ``CC_LoadNamedSettings``.
     steps_per_rev, gearbox_ratio, pitch:
         Optional explicit motor parameters. If supplied, ``steps_per_rev`` is
@@ -159,12 +163,22 @@ class KDC101Backend:
             except Exception as exc:
                 logger.debug("Could not load persisted KDC101 settings: %s", exc)
 
-        settings_name = self._stage_settings or entry.get("stage_settings")
-        if settings_name:
-            if not self._motor.load_named_settings(str(settings_name)):
-                raise RuntimeError(
-                    f"Kinesis stage settings '{settings_name}' could not be loaded."
-                )
+        settings_name = (
+            self._stage_settings
+            or entry.get("stage_settings")
+            or DEFAULT_KDC101_STAGE_SETTINGS
+        )
+        settings_name = self._normalize_stage_settings(str(settings_name))
+        if not self._motor.load_named_settings(settings_name):
+            raise RuntimeError(
+                f"Kinesis stage settings '{settings_name}' could not be loaded."
+            )
+
+        # Loading a named stage updates both motor parameters and travel mode
+        # asynchronously. Let the device publish that configuration before
+        # deciding whether the travel mode still needs an explicit update.
+        self._motor.request_settings()
+        time.sleep(max(0.1, float(getattr(self._motor, "poll_ms", 100)) / 1000.0))
 
         steps_per_rev = (
             self._steps_per_rev
@@ -193,14 +207,26 @@ class KDC101Backend:
             if self._travel_mode is not None
             else entry.get("travel_mode")
         )
-        if mode is not None:
-            self._motor.set_travel_mode(self._normalize_travel_mode(mode))
+        if mode is None:
+            mode = DEFAULT_KDC101_TRAVEL_MODE
+        desired_mode = self._normalize_travel_mode(mode)
 
-        try:
+        current_mode = self._motor.get_travel_mode()
+        if current_mode != desired_mode:
+            self._motor.set_travel_mode(desired_mode)
             self._motor.request_settings()
-            time.sleep(0.1)
-        except Exception:
-            pass
+            time.sleep(max(0.1, float(getattr(self._motor, "poll_ms", 100)) / 1000.0))
+
+    @staticmethod
+    def _normalize_stage_settings(settings_name: str) -> str:
+        normalized = settings_name.strip()
+        aliases = {
+            "prm1-z8": "PRM1-Z8",
+            "prm1/m-z8": "PRM1-Z8",
+            "prm1/mz8": "PRM1-Z8",
+            "prm1-mz8": "PRM1-Z8",
+        }
+        return aliases.get(normalized.lower(), normalized)
 
     @staticmethod
     def _normalize_travel_mode(mode: str | int) -> int:

@@ -5,11 +5,17 @@ from qtools.motor.backends.kdc101.kdc101 import (
     ThorlabsKDC101,
     list_devices,
 )
-from qtools.motor.backends.kdc101.stage import KDC101Backend
+from qtools.motor.backends.kdc101.stage import (
+    DEFAULT_KDC101_STAGE_SETTINGS,
+    DEFAULT_KDC101_TRAVEL_MODE,
+    KDC101Backend,
+)
 
 __all__ = [
     "KDC101Backend",
     "KDC101Error",
     "ThorlabsKDC101",
+    "DEFAULT_KDC101_STAGE_SETTINGS",
+    "DEFAULT_KDC101_TRAVEL_MODE",
     "list_devices",
 ]

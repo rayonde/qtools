@@ -68,12 +68,18 @@ backends use their protocol-aware discovery routines.
 | Option | Description |
 |--------|-------------|
 | `--method {usb,ethernet,all}` | Scanning protocol filter (default: `all`) |
-| `--timeout` | Compatibility timeout for network discovery (default: 1.0) |
+| `--timeout` | Hard per-backend discovery deadline in seconds (default: 2.0) |
 
 ```bash
 tdc list
 tdc list --method ethernet
 ```
+
+Each backend is scanned under the `--timeout` deadline, so a blocked serial
+driver or vendor SDK cannot make `tdc list` hang indefinitely. Siminics USB
+discovery is opt-in because some vendor SDK versions block in `InitDll()` when
+no board is present; enable it with
+`QTOOLS_TDC_SCAN_SIMINICS=1`.
 
 ---
 

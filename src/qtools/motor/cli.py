@@ -28,6 +28,10 @@ import sys
 
 from qtools.motor.connection import get_motor
 from qtools.motor.backends.motor import MotorBackend, list_motors
+from qtools.motor.backends.kdc101.stage import (
+    DEFAULT_KDC101_STAGE_SETTINGS,
+    DEFAULT_KDC101_TRAVEL_MODE,
+)
 from qtools.motor.config import MotorConfigManager
 
 
@@ -125,8 +129,12 @@ def cmd_config(args: argparse.Namespace) -> None:
         "Starting configuration wizard..."
     )
     mgr = MotorConfigManager.resolve()
-    stage_settings = getattr(args, "stage_settings", None)
+    stage_settings = (
+        getattr(args, "stage_settings", None) or DEFAULT_KDC101_STAGE_SETTINGS
+    )
     travel_mode = getattr(args, "travel_mode", None)
+    if travel_mode is None:
+        travel_mode = DEFAULT_KDC101_TRAVEL_MODE
 
     for device in devices:
         if not device.serial:
@@ -137,10 +145,8 @@ def cmd_config(args: argparse.Namespace) -> None:
             continue
         extra: dict[str, object] = {"backend": device.backend}
         if device.backend == "kdc101":
-            if stage_settings is not None:
-                extra["stage_settings"] = stage_settings
-            if travel_mode is not None:
-                extra["travel_mode"] = travel_mode
+            extra["stage_settings"] = stage_settings
+            extra["travel_mode"] = travel_mode
         mgr.prompt_device_info(device.serial, **extra)
 
     mgr.save()
@@ -408,7 +414,7 @@ def _add_runtime_options(
     parser.add_argument(
         "--stage-settings",
         default=default,
-        help="Kinesis stage settings name for KDC101 (e.g. PRM1-Z8)",
+        help="Kinesis stage settings name for KDC101 (default: PRM1-Z8)",
     )
     parser.add_argument(
         "--steps-per-rev",
@@ -431,7 +437,7 @@ def _add_runtime_options(
     parser.add_argument(
         "--travel-mode",
         default=default,
-        help="KDC101 travel mode; only rotational/2 is supported",
+        help="KDC101 travel mode; only rotational/2 is supported (default: 2)",
     )
     parser.add_argument(
         "--move-timeout",
