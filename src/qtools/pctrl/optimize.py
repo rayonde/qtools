@@ -5,14 +5,14 @@ optimize.py
 Noise-aware Nelder-Mead optimization of TDC measurements over servo angles.
 
 Only hill-climbing is performed: no full parameter sweep is used.  Each
-evaluation averages several singles readings and the optimizer termination
-tolerance is tied to the measured singles noise so fluctuation is not
-mistaken for a real intensity change.
+evaluation averages the configured measurement and the optimizer termination
+tolerance is tied to the measured noise so fluctuation is not mistaken for a
+real signal change.
 """
 
 import time
 import logging
-from typing import Callable, List, Dict, Any, Optional
+from typing import Callable, List, Dict, Any, Optional, Sequence
 import numpy as np
 from scipy.optimize import minimize
 
@@ -22,6 +22,170 @@ from qtools.pctrl.calibration import (
 from qtools.pctrl.config import channel_key_string
 
 logger = logging.getLogger(__name__)
+
+
+BasisPair = tuple[str, str]
+
+
+def normalize_basis_pairs(basis: Sequence[Sequence[str]] | None) -> tuple[BasisPair, ...]:
+    """Normalize user supplied two-arm basis labels."""
+    if basis is None:
+        return ()
+    pairs = []
+    for pair in basis:
+        if len(pair) != 2:
+            raise ValueError(f"Each basis combination must contain two labels: {pair!r}")
+        pairs.append((str(pair[0]).upper(), str(pair[1]).upper()))
+    if len(set(pairs)) != len(pairs):
+        raise ValueError("Basis combinations must be unique")
+    return tuple(pairs)
+
+
+def compose_basis_loss(
+    minimization_basis: Sequence[Sequence[str]] = (),
+    maximization_basis: Sequence[Sequence[str]] = (),
+) -> Callable[[dict[BasisPair, float]], float]:
+    """Build a scalar loss from basis-pair rates.
+
+    The optimizer minimizes the returned value.  Therefore minimizing terms
+    contribute ``+rate**2`` and maximizing terms contribute ``-rate**2``.
+    """
+    minimize = normalize_basis_pairs(minimization_basis)
+    maximize = normalize_basis_pairs(maximization_basis)
+    if not minimize and not maximize:
+        raise ValueError("At least one minimization or maximization basis is required")
+
+    def loss(counts: dict[BasisPair, float]) -> float:
+        return float(
+            sum(float(counts[key]) ** 2 for key in minimize)
+            - sum(float(counts[key]) ** 2 for key in maximize)
+        )
+
+    return loss
+
+
+class BasisMeasurement:
+    """Measurement adapter for basis-dependent optimization.
+
+    It owns basis motor movement and TDC readout while ``optimize_channel``
+    remains the only optimization loop.  Pass ``minimization_basis`` and/or
+    ``maximization_basis`` to generate the loss automatically, for example::
+
+        BasisMeasurement(...,
+            minimization_basis=[("H", "V"), ("V", "H")],
+            maximization_basis=[("D", "D")])
+    """
+
+    def __init__(
+        self,
+        meas_mgr,
+        polmeas_cfg,
+        motor_mgr,
+        *,
+        basis_pairs: Sequence[Sequence[str]] | None = None,
+        measurement_keys: Sequence[Sequence[str]] | None = None,
+        minimization_basis: Sequence[Sequence[str]] = (),
+        maximization_basis: Sequence[Sequence[str]] = (),
+        loss_fn: Callable[[dict[BasisPair, float]], float] | None = None,
+        basis_sides: tuple[str, str] = ("alice", "bob"),
+        basis_settle: float = 0.05,
+    ):
+        self.meas_mgr = meas_mgr
+        self.polmeas_cfg = polmeas_cfg
+        self.motor_mgr = motor_mgr
+        self.basis_sides = basis_sides
+        self.basis_settle = float(basis_settle)
+        self.minimization_basis = normalize_basis_pairs(minimization_basis)
+        self.maximization_basis = normalize_basis_pairs(maximization_basis)
+        if basis_pairs is None:
+            basis_pairs = measurement_keys
+        elif measurement_keys is not None:
+            raise ValueError("Pass only one of basis_pairs and measurement_keys")
+        if basis_pairs is None:
+            basis_pairs = self.minimization_basis + self.maximization_basis
+        self.measurement_keys = normalize_basis_pairs(basis_pairs)
+        if not self.measurement_keys:
+            raise ValueError("basis_pairs or a non-empty loss basis is required")
+        missing = set(self.minimization_basis + self.maximization_basis) - set(self.measurement_keys)
+        if missing:
+            raise ValueError(f"Loss basis pairs are not measured: {sorted(missing)!r}")
+        self.loss_fn = loss_fn or compose_basis_loss(
+            self.minimization_basis, self.maximization_basis
+        )
+        self.servo_mgr = None
+        self.servo_names: list[str] = []
+        self.limits = None
+        self.basis_now: dict[str, str] = {}
+        self.last_counts: dict[BasisPair, float] = {}
+        self.history_rows: list = []
+        self.last_elapsed = 0.0
+
+    def set_tracking(self, servo_mgr, servo_names: list[str], start: list[float], half_width_deg: float) -> None:
+        self.servo_mgr = servo_mgr
+        self.servo_names = list(servo_names)
+        self.limits = (list(start), float(half_width_deg))
+
+    def out_of_range(self) -> bool:
+        if self.limits is None:
+            return False
+        start, half_width = self.limits
+        return any(
+            abs(self.servo_mgr.get_angle(name) - self.servo_mgr.get_servo_center(name) - ref) > half_width
+            for name, ref in zip(self.servo_names, start)
+        )
+
+    def _basis_angle(self, side: str, basis: str) -> float:
+        from qtools.pmeas.entanglement import _get_basis_angle
+        return float(_get_basis_angle(self.polmeas_cfg, side, basis))
+
+    def _move_basis(self, side: str, basis: str) -> None:
+        key = str(basis).upper()
+        if self.basis_now.get(side) == key:
+            return
+        stage = self.motor_mgr.get_motor(side)
+        stage.move_to(self._basis_angle(side, key))
+        stage.wait_move()
+        time.sleep(self.basis_settle)
+        self.basis_now[side] = key
+
+    def _read(self, duration, samples, channels, measure_type, ch_start, ch_stop, delay, window_start, window_stop, threshvolt) -> float:
+        if measure_type != "pairs":
+            result = self.meas_mgr.measure(duration=duration, samples=samples, channels=channels)
+        else:
+            result = self.meas_mgr.measure(
+                duration=duration, samples=samples, measure_type="pairs",
+                ch_start=ch_start, ch_stop=ch_stop, delay=delay,
+                window_start=window_start, window_stop=window_stop,
+                threshvolt=threshvolt,
+            )
+        return float(result[0][0])
+
+    def measure(self, duration=None, samples=None, channels=None, measure_type="singles",
+                ch_start=None, ch_stop=None, delay=None, window_start=None,
+                window_stop=None, threshvolt=None) -> list:
+        started = time.time()
+        if self.out_of_range():
+            self.last_counts = {}
+            self.last_elapsed = time.time() - started
+            return [(float("inf"), 0.0)]
+        counts = {}
+        for basis_a, basis_b in self.measurement_keys:
+            self._move_basis(self.basis_sides[0], basis_a)
+            self._move_basis(self.basis_sides[1], basis_b)
+            counts[(basis_a, basis_b)] = self._read(
+                duration, samples, channels, measure_type, ch_start, ch_stop,
+                delay, window_start, window_stop, threshvolt,
+            )
+        self.last_counts = counts
+        self.last_elapsed = time.time() - started
+        return [(float(self.loss_fn(counts)), 0.0)]
+
+    def log_evaluation(self, eval_count, angles, value, raw) -> None:
+        self.history_rows.append((eval_count, dict(self.last_counts), float(value)))
+        parts = " ".join(
+            f"{a}{b.lower()}={c:9.2f}" for (a, b), c in self.last_counts.items()
+        )
+        print(f"      {parts}   loss={float(value):+.4f} ({self.last_elapsed:.1f}s)", flush=True)
 
 
 class OptimizeResult(list):

@@ -154,6 +154,7 @@ class PolarizationController:
         window_start: int | None = None,
         window_stop: int | None = None,
         threshvolt: float | None = None,
+        measurement_adapter: Any = None,
         verbose: bool = True,
         callback: Any = None,
         save_config: bool = False,
@@ -167,6 +168,9 @@ class PolarizationController:
         ----------
         metric_fn : Callable[[MeasManager], float], optional
             Required when using 2+ TDC channels.  Default: channel-1 mean.
+        measurement_adapter : object, optional
+            Measurement-compatible adapter, such as ``BasisMeasurement``,
+            used instead of the controller's default detector manager.
         channels : list[int], optional
             TDC channel numbers, e.g. ``[1, 2]`` for coincidence readout.
         measure_type : str, default "singles"
@@ -186,7 +190,8 @@ class PolarizationController:
         """
         from qtools.pctrl.optimize import optimize_channel
 
-        if self.meas_mgr is None:
+        active_meas_mgr = measurement_adapter or self.meas_mgr
+        if active_meas_mgr is None:
             raise ConnectionError(
                 "No measurement device configured. "
                 "Run 'pctrl device tdc <COM_PORT>' first."
@@ -208,7 +213,7 @@ class PolarizationController:
                 cfg=self.cfg,
                 channel=ch,
                 servo_mgr=self.servo_mgr,
-                meas_mgr=self.meas_mgr,
+                meas_mgr=active_meas_mgr,
                 target_servo_name=target_servo_name,
                 metric_fn=metric_fn,
                 minimize_metric=minimize,

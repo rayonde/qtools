@@ -195,10 +195,9 @@ class TDC:
             duration: Integration time in seconds.
             num: Number of measurements to take.
 
-        Returns:
-            A list of ``(integration_time, counts)`` tuples,
-            where *counts* is an array of raw per-channel counts.
-            Always returns a list, even when ``num == 1``.
+        Returns a list of ``(integration_time, counts)`` tuples for
+        compatibility with the singles CLI.  The backend acquisition itself
+        uses the unified :class:`SinglesResult` model.
 
         Raises:
             RuntimeError: If all retries are exhausted for a measurement.
@@ -221,10 +220,8 @@ class TDC:
             duration: Integration time in seconds.
             num: Number of measurements to take.
 
-        Returns:
-            A list of ``(integration_time, count_rates)`` tuples,
-            where *count_rates* is an array of per-channel rates in counts/s.
-            Always returns a list, even when ``num == 1``.
+        Returns a list of ``(integration_time, count_rates)`` tuples for
+        compatibility with the singles CLI.
 
         Raises:
             RuntimeError: If all retries are exhausted for a measurement.

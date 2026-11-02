@@ -223,7 +223,13 @@ class MeasManager:
         with self.tdc:
             results = self.tdc.measure_singles(duration=duration, num=samples)
 
-        n_channels = len(results[0][1])
+        def sample_time_and_values(sample):
+            if hasattr(sample, "integration_time"):
+                return float(sample.integration_time), np.asarray(sample.counts)
+            return float(sample[0]), np.asarray(sample[1])
+
+        _, first_values = sample_time_and_values(results[0])
+        n_channels = len(first_values)
         if not channels:
             channel_indices = list(range(n_channels))
         else:
@@ -239,9 +245,10 @@ class MeasManager:
         rate_res = []
         for idx in channel_indices:
             rates = [
-                float(sample[1][idx]) / float(sample[0])
+                float(sample_time_and_values(sample)[1][idx])
+                / float(sample_time_and_values(sample)[0])
                 for sample in results
-                if sample[0] > 0
+                if sample_time_and_values(sample)[0] > 0
             ]
             if not rates:
                 raise RuntimeError("TDC returned zero integration time")
@@ -265,14 +272,38 @@ class MeasManager:
         """Read coincidence pairs through the public tdc package API."""
         with self.tdc:
             self.tdc.set_threshold(threshvolt)
+            if hasattr(self.tdc, "measure_coincidence"):
+                # pctrl's public options are kept in TDC bins.  The new TDC
+                # result API accepts physical times, so convert using the
+                # configured analysis width (or native backend resolution).
+                width_ps = float(
+                    getattr(self.tdc, "bin_width", None)
+                    or getattr(self.tdc.backend, "resolution_ps", 1_000.0)
+                )
+                to_ns = width_ps / 1_000.0
+                result = self.tdc.measure_coincidence(
+                    duration=duration,
+                    ch_start=ch_start,
+                    ch_stop=ch_stop,
+                    ch_stop_delay=float(delay) * to_ns,
+                    unit="ns",
+                    window_start=float(window_start) * to_ns,
+                    window_stop=float(window_stop) * to_ns,
+                    samples=samples,
+                )
+                mean = result.net_pair_rate_mean
+                std = result.net_pair_rate_std
+                if mean is None:
+                    mean = result.raw_pair_rate_mean or 0.0
+                if std is None:
+                    std = result.raw_pair_rate_std or 0.0
+                return [(float(mean), float(std))]
+
+            # Compatibility for older third-party TDC wrappers.
             result = self.tdc.measure_pairs_samples(
-                duration=duration,
-                ch_start=ch_start,
-                ch_stop=ch_stop,
-                delay=delay,
-                window_start=window_start,
-                window_stop=window_stop,
-                num=samples,
+                duration=duration, ch_start=ch_start, ch_stop=ch_stop,
+                delay=delay, window_start=window_start,
+                window_stop=window_stop, num=samples,
             )
         return [(
             float(result["net_pair_rate"]),

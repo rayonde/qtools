@@ -125,6 +125,20 @@ class SinglesResult:
     counts: NDArray[np.uint64]
     count_rates: NDArray[np.float64]
 
+    def __iter__(self):
+        """Legacy tuple view: ``(integration_time, counts)``."""
+        yield self.integration_time
+        yield self.counts
+
+    def __getitem__(self, item):
+        if item == 0:
+            return self.integration_time
+        if item == 1:
+            return self.counts
+        if item == 2:
+            return self.count_rates
+        raise IndexError("SinglesResult index out of range")
+
     # -- convenience helpers ------------------------------------------------
 
     @property
@@ -346,6 +360,18 @@ class CoincidenceResult:
                 self.accidental_counts, self.integration_time, strict=True
             )
         ]
+
+    @property
+    def acc_pair_rate_mean(self) -> Optional[float]:
+        rates = self.acc_pair_rate
+        return None if rates is None else float(np.mean(rates))
+
+    @property
+    def acc_pair_rate_std(self) -> Optional[float]:
+        rates = self.acc_pair_rate
+        if rates is None or len(rates) < 2:
+            return None
+        return float(np.std(rates, ddof=1))
 
     @property
     def net_pair_rate(self) -> Optional[list[float]]:

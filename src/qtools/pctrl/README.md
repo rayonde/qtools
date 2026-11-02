@@ -19,7 +19,7 @@ src/qtools/pctrl/
 ├── calibration.py
 ├── cli.py                      # pctrl command
 ├── config.py                   # YAML configuration management
-├── joint_optimize.py           # Joint controller/measurement optimization
+├── joint_optimize.py           # Backward-compatible helpers; optimizer is in optimize.py
 ├── loops.py
 ├── meas_manager.py             # qtools.powermeter / qtools.tdc integration
 ├── optimize.py
@@ -462,4 +462,4 @@ All sweep data is fed into a single optimization loop:
 
 ## Joint Optimization
 
-Run `python -m qtools.pctrl.joint_optimize --help` for the joint controller/measurement workflow. This module reads `pctrl_config.yaml` and `polmeas_config.yaml` from the working directory and writes results to `optimized_paddles/` there.
+For basis-dependent optimization, use `BasisMeasurement` from `qtools.pctrl.optimize` with `PolarizationController.optimize`. The former `joint_optimize` module remains only as a compatibility import for legacy correlation helpers.

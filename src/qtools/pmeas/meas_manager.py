@@ -298,7 +298,12 @@ class MeasManager:
 
                 if meas_type == "singles":
                     res = tdc.measure_singles(duration=duration, num=samples)
-                    counts = [float(np.sum(s.counts)) if hasattr(s, "counts") else float(s) for s in res]
+                    counts = [
+                        float(np.sum(s.counts)) if hasattr(s, "counts")
+                        else float(np.sum(s[1])) if isinstance(s, (tuple, list)) and len(s) > 1
+                        else float(s)
+                        for s in res
+                    ]
                     mean_cnt, std_cnt = _calc_stats(counts)
                     return MeasurementResult(
                         value=mean_cnt,
@@ -310,7 +315,12 @@ class MeasManager:
 
                 elif meas_type == "rates":
                     res = tdc.measure_rates(duration=duration, num=samples)
-                    rates = [float(np.sum(r[1])) for r in res]
+                    rates = [
+                        float(np.sum(r.count_rates)) if hasattr(r, "count_rates")
+                        else float(np.sum(r[1])) if isinstance(r, (tuple, list)) and len(r) > 1
+                        else float(r)
+                        for r in res
+                    ]
                     mean_rate, std_rate = _calc_stats(rates)
                     return MeasurementResult(
                         value=mean_rate,
@@ -334,29 +344,72 @@ class MeasManager:
                     window_stop = window_stop if window_stop is not None else task_cfg.get("window_stop", None)
                     bin_offset = task_cfg.get("bin_offset", 0)
                     unit = task_cfg.get("unit", "ns")
-                    
-                    res = tdc.measure_pairs_samples(
-                        duration=duration,
-                        ch_start=ch_start,
-                        ch_stop=ch_stop,
-                        delay=delay,
-                        bins=bins,
-                        peak=peak,
-                        loffset=loffset,
-                        roffset=roffset,
-                        window_start=window_start,
-                        window_stop=window_stop,
-                        bin_offset=bin_offset,
-                        unit=unit,
-                        num=samples,
-                    )
 
+                    if hasattr(tdc, "measure_coincidence"):
+                        # Config files historically store delay/window in
+                        # backend bins.  CoincidenceResult uses physical time
+                        # at the public TDC API boundary.
+                        width_ps = float(
+                            getattr(tdc, "bin_width", None)
+                            or getattr(tdc.backend, "resolution_ps", 1_000.0)
+                        )
+                        unit_scale = {
+                            "ps": 1.0,
+                            "ns": 1e-3,
+                            "us": 1e-6,
+                            "ms": 1e-9,
+                        }
+                        if unit not in unit_scale:
+                            raise ValueError(f"Unsupported TDC time unit: {unit!r}")
+                        to_unit = width_ps * unit_scale[unit]
+                        coincidence = tdc.measure_coincidence(
+                            duration=duration,
+                            ch_start=ch_start,
+                            ch_stop=ch_stop,
+                            ch_stop_delay=float(delay) * to_unit,
+                            unit=unit,
+                            window_start=(None if window_start is None else float(window_start) * to_unit),
+                            window_stop=(None if window_stop is None else float(window_stop) * to_unit),
+                            samples=samples,
+                        )
+                        raw_mean = coincidence.raw_pair_rate_mean or 0.0
+                        raw_std = coincidence.raw_pair_rate_std or 0.0
+                        acc_mean = coincidence.acc_pair_rate_mean or 0.0
+                        acc_std = coincidence.acc_pair_rate_std or 0.0
+                        net_mean = coincidence.net_pair_rate_mean
+                        net_std = coincidence.net_pair_rate_std
+                        net_mean = raw_mean - acc_mean if net_mean is None else net_mean
+                        net_std = raw_std if net_std is None else net_std
+                        metrics = {
+                            "result": coincidence,
+                            "raw_pair_rate": float(raw_mean),
+                            "raw_pair_rate_std": float(raw_std),
+                            "acc_pair_rate": float(acc_mean),
+                            "acc_pair_rate_std": float(acc_std),
+                            "net_pair_rate": float(net_mean),
+                            "net_pair_rate_std": float(net_std),
+                        }
+                        return MeasurementResult(
+                            value=float(net_mean), error=float(net_std), unit="cps",
+                            metrics=metrics,
+                            metadata={"detector": detector, "meas_type": meas_type,
+                                      "duration": duration, "samples": samples, "task": task},
+                        )
+
+                    # Compatibility for an older TDC wrapper.
+                    res = tdc.measure_pairs_samples(
+                        duration=duration, ch_start=ch_start, ch_stop=ch_stop,
+                        delay=delay, bins=bins, peak=peak, loffset=loffset,
+                        roffset=roffset, window_start=window_start,
+                        window_stop=window_stop, bin_offset=bin_offset,
+                        unit=unit, num=samples,
+                    )
                     return MeasurementResult(
                         value=float(res["net_pair_rate"]),
-                        error=float(res["net_pair_rate_std"]),
-                        unit="cps",
+                        error=float(res["net_pair_rate_std"]), unit="cps",
                         metrics=res,
-                        metadata={"detector": detector, "meas_type": meas_type, "duration": duration, "samples": samples, "task": task},
+                        metadata={"detector": detector, "meas_type": meas_type,
+                                  "duration": duration, "samples": samples, "task": task},
                     )
 
                 elif meas_type == "timestamps":

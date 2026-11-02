@@ -920,8 +920,8 @@ def run_bell_scan(
                         mean_r = res.value
                         std_r = res.error
                     else:
-                        mean_r = res["raw_pair_rate"]
-                        std_r = res["raw_pair_rate_std"]
+                        mean_r = res.metrics["raw_pair_rate"]
+                        std_r = res.metrics["raw_pair_rate_std"]
                 else:
                     mean_r, std_r = 0.0, 0.0
 
