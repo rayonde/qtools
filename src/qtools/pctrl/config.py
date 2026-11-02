@@ -1020,8 +1020,8 @@ _OPT_DEFAULT_CONFIG: dict = {
     },
     "optimization": {
         "method": "Nelder-Mead",
-        "maxiter": 100,
-        "tol": 1e-4,
+        "maxiter": 30,
+        "tol": 1.0,
         "step_size_deg": 15.0,
         "speed_deg_s": 10.0,
         "settle_time": 0.1,

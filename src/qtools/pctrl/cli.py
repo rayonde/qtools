@@ -343,7 +343,27 @@ Examples:
         "--step-size",
         type=float,
         default=15.0,
-        help="Initial simplex step size in degrees (default: 15.0)",
+        help="Actual initial simplex step size in degrees (default: 15.0)",
+    )
+    opt_parser.add_argument(
+        "--initial-angles",
+        type=_parse_initial_angles,
+        default=None,
+        metavar="current|saved|A,B,C",
+        help=(
+            "Warm start: 'current', 'saved' (last saved optimum), or a "
+            "comma-separated angle list"
+        ),
+    )
+    opt_parser.add_argument(
+        "--search-radius",
+        type=float,
+        default=None,
+        metavar="DEG",
+        help=(
+            "Search half-width in degrees around the warm start; "
+            "default searches the full mechanical range"
+        ),
     )
     opt_parser.add_argument(
         "--overshoot", "-o",
@@ -556,6 +576,24 @@ Examples:
     return parser
 
 
+def _parse_initial_angles(value: str):
+    """Parse 'current', 'saved', or a comma-separated angle list."""
+    mode = str(value).strip().lower()
+    if mode in {"current", "saved"}:
+        return mode
+    parts = [part.strip() for part in str(value).split(",") if part.strip()]
+    if not parts:
+        raise argparse.ArgumentTypeError(
+            "initial angles must be 'current', 'saved', or a comma-separated list"
+        )
+    try:
+        return [float(part) for part in parts]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"invalid initial angle list: {value!r}"
+        ) from exc
+
+
 def _parse_channels(value: str) -> list[int]:
     """Parse a 1-based TDC channel spec like '2' or '1,2' into a list of ints."""
     parts = [p.strip() for p in str(value).split(",") if p.strip()]
@@ -678,6 +716,8 @@ def main() -> None:
                 maxiter=args.maxiter,
                 tol=args.tol,
                 step_size_deg=args.step_size,
+                initial_angles=args.initial_angles,
+                search_radius_deg=args.search_radius,
                 speed_deg_s=args.speed if args.speed is not None else 10.0,
                 overshoot=args.overshoot,
                 settle_time=args.settle_time,

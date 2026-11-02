@@ -145,6 +145,8 @@ class PolarizationController:
         maxiter: int = 30,
         tol: float = 1.0,
         step_size_deg: float = 15.0,
+        initial_angles: Sequence[float] | dict[str, float] | str | None = None,
+        search_radius_deg: float | Sequence[float] | dict[str, float] | None = None,
         speed_deg_s: float = 10.0,
         overshoot: bool = False,
         settle_time: float = 0.1,
@@ -184,6 +186,17 @@ class PolarizationController:
             TDC measurement type: ``"singles"`` or ``"pairs"``.
         samples : int
             Number of readings averaged per evaluation.
+        step_size_deg : float
+            Actual initial simplex step size in degrees.  Each optimize call is
+            one stage; use a large step for a coarse pass and smaller steps for
+            manual fine/final passes.
+        initial_angles : sequence, mapping, "current", or "saved", optional
+            Warm start.  A previous ``OptimizeResult`` can be passed directly.
+            ``"saved"`` loads ``optimal_phys_angle`` from the servo config.
+        search_radius_deg : float, sequence, or mapping, optional
+            Half-width of the search window around ``initial_angles``.  Values
+            are clamped to each servo's mechanical limits.  ``None`` searches
+            the full mechanical range.
         callback : Callable, optional
             ``callback(iteration, angles, scalar_value, raw_measurement)``
             where *raw_measurement* is the ``(C, 2)`` ndarray of
@@ -229,6 +242,8 @@ class PolarizationController:
                 target=[part.strip() for part in target.split(",") if part.strip()],
                 metric_fn=metric_fn, minimize=minimize, method=method,
                 maxiter=maxiter, tol=tol, step_size_deg=step_size_deg,
+                initial_angles=initial_angles,
+                search_radius_deg=search_radius_deg,
                 speed_deg_s=speed_deg_s, settle_time=settle_time, duration=duration,
                 overshoot=overshoot,
                 samples=samples, measure_type=measure_type, channels=channels,
@@ -274,6 +289,8 @@ class PolarizationController:
                 maxiter=maxiter,
                 tol=tol,
                 step_size_deg=step_size_deg,
+                initial_angles=initial_angles,
+                search_radius_deg=search_radius_deg,
                 speed_deg_s=speed_deg_s,
                 overshoot=overshoot,
                 settle_time=settle_time,

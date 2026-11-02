@@ -269,6 +269,31 @@ def test_optimize_cli_pairs_forwards_parameters():
     assert kwargs["samples"] == 3
 
 
+def test_optimize_cli_forwards_warm_start_and_search_radius():
+    from unittest.mock import patch
+    from qtools.pctrl.cli import main
+
+    with patch("qtools.pctrl.PolarizationController") as mock_ctrl:
+        mock_ctrl.return_value.optimize.return_value = []
+        with patch(
+            "sys.argv",
+            [
+                "pctrl",
+                "optimize",
+                "alice",
+                "--initial-angles",
+                "saved",
+                "--search-radius",
+                "12.5",
+            ],
+        ):
+            main()
+
+    kwargs = mock_ctrl.return_value.optimize.call_args.kwargs
+    assert kwargs["initial_angles"] == "saved"
+    assert kwargs["search_radius_deg"] == 12.5
+
+
 def test_optimize_direction_flags_are_mutually_exclusive():
     from qtools.pctrl.cli import _build_parser
 

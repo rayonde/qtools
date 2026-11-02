@@ -12,6 +12,7 @@ real signal change.
 
 import time
 import logging
+from collections.abc import Mapping
 from typing import Callable, List, Dict, Any, Optional, Sequence
 import numpy as np
 from scipy.optimize import minimize
@@ -25,6 +26,163 @@ logger = logging.getLogger(__name__)
 
 
 BasisPair = tuple[str, str]
+
+
+def _expand_servo_values(
+    values,
+    servos: Sequence[dict],
+    opt_indices: Sequence[int],
+    *,
+    field_name: str,
+) -> list[float]:
+    """Expand a scalar/sequence/mapping into values for optimised servos."""
+    if isinstance(values, Mapping):
+        missing = [servos[idx]["name"] for idx in opt_indices
+                   if servos[idx]["name"] not in values]
+        if missing:
+            raise ValueError(f"{field_name} is missing servos: {missing}")
+        expanded = [values[servos[idx]["name"]] for idx in opt_indices]
+    else:
+        try:
+            array = np.asarray(values, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} must contain numeric values") from exc
+        if array.ndim != 1:
+            raise ValueError(f"{field_name} must be a one-dimensional sequence")
+        if array.size == len(opt_indices):
+            expanded = array.tolist()
+        elif array.size == len(servos):
+            expanded = [array[idx] for idx in opt_indices]
+        else:
+            raise ValueError(
+                f"{field_name} must contain {len(opt_indices)} values for the "
+                f"optimised servos (or {len(servos)} for the full channel)"
+            )
+
+    try:
+        result = [float(value) for value in expanded]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must contain numeric values") from exc
+    if not all(np.isfinite(value) for value in result):
+        raise ValueError(f"{field_name} must contain finite values")
+    return result
+
+
+def _resolve_initial_angles(
+    initial_angles,
+    cfg,
+    servos: Sequence[dict],
+    opt_indices: Sequence[int],
+    current_phys: Sequence[float],
+) -> list[float]:
+    """Resolve the optimizer warm start to one value per optimised servo."""
+    if initial_angles is None:
+        return [float(current_phys[idx]) for idx in opt_indices]
+
+    if isinstance(initial_angles, str):
+        mode = initial_angles.strip().lower()
+        if mode == "current":
+            return [float(current_phys[idx]) for idx in opt_indices]
+        if mode == "saved":
+            values = []
+            missing = []
+            for idx in opt_indices:
+                name = servos[idx]["name"]
+                servo_cfg = cfg.get_servo(name)
+                saved = None if servo_cfg is None else servo_cfg.get("optimal_phys_angle")
+                if saved is None:
+                    missing.append(name)
+                else:
+                    values.append(float(saved))
+            if missing:
+                raise ValueError(
+                    "No saved optimal angle is available for: "
+                    + ", ".join(missing)
+                    + ". Run optimize with save_config=True first."
+                )
+            if not all(np.isfinite(value) for value in values):
+                raise ValueError("saved optimal angles must be finite")
+            return values
+        raise ValueError("initial_angles must be 'current', 'saved', a sequence, or a mapping")
+
+    return _expand_servo_values(
+        initial_angles, servos, opt_indices, field_name="initial_angles"
+    )
+
+
+def _resolve_search_radii(
+    search_radius_deg,
+    servos: Sequence[dict],
+    opt_indices: Sequence[int],
+) -> Optional[list[float]]:
+    """Resolve a scalar/sequence/mapping search radius per optimised servo."""
+    if search_radius_deg is None:
+        return None
+    if isinstance(search_radius_deg, (int, float, np.number)):
+        radii = [float(search_radius_deg)] * len(opt_indices)
+    else:
+        radii = _expand_servo_values(
+            search_radius_deg,
+            servos,
+            opt_indices,
+            field_name="search_radius_deg",
+        )
+    if any(not np.isfinite(radius) or radius <= 0.0 for radius in radii):
+        raise ValueError("search_radius_deg must be finite and greater than zero")
+    return radii
+
+
+def _resolve_search_bounds(
+    initial_angles: Sequence[float],
+    mechanical_bounds: Sequence[tuple[float, float]],
+    search_radii: Optional[Sequence[float]],
+) -> list[tuple[float, float]]:
+    """Build bounds around a warm start, clamped to mechanical limits."""
+    if search_radii is None:
+        return [(float(lo), float(hi)) for lo, hi in mechanical_bounds]
+
+    bounds = []
+    for center, (lo, hi), radius in zip(
+        initial_angles, mechanical_bounds, search_radii, strict=True
+    ):
+        center = float(np.clip(center, lo, hi))
+        bounds.append((max(float(lo), center - radius),
+                       min(float(hi), center + radius)))
+    return bounds
+
+
+def _build_initial_simplex(
+    x0: Sequence[float],
+    bounds: Sequence[tuple[float, float]],
+    step_size_deg: float,
+) -> np.ndarray:
+    """Build a Nelder-Mead simplex with an actual angular edge length."""
+    step_size = float(step_size_deg)
+    if not np.isfinite(step_size) or step_size <= 0.0:
+        raise ValueError("step_size_deg must be finite and greater than zero")
+
+    x0_array = np.asarray(x0, dtype=float)
+    lo = np.asarray([bound[0] for bound in bounds], dtype=float)
+    hi = np.asarray([bound[1] for bound in bounds], dtype=float)
+    vertices = [x0_array.copy()]
+
+    for index in range(x0_array.size):
+        vertex = x0_array.copy()
+        up_room = hi[index] - x0_array[index]
+        down_room = x0_array[index] - lo[index]
+        if up_room >= down_room:
+            vertex[index] = min(x0_array[index] + step_size, hi[index])
+            if abs(vertex[index] - x0_array[index]) < 1e-12 and down_room > 0.0:
+                vertex[index] = max(x0_array[index] - step_size, lo[index])
+        else:
+            vertex[index] = max(x0_array[index] - step_size, lo[index])
+            if abs(vertex[index] - x0_array[index]) < 1e-12 and up_room > 0.0:
+                vertex[index] = min(x0_array[index] + step_size, hi[index])
+        if abs(vertex[index] - x0_array[index]) < 1e-12:
+            raise ValueError("search bounds are too narrow to build an initial simplex")
+        vertices.append(vertex)
+
+    return np.asarray(vertices, dtype=float)
 
 
 def normalize_basis_pairs(basis: Sequence[Sequence[str]] | None) -> tuple[BasisPair, ...]:
@@ -171,6 +329,10 @@ class OptimizeResult(list):
         n_evaluations: int,
         message: str,
         history: List[Dict[str, Any]] | None = None,
+        *,
+        initial_angles: List[float] | None = None,
+        search_bounds: List[tuple[float, float]] | None = None,
+        step_size_deg: float | None = None,
     ):
         super().__init__(optimal_angles)
         self.optimal_angles = optimal_angles
@@ -180,6 +342,9 @@ class OptimizeResult(list):
         self.n_evaluations = n_evaluations
         self.message = message
         self.history = history or []
+        self.initial_angles = initial_angles
+        self.search_bounds = search_bounds
+        self.step_size_deg = step_size_deg
 
 
 def _relative_noise_tolerance(base_mean: float, noise_std: float) -> float:
@@ -253,6 +418,8 @@ def optimize_channel(
     maxiter: int = 30,
     tol: float = 1.0,
     step_size_deg: float = 15.0,
+    initial_angles: Sequence[float] | Mapping[str, float] | str | None = None,
+    search_radius_deg: float | Sequence[float] | Mapping[str, float] | None = None,
     speed_deg_s: float = 10.0,
     overshoot: bool = False,
     settle_time: float = 0.1,
@@ -292,6 +459,17 @@ def optimize_channel(
     tol : float
         Nelder-Mead angle tolerance in degrees.  The default 1.0 deg is
         intentionally loose so the optimizer does not chase measurement noise.
+    step_size_deg : float
+        Actual initial simplex edge length in degrees.  A staged workflow should
+        use a large value for coarse search and smaller values for refinement.
+    initial_angles : sequence, mapping, "current", or "saved", optional
+        Warm start for the optimised servos.  A previous ``OptimizeResult`` can
+        be passed directly.  ``"saved"`` reads ``optimal_phys_angle`` from the
+        servo config; ``None`` and ``"current"`` use the current hardware angle.
+    search_radius_deg : float, sequence, or mapping, optional
+        Search half-width around ``initial_angles``.  Values are per optimised
+        servo.  ``None`` keeps the full mechanical range.  This parameter is
+        intended for manual coarse/fine/final staged optimization calls.
     plot : bool, optional
         If True, save and display the metric / servo-angle convergence
         figures (see ``analysis.plotting.plot_optimization_history``).
@@ -334,36 +512,31 @@ def optimize_channel(
     else:
         opt_indices = list(range(len(servos)))
 
-    x0 = [current_phys[idx] for idx in opt_indices]
-
-    # ── Bounds ───────────────────────────────────────────────────
-    bounds = []
+    mechanical_bounds = []
     for idx in opt_indices:
         info = servo_info[servos[idx]["name"]]
-        bounds.append((info["lo_rel"], info["hi_rel"]))
+        mechanical_bounds.append((info["lo_rel"], info["hi_rel"]))
 
-    # ── Initial simplex ──────────────────────────────────────────
-    # Spread the initial simplex over most of the allowed range instead of a
-    # small neighbourhood of the current angle: with noisy TDC singles, a
-    # narrow simplex makes Nelder-Mead converge on measurement noise.  Each
-    # vertex moves a large step (at least 60% of the allowed span) toward one
-    # bound along its axis, so the -90..90 window is probed early.
-    n_opt = len(opt_indices)
+    x0 = _resolve_initial_angles(
+        initial_angles, cfg, servos, opt_indices, current_phys
+    )
+    search_radii = _resolve_search_radii(
+        search_radius_deg, servos, opt_indices
+    )
+    bounds = _resolve_search_bounds(x0, mechanical_bounds, search_radii)
+
     lo_b = np.array([b[0] for b in bounds])
     hi_b = np.array([b[1] for b in bounds])
     x0c = np.clip(np.asarray(x0, dtype=float), lo_b, hi_b)
-    step = np.maximum(np.full(n_opt, float(step_size_deg)), 0.6 * (hi_b - lo_b))
-    vertices = [x0c]
-    for i in range(n_opt):
-        v = x0c.copy()
-        if hi_b[i] - x0c[i] >= x0c[i] - lo_b[i]:
-            v[i] = min(x0c[i] + step[i], hi_b[i])
+    simplex = _build_initial_simplex(x0c, bounds, step_size_deg)
+
+    if verbose:
+        print(f"[optimize] warm start={[round(float(a), 2) for a in x0c]}")
+        if search_radii is None:
+            print("[optimize] search bounds=full mechanical range")
         else:
-            v[i] = max(x0c[i] - step[i], lo_b[i])
-        if abs(v[i] - x0c[i]) < 1e-9:  # guard against a degenerate vertex
-            v[i] = lo_b[i] if x0c[i] > (lo_b[i] + hi_b[i]) / 2.0 else hi_b[i]
-        vertices.append(v)
-    simplex = np.array(vertices)
+            print(f"[optimize] search radii={[round(r, 2) for r in search_radii]}")
+        print(f"[optimize] simplex step={float(step_size_deg):.2f} deg")
 
     servo_mgr.lock([s["servo_id"] for s in servos])
 
@@ -570,4 +743,7 @@ def optimize_channel(
         n_evaluations=eval_count,
         message=str(res.message),
         history=history,
+        initial_angles=[float(a) for a in x0c],
+        search_bounds=[(float(lo), float(hi)) for lo, hi in bounds],
+        step_size_deg=float(step_size_deg),
     )

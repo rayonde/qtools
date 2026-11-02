@@ -234,10 +234,17 @@ Optimize waveplate angles to maximize or minimize TDC singles on a selected chan
 *   `--save-config` (Optional, alias: `--save`): Save the optimized physical angles back to the config file.
 *   `--save-process [filepath]` (Optional): Save step-by-step optimization process history (angles, metric value, loss) to a CSV, JSON, or YAML file (default: `optimize_process_<YYYYMMDD_HHMMSS>.csv`).
 *   `--plot` (Optional): Plot and save the convergence history — metric value and servo angles vs evaluation number.
-*   `--step-size <degrees>` (Optional): Step size for the initial simplex (default: `15.0`).
+*   `--step-size <degrees>` (Optional): Actual initial simplex edge length in degrees (default: `15.0`).
+*   `--initial-angles current|saved|A,B,C` (Optional): Warm start from current angles, the last saved optimum, or an explicit angle list.
+*   `--search-radius <degrees>` (Optional): Search half-width around the warm start, clamped to each servo's mechanical limits. Default: full range.
 *   `--settle-time <seconds>` (Optional): Settle time in seconds after servos stop moving (default: `0.1`).
 ```bash
-pctrl optimize alice --measure singles --maximize --channel 1 --time 2
+# One call is one optimization stage. Save the coarse result first.
+pctrl optimize alice --maximize --step-size 60 --tol 2 --maxiter 40 --save-config
+# Refine around the saved coarse optimum.
+pctrl optimize alice --maximize --initial-angles saved --search-radius 20 --step-size 10 --tol 0.8 --maxiter 40
+# Final polish uses the current angle after the previous call as its warm start.
+pctrl optimize alice --maximize --search-radius 6 --step-size 3 --tol 0.3 --maxiter 25 --time 0.5 --samples 3
 ```
 
 
@@ -315,7 +322,7 @@ CLI / REPL / Python API
 
 | Layer | Responsibility | Extension point |
 |---|---|---|
-| `optimize_channel()` | Simplex construction, Nelder-Mead loop, bounds enforcement | `method`, `tol`, `step_size_deg` |
+| `optimize_channel()` | One simplex/Nelder-Mead stage with warm start and optional local bounds | `method`, `tol`, `step_size_deg`, `initial_angles`, `search_radius_deg` |
 | `hardware_loss(x)` | Move servos → wait settle → measure → return scalar | Closure captures `metric_fn`, `servo_mgr`, `meas_mgr` |
 | `read_measurement(meas_mgr)` | Read TDC singles and return channel means | Selected `--channel` |
 | `callback(iter, angles, val, raw_data)` | Observe each evaluation in real time | Logging, live plots, abort logic |
@@ -370,20 +377,68 @@ def print_progress(iteration: int, angles: list[float],
                    metric_val: float, raw_meas):
     print(f"Step {iteration:03d} | angles={angles} | value={metric_val:.4f}")
 
+`optimize()` intentionally performs **one stage only**. Run it multiple times,
+using the previous result as the next warm start and shrinking the search radius:
+
+```python
 with PolarizationController(config_path="polarization_config.yaml") as ctrl:
-    result = ctrl.optimize(
+    # Coarse search over the full mechanical range.
+    coarse = ctrl.optimize(
         target="alice",
-        metric_fn=my_metrics.visibility,   # any callable(meas_mgr)->float
-        callback=print_progress,           # optional real-time observer
-        minimize=False,                    # False = maximize
-        maxiter=100,
+        metric_fn=my_metrics.visibility,
+        minimize=False,
+        maxiter=40,
+        tol=2.0,
+        step_size_deg=60.0,
+        settle_time=0.2,
+    )
+
+    # Refine around the coarse optimum.
+    fine = ctrl.optimize(
+        target="alice",
+        metric_fn=my_metrics.visibility,
+        minimize=False,
+        initial_angles=coarse,          # OptimizeResult is accepted directly
+        search_radius_deg=20.0,
+        maxiter=40,
+        tol=0.8,
         step_size_deg=10.0,
         settle_time=0.2,
     )
-    print(f"Optimal angles: {result.optimal_angles}")
-    print(f"Best value:     {result.optimal_value}")
-    print(f"Iterations:     {result.n_iterations}")
+
+    # Final polish; longer integration reduces noise before a tight tolerance.
+    final = ctrl.optimize(
+        target="alice",
+        metric_fn=my_metrics.visibility,
+        minimize=False,
+        initial_angles=fine.optimal_angles,
+        search_radius_deg=6.0,
+        maxiter=25,
+        tol=0.3,
+        step_size_deg=3.0,
+        duration=0.5,
+        samples=3,
+        settle_time=0.2,
+    )
+    print(f"Optimal angles: {final.optimal_angles}")
+    print(f"Best value:     {final.optimal_value}")
 ```
+
+### Recommended staged parameters
+
+The values below are starting points, not a hard-coded pipeline. Use repeated
+measurements to establish the objective noise floor before tightening the final
+stage.
+
+| Stage | `initial_angles` | `search_radius_deg` | `step_size_deg` | `maxiter` | `tol` | `duration` | `samples` |
+|---|---|---|---:|---:|---:|---:|---:|
+| Coarse | current or saved optimum | full range (`None`) | 45-90 | 30-50 | 1.5-2.5 | 0.2-0.5 | 1 |
+| Fine | previous result | 20-30 | 10-15 | 30-50 | 0.5-1.0 | 0.5 | 2 |
+| Final | previous result | 5-10 | 2-5 | 20-30 | at least one encoder step | 0.5-1.0 | 3-5 |
+
+For SCS servos one encoder step is about `0.2933 deg`; for STS it is about
+`0.0879 deg`. A `tol` much smaller than one encoder step only causes extra
+measurements without improving the achievable physical angle.
 
 ### Example 3: Complex Metric with Stateful Pre-processing
 
@@ -439,6 +494,9 @@ with PolarizationController("polarization_config.yaml") as ctrl:
 | `n_evaluations` | `int` | Total hardware evaluations |
 | `message` | `str` | Solver termination reason |
 | `history` | `list[dict]` | Full history of `{angles, value, evaluation}` |
+| `initial_angles` | `list[float]` | Warm start used by this stage |
+| `search_bounds` | `list[tuple]` | Bounds used after applying the search radius |
+| `step_size_deg` | `float` | Actual simplex step used by this stage |
 | `result[i]` | `float` | Indexable as a plain list of angles |
 
 ---
