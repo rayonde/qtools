@@ -13,10 +13,10 @@ from __future__ import annotations
 
 import glob
 import logging
-import time
 from typing import Optional
 from qtools.pctrl.backends import ServoBackend, COMM_SUCCESS
 from qtools.pctrl.config import ConfigManager, os_key
+from qtools.pctrl.motion import move_to_position, wait_for_positions
 
 logger = logging.getLogger(__name__)
 # ══════════════════════════════════════════════════════════════
@@ -65,8 +65,10 @@ def auto_discover(
         logger.info("Scanning %s ...", port)
         try:
             backend = ServoBackend(port=port, baudrate=baudrate, servo_type=servo_type)
-            ids = backend.list_servos()
-            backend.close()
+            try:
+                ids = backend.list_servos()
+            finally:
+                backend.close()
         except Exception:
             logger.debug("Failed to open %s", port, exc_info=True)
             continue
@@ -144,6 +146,7 @@ class ServoManager:
         if port:
             self.cfg.port = port
         self._mock_mode = mock_mode
+        self._pending_positions: dict[int, int] = {}
 
         if not self._mock_mode and not self.cfg.port:
             disc = auto_discover(baudrate=self.cfg.baudrate, servo_type=self.cfg.servo_type)
@@ -162,9 +165,13 @@ class ServoManager:
             mock=self._mock_mode,
         )
 
-        self.servo_ids = self._servo_backend.list_servos()
-        if not self._mock_mode and self.cfg.port:
-            self.save_config()
+        try:
+            self.servo_ids = self._servo_backend.list_servos()
+            if not self._mock_mode and self.cfg.port:
+                self.save_config()
+        except BaseException:
+            self.disconnect()
+            raise
 
     # ── config ──────────────────────────────────────────────────
 
@@ -316,7 +323,8 @@ class ServoManager:
         return s
 
     def move_to_angle(self, name: str, angle_deg: float,
-                      speed_deg_s: float = 10.0, acc: int = 20) -> None:
+                      speed_deg_s: float = 10.0, acc: int = 20, *,
+                      overshoot: bool = False) -> None:
         """Move a servo to a waveplate-relative angle (degrees).
 
         *angle_deg* is relative to the servo's configured ``zero_position``,
@@ -324,6 +332,9 @@ class ServoManager:
         target is ``zero_position + angle_deg / deg_per_step``, clamped to
         ``[min_position, max_position]`` so a servo is never commanded past
         its configured software limits.
+
+        ``overshoot`` uses the same two-step movement as ``pctrl set -o``.
+        ``wait_for_settle`` verifies the final encoder position.
         """
         s = self._resolve_servo(name)
         sid = s["servo_id"]
@@ -332,9 +343,14 @@ class ServoManager:
         lo_pos = int(s.get("min_position", 0))
         hi_pos = int(s.get("max_position", 1023))
         speed_steps = self.backend.angle_to_pos(speed_deg_s)
-        pos = int(round(zero + angle_deg / dps))
+        pos = zero + angle_deg / dps
         pos = max(lo_pos, min(hi_pos, pos))
-        self.backend.move(sid, pos, speed_steps, acc)
+        self._pending_positions.pop(sid, None)
+        move_to_position(
+            self.backend, sid, pos, speed_steps, acc, limits=(lo_pos, hi_pos),
+            deg_per_step=dps, overshoot=overshoot,
+        )
+        self._pending_positions[sid] = int(round(pos))
 
     def get_limits(self, name: str) -> tuple[float, float]:
         """Return (min_angle, max_angle) in servo-native degrees for a servo."""
@@ -359,9 +375,11 @@ class ServoManager:
         convention the ``set`` command uses.
         """
         s = self._resolve_servo(name)
-        pos, _, result, _ = self.backend.ReadPosSpeed(s["servo_id"])
-        if result != COMM_SUCCESS:
-            return 0.0
+        pos, _, result, error = self.backend.ReadPosSpeed(s["servo_id"])
+        if result != COMM_SUCCESS or error:
+            raise ConnectionError(
+                f"Failed to read servo '{name}' (communication={result}, error={error})"
+            )
         zero = int(s.get("zero_position", 512))
         dps = float(s.get("deg_per_step", 0.2933))
         return (pos - zero) * dps
@@ -372,20 +390,17 @@ class ServoManager:
         speed_steps = self.backend.angle_to_pos(speed_deg_s)
         self.backend.set_speed(s["servo_id"], speed_steps)
 
-    def wait_for_settle(self, names: list[str], timeout: float = 5.0) -> None:
-        """Block until all named servos stop moving or timeout expires."""
-        ids = [self._resolve_servo(n)["servo_id"] for n in names]
-        start = time.time()
-        while time.time() - start < timeout:
-            all_stopped = True
-            for sid in ids:
-                moving_list = self.backend.is_moving(sid)
-                if moving_list and moving_list[0]:
-                    all_stopped = False
-                    break
-            if all_stopped:
-                break
-            time.sleep(0.05)
+    def wait_for_settle(self, names: list[str], timeout: float = 60.0) -> None:
+        """Wait for all servos to stop at their commanded encoder positions.
+
+        The default allows a full 360-degree move at the usual 10 deg/s.
+        """
+        servos = [self._resolve_servo(n) for n in names]
+        targets = {s["servo_id"]: self._pending_positions.get(s["servo_id"])
+                   for s in servos}
+        wait_for_positions(self.backend, targets, timeout=timeout)
+        for sid in targets:
+            self._pending_positions.pop(sid, None)
 
 
 

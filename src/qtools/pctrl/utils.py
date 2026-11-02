@@ -17,6 +17,7 @@ from qtools.pctrl.servo_manager import (
     ServoManager, servo_encoder_for_angle, write_eeprom_limits,
 )
 from qtools.pctrl.config import resolve_target, channel_key_string
+from qtools.pctrl.motion import move_to_position
 
 
 # ════════════════════════════════════════════════════════════
@@ -303,10 +304,9 @@ def run_direct_set(config: str, set_str: str, speed_deg_s: float | None = None, 
     When ``encode`` is True, values are treated as raw encoder positions
     (0-4095 for STS, 0-1023 for SCS) instead of degrees.
 
-    When ``accurate`` is True and the target is within 20 encoder counts
-    of the current position, the servo first overshoots by 40 counts
-    (clamped to limits) then approaches the target — compensating for
-    gear backlash on small movements.
+    When ``accurate`` is True, use the existing CLI overshoot: for nonzero
+    moves under 3 degrees, first move 150 encoder counts away, then return
+    to the target. Wait for encoder arrival on both legs.
     """
     from qtools.pctrl.config import ConfigManager
 
@@ -386,12 +386,11 @@ def run_direct_set(config: str, set_str: str, speed_deg_s: float | None = None, 
         except Exception:
             print(f"Error: Failed to connect to serial port {active_port}")
             sys.exit(1)
-    speed_val = int(round(speed_deg_s * 4096.0 / 360.0)) if speed_deg_s is not None else 114
+    speed_val = ph_sts.angle_to_pos(10.0 if speed_deg_s is None else speed_deg_s)
     default_acc = 50
 
     # Determine hardware encoder max based on servo type
-    if encode:
-        enc_max = 1023 if active_type == "scs" else 4095
+    enc_max = 1023 if active_type.lower() == "scs" else 4095
 
     try:
         for cmd in commands:
@@ -412,8 +411,8 @@ def run_direct_set(config: str, set_str: str, speed_deg_s: float | None = None, 
                 hi_deg = float(s.get("max_angle", 90.0))
 
                 if cmd["is_relative"]:
-                    curr_pos, _, result, _ = ph_sts.ReadPosSpeed(s["servo_id"])
-                    if result != COMM_SUCCESS:
+                    curr_pos, _, result, error = ph_sts.ReadPosSpeed(s["servo_id"])
+                    if result != COMM_SUCCESS or error:
                         print(f"Error: Failed to query current position of servo '{s['name']}' (ID: {s['servo_id']}).")
                         sys.exit(1)
                     curr_phys = (curr_pos - zero) * dps
@@ -440,35 +439,17 @@ def run_direct_set(config: str, set_str: str, speed_deg_s: float | None = None, 
                 clamped_ang = max(lo_deg, min(hi_deg, target_phys))
                 enc = int(round(zero + clamped_ang / dps))
                 lo = max(0, int(round(zero + lo_deg / dps)))
-                hi = min(4095, int(round(zero + hi_deg / dps)))
+                hi = min(enc_max, int(round(zero + hi_deg / dps)))
                 clamped_enc = max(lo, min(hi, enc))
                 label = f"{clamped_ang:.2f}° (encoder: {clamped_enc})"
 
-            # ── Overshoot two-step mode (backlash compensation) ──
-            if accurate:
-                curr, _, result, _ = ph_sts.ReadPosSpeed(s["servo_id"])
-                if result == COMM_SUCCESS:
-                    diff = abs(clamped_enc - curr)
-                    if 0 < diff < 30:
-                        # Prefer away from target, fallback toward target
-                        to_target = 1 if clamped_enc >= curr else -1
-                        for d in (-to_target, to_target):
-                            cand = curr + d * 150
-                            cand = max(lo, min(hi, cand))
-                            if abs(cand - curr) >= 150:
-                                overshoot = cand
-                                break
-                        else:
-                            overshoot = clamped_enc  # neither direction has room
-
-                        if overshoot != clamped_enc:
-                            ph_sts.move(s["servo_id"], overshoot, speed_val, default_acc)
-                            print(f"  {s['name']}: overshoot -> {overshoot} "
-                                  f"(diff={diff} < 30, first step)")
-                            time.sleep(0.15)
-
-            # ── Final move ───────────────────────────────────────
-            ph_sts.move(s["servo_id"], clamped_enc, speed_val, default_acc)
+            move_to_position(
+                ph_sts, s["servo_id"],
+                clamped_enc if encode else max(lo, min(hi, zero + clamped_ang / dps)),
+                speed_val, default_acc,
+                limits=(lo, hi), deg_per_step=float(s["deg_per_step"]),
+                overshoot=accurate, wait=accurate,
+            )
             print(f"Set {s['name']} -> {label} with speed {speed_val} steps/s")
     finally:
         if should_close:

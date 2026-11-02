@@ -139,6 +139,45 @@ pctrl set <target> [angle] [-s SPEED]
 ```
 * Supports setting multiple targets (e.g. `pctrl set 1,2,3 45` to set all to 45°, or `pctrl set 1,2,3 45,90,135` for different angles).
 * `-s SPEED, --speed SPEED`: Optional speed limit in degrees/second.
+* `-o, --overshoot`: For a nonzero move smaller than 3°, first move a large
+  angle, then return to the target. Uses the existing 150-encoder-count
+  offset (about 44° on SCS or 13° on STS), within the configured limits.
+  Each leg waits for encoder arrival before continuing.
+
+If 1–2° commands update the target but the encoder does not move, first read
+the firmware deadband with `pctrl threshold <servo_name>`. One encoder count
+is approximately 0.293° on SCS and 0.088° on STS. A large deadband or static
+friction can prevent small commands from producing motion. Changing the
+threshold, for example `pctrl threshold <servo_name> 2`, writes both CW/CCW
+values to EEPROM; choose a value supported by the servo and check for jitter
+or heating. Extra sleep alone does not remove deadband.
+
+Overshoot is explicitly enabled with the existing CLI option or a Python
+API parameter; it defaults to off:
+
+```bash
+pctrl set -o alice1550_qwp_1 2
+pctrl optimize alice --overshoot
+```
+
+```python
+controller.set_angles("alice1550_qwp_1", 2, overshoot=True)
+controller.optimize("alice", overshoot=True)
+```
+
+The trigger uses the current encoder position converted to degrees using
+the servo's `deg_per_step`. The first leg prefers moving away from the
+target, falling back to the other direction near a limit. If neither
+direction has room for 150 counts, it sends the target directly, matching
+the existing CLI behavior. No extra movement is added for zero displacement
+or moves of 3° or more.
+
+Optimization and calibration verify the final encoder position before
+measurement. A stopped status with an encoder error over two counts now
+times out with actual and target values. Overshoot manual commands also
+wait for final arrival. Two counts are about 0.59° on SCS or 0.18° on STS.
+Encoder feedback does not detect slip or backlash downstream of the servo
+sensor.
 
 ##### `reset` (alias: `zero`, `middle`)
 Reset target servos (default: `all`) to their configured middle positions.

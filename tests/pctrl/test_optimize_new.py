@@ -278,6 +278,38 @@ def test_optimize_direction_flags_are_mutually_exclusive():
         )
 
 
+def test_optimize_cli_closes_controller_on_failure():
+    from unittest.mock import patch
+    from qtools.pctrl.cli import main
+
+    with patch("qtools.pctrl.PolarizationController") as controller, patch(
+        "sys.argv", ["pctrl", "optimize", "alice"]
+    ):
+        controller.return_value.optimize.side_effect = RuntimeError("read failed")
+        with pytest.raises(RuntimeError, match="read failed"):
+            main()
+    controller.return_value.close.assert_called_once()
+
+
+def test_optimize_cli_reports_nonconvergence(capsys):
+    from unittest.mock import patch
+    from qtools.pctrl.cli import main
+    from qtools.pctrl.optimize import OptimizeResult
+
+    result = OptimizeResult(
+        [10.0], success=False, message="Maximum iterations reached",
+        optimal_value=1, n_iterations=1, n_evaluations=2, history=[],
+    )
+    with patch("qtools.pctrl.PolarizationController") as controller, patch(
+        "sys.argv", ["pctrl", "optimize", "alice"]
+    ):
+        controller.return_value.optimize.return_value = result
+        main()
+    output = capsys.readouterr().out
+    assert "Optimization successful!" not in output
+    assert result.message in output
+
+
 def test_relative_noise_tolerance_caps_large_fluctuation():
     tolerance = _relative_noise_tolerance(base_mean=10.0, noise_std=10.0)
 

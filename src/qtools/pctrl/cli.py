@@ -199,7 +199,7 @@ Examples:
     set_parser.add_argument(
         "--overshoot", "-o",
         action="store_true",
-        help="Two-step positioning: if |target-current| < 30 counts, overshoot by 150 then approach target (backlash compensation)",
+        help="For moves under 3 degrees, first move 150 encoder counts away then return; verify arrival on both legs",
     )
 
     # get subcommand
@@ -344,6 +344,11 @@ Examples:
         type=float,
         default=15.0,
         help="Initial simplex step size in degrees (default: 15.0)",
+    )
+    opt_parser.add_argument(
+        "--overshoot", "-o",
+        action="store_true",
+        help="Use the same two-step movement as 'set -o' for small moves",
     )
     opt_parser.add_argument(
         "--settle-time",
@@ -664,32 +669,39 @@ def main() -> None:
 
         ctrl = PolarizationController(config_path=args.config, mock=args.mock)
 
-        print(f"Running Nelder-Mead {args.measure} optimization on target: '{args.target}'...")
-        optimal_angles = ctrl.optimize(
-            target=args.target,
-            minimize=args.minimize and not args.maximize,
-            method="Nelder-Mead",
-            maxiter=args.maxiter,
-            tol=args.tol,
-            step_size_deg=args.step_size,
-            speed_deg_s=args.speed if args.speed is not None else 10.0,
-            settle_time=args.settle_time,
-            channels=args.channel,
-            duration=args.time if args.time is not None else 0.2,
-            samples=args.samples,
-            measure_type=args.measure,
-            ch_start=args.ch_start,
-            ch_stop=args.ch_stop,
-            delay=args.delay,
-            window_start=args.ws,
-            window_stop=args.we,
-            threshvolt=args.threshvolt,
-            save_config=args.save_config,
-            save_process=args.save_process,
-            plot=args.plot,
-        )
-        print(f"Optimization successful! Optimal physical angles: {optimal_angles}")
-        ctrl.close()
+        try:
+            print(f"Running Nelder-Mead {args.measure} optimization on target: '{args.target}'...")
+            optimal_angles = ctrl.optimize(
+                target=args.target,
+                minimize=args.minimize and not args.maximize,
+                method="Nelder-Mead",
+                maxiter=args.maxiter,
+                tol=args.tol,
+                step_size_deg=args.step_size,
+                speed_deg_s=args.speed if args.speed is not None else 10.0,
+                overshoot=args.overshoot,
+                settle_time=args.settle_time,
+                channels=args.channel,
+                duration=args.time if args.time is not None else 0.2,
+                samples=args.samples,
+                measure_type=args.measure,
+                ch_start=args.ch_start,
+                ch_stop=args.ch_stop,
+                delay=args.delay,
+                window_start=args.ws,
+                window_stop=args.we,
+                threshvolt=args.threshvolt,
+                save_config=args.save_config,
+                save_process=args.save_process,
+                plot=args.plot,
+            )
+            if getattr(optimal_angles, "success", True):
+                print(f"Optimization successful! Optimal physical angles: {optimal_angles}")
+            else:
+                print(f"Optimization did not converge: {optimal_angles.message}")
+                print(f"Best physical angles: {optimal_angles}")
+        finally:
+            ctrl.close()
         return
     elif subcmd == "threshold":
         if args.threshold is None:

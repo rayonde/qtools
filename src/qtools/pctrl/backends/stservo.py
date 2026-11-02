@@ -275,8 +275,10 @@ class STServo:
         
         if speed is None:
             speed = self.speed
-        elif not isinstance(speed, list):
-            speed = [speed]
+        if not isinstance(speed, list):
+            speed = [speed] * len(servo_id)
+        if len(speed) != len(servo_id):
+            raise ValueError("speed must contain one value per servo ID")
         
         success = True
         for sid, spd in zip(servo_id, speed):
@@ -537,11 +539,13 @@ class STServo:
         for sid in servo_id:
             val, res, err = self._handler.ReadMoving(sid)
             if res != COMM_SUCCESS:
-                logger.error("Servo %d moving status get failed: %s", sid, self._handler.getTxRxResult(res))
-                moving_status.append(False)
+                raise ConnectionError(
+                    f"Servo {sid} moving status read failed: {self._handler.getTxRxResult(res)}"
+                )
             elif err != 0:
-                logger.error("Servo %d moving status get error: %s", sid, self._handler.getRxPacketError(err))
-                moving_status.append(False)
+                raise ConnectionError(
+                    f"Servo {sid} moving status error: {self._handler.getRxPacketError(err)}"
+                )
             else:
                 logger.info("Servo ID %d moving status is %d", sid, val)
                 moving_status.append(bool(val))

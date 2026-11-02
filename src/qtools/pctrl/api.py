@@ -42,8 +42,8 @@ class PolarizationController:
     # ── servo helpers ───────────────────────────────────────────
 
     def set_angles(self, target: str, angles: Union[float, List[float], str],
-                   speed_deg_s: float = 10.0) -> None:
-        """Move target servo(s) to target physical angle(s) in degrees."""
+                   speed_deg_s: float = 10.0, *, overshoot: bool = False) -> None:
+        """Move target servo(s); ``overshoot`` uses the existing CLI two-step move."""
         from qtools.pctrl.utils import run_direct_set
         if isinstance(angles, list):
             angles_str = ",".join(map(str, angles))
@@ -58,6 +58,8 @@ class PolarizationController:
             port=self.cfg.port,
             baud=self.cfg.baudrate,
             ph_sts=self.servo_mgr.backend,
+            servo_type=self.cfg.servo_type,
+            accurate=overshoot,
         )
 
     def get_angles(self, target: str) -> Dict[str, float]:
@@ -128,6 +130,7 @@ class PolarizationController:
             channels=channels,
             duration=duration,
             plot=plot,
+            servo_mgr=self.servo_mgr,
         )
 
     # ── optimization ────────────────────────────────────────────
@@ -143,6 +146,7 @@ class PolarizationController:
         tol: float = 1.0,
         step_size_deg: float = 15.0,
         speed_deg_s: float = 10.0,
+        overshoot: bool = False,
         settle_time: float = 0.1,
         duration: float = 0.2,
         samples: int = 1,
@@ -171,6 +175,9 @@ class PolarizationController:
         measurement_adapter : object, optional
             Measurement-compatible adapter, such as ``BasisMeasurement``,
             used instead of the controller's default detector manager.
+        overshoot : bool, default False
+            For moves under 3 degrees, first make a large move, then return
+            to the target, using the same two-step movement as ``pctrl set -o``.
         channels : list[int], optional
             TDC channel numbers, e.g. ``[1, 2]`` for coincidence readout.
         measure_type : str, default "singles"
@@ -190,7 +197,7 @@ class PolarizationController:
         """
         from qtools.pctrl.optimize import optimize_channel
 
-        active_meas_mgr = measurement_adapter or self.meas_mgr
+        active_meas_mgr = self.meas_mgr if measurement_adapter is None else measurement_adapter
         if active_meas_mgr is None:
             raise ConnectionError(
                 "No measurement device configured. "
@@ -203,18 +210,27 @@ class PolarizationController:
         if isinstance(target, (list, tuple, set)):
             target_channels = []
             target_servo_name = None
-            seen_channels = set()
+            selected_channels = {}
             for item in target:
-                for channel in resolve_target(self.cfg, item).channels:
-                    if id(channel) not in seen_channels:
-                        target_channels.append(channel)
-                        seen_channels.add(id(channel))
+                resolution = resolve_target(self.cfg, item)
+                for channel in resolution.channels:
+                    key = channel_key_string(channel["path"], channel["wavelength"])
+                    if key not in selected_channels:
+                        selected_channels[key] = {**channel, "servos": []}
+                        target_channels.append(selected_channels[key])
+                    selected = selected_channels[key]["servos"]
+                    for servo in channel["servos"]:
+                        if (resolution.target_servo_name is None
+                                or servo["name"] == resolution.target_servo_name):
+                            if servo not in selected:
+                                selected.append(servo)
         elif isinstance(target, str) and "," in target:
             return self.optimize(
                 target=[part.strip() for part in target.split(",") if part.strip()],
                 metric_fn=metric_fn, minimize=minimize, method=method,
                 maxiter=maxiter, tol=tol, step_size_deg=step_size_deg,
                 speed_deg_s=speed_deg_s, settle_time=settle_time, duration=duration,
+                overshoot=overshoot,
                 samples=samples, measure_type=measure_type, channels=channels,
                 ch_start=ch_start, ch_stop=ch_stop, delay=delay,
                 window_start=window_start, window_stop=window_stop,
@@ -259,6 +275,7 @@ class PolarizationController:
                 tol=tol,
                 step_size_deg=step_size_deg,
                 speed_deg_s=speed_deg_s,
+                overshoot=overshoot,
                 settle_time=settle_time,
                 duration=duration,
                 samples=samples,

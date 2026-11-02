@@ -254,6 +254,7 @@ def optimize_channel(
     tol: float = 1.0,
     step_size_deg: float = 15.0,
     speed_deg_s: float = 10.0,
+    overshoot: bool = False,
     settle_time: float = 0.1,
     duration: float = 0.2,
     samples: int = 1,
@@ -384,7 +385,20 @@ def optimize_channel(
             channels=channels,
             **measure_kwargs,
         )
-        return np.asarray(data, dtype=float)
+        data = np.asarray(data, dtype=float)
+        if data.ndim != 2 or data.shape[0] == 0 or data.shape[1] != 2:
+            raise ValueError("Measurement must contain one [mean, std] row per channel")
+        if not np.all(np.isfinite(data)):
+            raise ValueError("Measurement contains non-finite values")
+        if data.shape[0] > 1 and channels and len(channels) > 1 and metric_fn is None:
+            raise ValueError("Multi-channel measurement requires an explicit metric_fn")
+        return data
+
+    def custom_metric():
+        value = float(metric_fn(meas_mgr))
+        if not np.isfinite(value):
+            raise ValueError("metric_fn returned a non-finite value")
+        return value
 
     # ---- Measure baseline noise at the current angles ----
     if verbose:
@@ -392,7 +406,7 @@ def optimize_channel(
     for i, idx in enumerate(opt_indices):
         s = servos[idx]
         native = servo_info[s["name"]]["center"] + x0c[i]
-        servo_mgr.move_to_angle(s["name"], native, speed_deg_s)
+        servo_mgr.move_to_angle(s["name"], native, speed_deg_s, overshoot=overshoot)
     if not is_mock:
         servo_mgr.wait_for_settle(
             [servos[idx]["name"] for idx in opt_indices]
@@ -429,7 +443,7 @@ def optimize_channel(
         for i, idx in enumerate(opt_indices):
             s = servos[idx]
             native = servo_info[s["name"]]["center"] + x[i]
-            servo_mgr.move_to_angle(s["name"], native, speed_deg_s)
+            servo_mgr.move_to_angle(s["name"], native, speed_deg_s, overshoot=overshoot)
 
         if not is_mock:
             servo_mgr.wait_for_settle(
@@ -447,8 +461,8 @@ def optimize_channel(
         eval_count += 1
 
         val, raw_std, raw_data = measure_point(x, duration, samples)
-        if metric_fn:
-            val = float(metric_fn(meas_mgr))
+        if metric_fn is not None:
+            val = custom_metric()
             raw_std = 0.0
 
         history.append({
@@ -483,7 +497,7 @@ def optimize_channel(
         opts["fatol"] = stop_tolerance
 
     res = minimize(
-        hardware_loss, x0, bounds=bounds,
+        hardware_loss, x0c, bounds=bounds,
         method=method, options=opts,
     )
 
@@ -496,7 +510,7 @@ def optimize_channel(
     for i, idx in enumerate(opt_indices):
         s = servos[idx]
         native = servo_info[s["name"]]["center"] + optimal_angles[i]
-        servo_mgr.move_to_angle(s["name"], native, speed_deg_s)
+        servo_mgr.move_to_angle(s["name"], native, speed_deg_s, overshoot=overshoot)
 
     if not is_mock:
         servo_mgr.wait_for_settle(
@@ -507,8 +521,8 @@ def optimize_channel(
     # Re-measure the optimum with the same averaged-readout settings so the
     # reported value is not just one lucky noisy sample.
     final_raw = read_point(duration, samples)
-    if metric_fn:
-        final_val = float(metric_fn(meas_mgr))
+    if metric_fn is not None:
+        final_val = custom_metric()
         final_std = 0.0
     else:
         final_val = float(final_raw[0, 0])

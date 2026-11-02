@@ -36,6 +36,10 @@ def generate_sweep_angles(
     right: float = 90.0
 ) -> List[float]:
     """Generate a sweep path: 0 -> left -> 0 -> right -> 0."""
+    if not np.isfinite(step_deg) or step_deg <= 0:
+        raise ValueError("step_deg must be finite and greater than zero")
+    if not (np.isfinite(left) and np.isfinite(right) and left <= 0 <= right):
+        raise ValueError("Sweep bounds must be finite and contain zero")
     path = []
     ang = 0.0
     while ang > left:
@@ -86,6 +90,8 @@ def generate_sweep(
     (encoders, actuals) — list of encoder positions and the
         corresponding waveplate-relative angles actually achieved.
     """
+    if not np.isfinite(deg_per_step) or deg_per_step <= 0:
+        raise ValueError("deg_per_step must be finite and greater than zero")
     desired = generate_sweep_angles(step_deg, left, right)
 
     encoders: list[int] = []
@@ -113,8 +119,7 @@ def servo_sweep_bounds(s: dict) -> tuple[float, float]:
     ``[(min_position - zero_position) * dps, (max_position - zero_position) * dps]``
     is intersected with the configured software angle limits (``min_angle`` /
     ``max_angle``, same frame) so a sweep never drives a servo past either.
-    When the software limits don't overlap the encoder range the pair collapses
-    to ``(0, 0)``.
+    Non-overlapping or non-finite limits are rejected.
     """
     zero = int(s.get("zero_position", 512))
     dps = float(s.get("deg_per_step", 0.2933))
@@ -124,8 +129,10 @@ def servo_sweep_bounds(s: dict) -> tuple[float, float]:
     sw_hi = float(s.get("max_angle", enc_hi))
     lo_rel = max(enc_lo, sw_lo)
     hi_rel = min(enc_hi, sw_hi)
-    if lo_rel > hi_rel:      # software limits don't overlap the range
-        lo_rel = hi_rel = 0.0
+    if not all(np.isfinite(value) for value in (dps, enc_lo, enc_hi, sw_lo, sw_hi)) or dps <= 0:
+        raise ValueError("Servo limits require finite values and positive deg_per_step")
+    if lo_rel > hi_rel:
+        raise ValueError("Servo software and encoder limits do not overlap")
     return lo_rel, hi_rel
 
 
@@ -148,19 +155,19 @@ def evaluate_metric(meas_mgr, duration: float = 0.2, samples: int = 1,
                     metric_fn=None) -> float:
     """Compute scalar metric from MeasManager measurement.
 
+    - An explicit *metric_fn* returns ``metric_fn(meas_mgr)``.
     - 1 channel (powermeter or single TDC): returns channel mean.
-    - 2+ channels with an explicit *metric_fn*: returns ``metric_fn(meas_mgr)``.
     - 2+ channels without *metric_fn* and without explicit *channels*: returns
       the channel-1 mean (the documented default for plain ``optimize`` /
       ``calibration``).  Only a caller that explicitly requests 2+ channels
       with no metric must provide one — summing singles is not a coincidence
       proxy.
     """
+    if metric_fn is not None:
+        return float(metric_fn(meas_mgr))
     data = read_measurement(meas_mgr, duration, samples, channels)
     if data.shape[0] == 1:
         return float(data[0, 0])  # single channel → mean
-    if metric_fn is not None:
-        return float(metric_fn(meas_mgr))
     if not channels:
         return float(data[0, 0])  # default metric: channel-1 mean
     raise ValueError(
@@ -611,37 +618,39 @@ def run_calibration(
 
     *target* can be a servo name, servo ID, channel path, or 'all'.
     *servo_mgr* — optional pre-connected ServoManager. If None, a new one
-      is created from *config* + *port*.
+      is created from *config* + *port* and closed on exit. A supplied
+      manager remains connected and its config is updated in place.
     *plot* — if True, save calibration fit / verification / Poincaré-sphere
       figures and display them (see ``analysis.plotting.plot_calibration``).
     """
     from qtools.pctrl.servo_manager import ServoManager
     from qtools.pctrl.meas_manager import MeasManager
 
-    cfg = ConfigManager(config)
-    if not cfg.load():
-        print(f"Error: Config file not found: {config}")
-        sys.exit(1)
-
-    # ── Servo manager ────────────────────────────────────────────
-    if servo_mgr is None:
-        servo_mgr = ServoManager(config, port=port, mock_mode=mock)
-
-    # ── Measurement manager ──────────────────────────────────────
-    if mock:
-        from qtools.pctrl.meas_manager import MockMeasManager
-        meas_mgr = MockMeasManager()
-        print("[Mock] Using MockMeasManager for calibration measurements.")
+    owns_servo_mgr = servo_mgr is None
+    if owns_servo_mgr:
+        cfg = ConfigManager(config)
+        if not cfg.load():
+            print(f"Error: Config file not found: {config}")
+            sys.exit(1)
     else:
-        try:
-            meas_mgr = MeasManager(config_manager=cfg)
-        except Exception as e:
-            print(f"[Warning] MeasManager init failed: {e}")
-            meas_mgr = None
+        cfg = servo_mgr.cfg
+        mock = servo_mgr.mock_mode
 
-        # Verify sensor
-        if meas_mgr is not None:
+    resolution = resolve_target(cfg, target)
+    if not resolution.channels:
+        raise ValueError(f"Target '{target}' not recognized.")
+
+    if owns_servo_mgr:
+        servo_mgr = ServoManager(cfg=cfg, port=port, mock_mode=mock)
+
+    try:
+        if mock:
+            from qtools.pctrl.meas_manager import MockMeasManager
+            meas_mgr = MockMeasManager()
+            print("[Mock] Using MockMeasManager for calibration measurements.")
+        else:
             try:
+                meas_mgr = MeasManager(config_manager=cfg)
                 val = evaluate_metric(meas_mgr, channels=channels)
                 ch_label = f" ch{channels}" if channels else ""
                 print(f"Sensor OK. Reading{ch_label}: {val:.6e}")
@@ -650,31 +659,21 @@ def run_calibration(
                 print("Connect a powermeter or TDC first, or use --mock mode.")
                 sys.exit(1)
 
-    # ── Resolve target channels ──────────────────────────────────
-    resolution = resolve_target(cfg, target)
-    target_channels = resolution.channels
-    target_servo_name = resolution.target_servo_name
-
-    if not target_channels:
-        print(f"Error: Target '{target}' not recognized.")
-        sys.exit(1)
-
-    # ── Run calibration for each channel ─────────────────────────
-    for ch in target_channels:
-        run_calibration_group(
-            cfg=cfg,
-            channel=ch,
-            servo_mgr=servo_mgr,
-            meas_mgr=meas_mgr,
-            step_deg=step_deg,
-            speed_deg_s=speed_deg_s,
-            basis=basis,
-            fast=fast,
-            target_servo_name=target_servo_name,
-            channels=channels,
-            duration=duration,
-            plot=plot,
-        )
-
-    # Cleanup
-    servo_mgr.disconnect()
+        for ch in resolution.channels:
+            run_calibration_group(
+                cfg=cfg,
+                channel=ch,
+                servo_mgr=servo_mgr,
+                meas_mgr=meas_mgr,
+                step_deg=step_deg,
+                speed_deg_s=speed_deg_s,
+                basis=basis,
+                fast=fast,
+                target_servo_name=resolution.target_servo_name,
+                channels=channels,
+                duration=duration,
+                plot=plot,
+            )
+    finally:
+        if owns_servo_mgr:
+            servo_mgr.disconnect()

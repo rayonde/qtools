@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, List
 import numpy as np
 
-from qtools.pctrl.config import CalConfigManager, OptConfigManager
+from qtools.pctrl.config import CalConfigManager, ConfigManager, OptConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -215,13 +215,17 @@ class MeasManager:
     def _measure_pm(self, duration: float, samples: int) -> tuple:
         """Read from qtools.powermeter — connect, sample, disconnect."""
         with self.pm:
-            mean_power, std_dev = self.pm.measure_power()
+            mean_power, std_dev = powermeter.measure_power(
+                self.pm, duration=duration, samples=samples
+            )
         return mean_power, std_dev
 
     def _measure_tdc(self, duration: float = 1, samples: int = 1,  channels: Optional[List[int]] = None) -> List:
         """Read from TDC — connect, measure singles, disconnect."""
         with self.tdc:
             results = self.tdc.measure_singles(duration=duration, num=samples)
+        if not results:
+            raise RuntimeError("TDC returned no singles measurements")
 
         def sample_time_and_values(sample):
             if hasattr(sample, "integration_time"):
@@ -360,6 +364,8 @@ class MeasManager:
                 if name == "tdc":
                     return self._measure_tdc(duration, samples, channels)
                 return [self._measure_pm(duration, samples)]
+            except ValueError:
+                raise
             except Exception as e:
                 logger.warning("%s measurement failed (%s), trying the other detector.",
                                name.capitalize(), e)
@@ -386,8 +392,13 @@ class MeasManager:
         duration = duration if duration is not None else params.get("duration", 1)
 
         with self.tdc:
-            stamps = self.tdc.measure_timestamps(duration=duration, channels=channels)
-        return stamps
+            records = self.tdc.measure_timestamps(
+                duration=duration, channels=channels, unit="ps"
+            )
+        if not records:
+            return np.empty(0, dtype=float)
+        stamps = np.concatenate([np.asarray(record[2], dtype=float) for record in records])
+        return np.sort(stamps) * 1e-12
     
     # ── expert data saving ─────────────────────────────────────
 
