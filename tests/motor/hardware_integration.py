@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from qtools.motor.api import get_motor
-from qtools.motor.backends.motor import list_devices
+from qtools.motor.backends.motor import list_motors
 from qtools.motor.config import MotorConfigManager
 
 
@@ -23,15 +23,18 @@ def _section(title: str) -> None:
     print(f"\n=== {title} ===")
 
 
-def test_list_devices() -> list[tuple[str, str]]:
+def test_list_motors():
     """Scan for connected devices."""
-    _section("list_devices()")
-    devices = list_devices()
-    print(f"  found {len(devices)} device(s)")
-    for i, (port, label) in enumerate(devices, 1):
-        print(f"  [{i}] {port}: {label}")
-    assert len(devices) > 0, "no devices connected"
-    return devices
+    _section("list_motors()")
+    motors = list_motors()
+    print(f"  found {len(motors)} motor(s)")
+    for i, motor in enumerate(motors, 1):
+        print(
+            f"  [{i}] backend={motor.backend} target={motor.target} "
+            f"serial={motor.serial}: {motor.label}"
+        )
+    assert len(motors) > 0, "no devices connected"
+    return motors
 
 
 def test_get_motor_auto(port: str = ""):
@@ -242,7 +245,7 @@ def main() -> int:
         temp_config_dir = Path(tmpdir)
 
         tests = [
-            ("list_devices", lambda: test_list_devices()),
+            ("list_motors", lambda: test_list_motors()),
             ("get_motor_auto", lambda: test_get_motor_auto(args.device)),
             ("get_motor_by_port", lambda: test_get_motor_by_port(args.device) if args.device else None),
             ("connect_lifecycle", lambda: test_connect_lifecycle(test_get_motor_auto(args.device))),
@@ -262,7 +265,7 @@ def main() -> int:
         for name, test_fn in tests:
             try:
                 result = test_fn()
-                if name == "list_devices" and not result:
+                if name == "list_motors" and not result:
                     failed.append(f"{name}: no devices found")
             except Exception as e:
                 failed.append(f"{name}: {e}")

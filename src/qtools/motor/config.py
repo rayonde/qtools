@@ -339,16 +339,32 @@ class MotorConfigManager:
 
     # ── Interactive naming wizard ──────────────────────────────────
 
-    def prompt_device_info(self, serial_no: int | str) -> dict[str, Any]:
+    def prompt_device_info(
+        self,
+        serial_no: int | str,
+        *,
+        backend: str | None = None,
+        stage_settings: str | None = None,
+        travel_mode: str | int | None = None,
+    ) -> dict[str, Any]:
         """Return the device entry for *serial_no*, prompting the user if new.
 
         Name convention: ``<optical_path><wavelength>_<role>_<waveplate>``
         e.g. ``alice1550_basis_hwp``.  ``id`` defaults to *optical_path*.
+        Backend metadata is updated even when the device is already known.
         """
         serial_str = str(serial_no)
+        backend_fields: dict[str, Any] = {}
+        if backend:
+            backend_fields["backend"] = str(backend)
+        if stage_settings is not None:
+            backend_fields["stage_settings"] = str(stage_settings)
+        if travel_mode is not None:
+            backend_fields["travel_mode"] = travel_mode
 
         existing = self.get_device(serial_str)
         if existing is not None:
+            existing.update(backend_fields)
             return existing
 
         try:
@@ -397,6 +413,7 @@ class MotorConfigManager:
                 waveplate=waveplate,
                 zero_offset=0.0,
                 serial=serial_str,
+                **backend_fields,
             )
             self.save()
             print(f"[OK] Saved to {self.config_path}\n")
@@ -412,6 +429,7 @@ class MotorConfigManager:
                 "role": "unknown",
                 "waveplate": "unknown",
                 "zero_offset": 0.0,
+                **backend_fields,
             }, serial_str)
 
 

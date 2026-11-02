@@ -16,6 +16,7 @@ class PolmeasRepl:
         self.cfg = ConfigManager.resolve(config_path)
 
     def run(self) -> None:
+        from qtools.motor import list_motors
         from qtools.pmeas.commands.utils import _resolve_motor
 
         print("=" * 50)
@@ -68,20 +69,18 @@ class PolmeasRepl:
             return list(stages.items())
 
         def _resolve_target(target: str) -> str:
-            devices = list_devices()
+            devices = list_motors()
             if not devices:
-                raise LookupError("No K10CR1 devices detected.")
-
-            sm_config = sm_load_config()
+                raise LookupError("No motor devices detected.")
 
             if target.isdigit():
                 idx = int(target)
                 if 1 <= idx <= len(devices):
-                    return devices[idx - 1][0]
+                    return devices[idx - 1].target
                 raise LookupError(f"Invalid index {idx}. Use 1-{len(devices)}.")
 
-            connected_ports = [d[0] for d in devices]
-            if target in connected_ports:
+            connected_targets = [device.target for device in devices]
+            if target in connected_targets:
                 return target
 
             if "/" in target or target.upper().startswith("COM"):
@@ -89,21 +88,14 @@ class PolmeasRepl:
 
             for d in polmeas_devices.values():
                 if d.get("name") == target:
-                    for p, label in devices:
-                        if d.get("serial", "") in label:
-                            return p
+                    for device in devices:
+                        if str(d.get("serial", "")) == device.serial:
+                            return device.target
                     raise LookupError(f"Device '{target}' is configured but not connected.")
 
-            for sn, info in sm_config.items():
-                if info.get("name") == target:
-                    for p, label in devices:
-                        if sn in label:
-                            return p
-                    raise LookupError(f"Device '{target}' (SN: {sn}) is configured but not connected.")
-
-            for p, label in devices:
-                if target in label:
-                    return p
+            for device in devices:
+                if target in device.label or target == device.serial:
+                    return device.target
 
             raise LookupError(f"Target '{target}' does not match any connected device.")
 
@@ -143,7 +135,6 @@ class PolmeasRepl:
                     print("  exit / quit           Exit the REPL\n")
 
                 elif cmd == "devices":
-                    connected = list_devices()
                     print("\nConnected devices:")
                     for port, stage_obj in _active_stages():
                         active_mark = "  <-- active" if port == active_port else ""

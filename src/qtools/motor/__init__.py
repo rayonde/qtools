@@ -4,13 +4,17 @@ Provides:
 * Generic motor backend interface  (:class:`MotorBackend`)
 * Physical K10CR1 stage backend  (:class:`K10CR1Backend`)
 * Low-level APT-protocol driver  (:class:`ThorlabsK10CR1`)
-* Device auto-discovery  (:func:`list_devices`)
+* Device auto-discovery  (:func:`list_motors`)
 * Convenience connection helper  (:func:`get_motor`)
 """
 
 from qtools import __version__ as __version__
 
-from qtools.motor.backends.motor import MotorBackend, list_devices
+from qtools.motor.backends.motor import (
+    MotorBackend,
+    MotorDeviceInfo,
+    list_motors,
+)
 from qtools.motor.backends.k10cr1.k10cr1 import ThorlabsK10CR1
 from qtools.motor.backends.k10cr1.stage import K10CR1Backend
 from qtools.motor.backends.kdc101.kdc101 import KDC101Error, ThorlabsKDC101
@@ -26,7 +30,8 @@ __all__ = [
     "ThorlabsKDC101",
     "KDC101Error",
     "MotorConfigManager",
-    "list_devices",
+    "list_motors",
+    "MotorDeviceInfo",
     "get_motor",
 ]
 

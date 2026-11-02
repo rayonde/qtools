@@ -27,7 +27,7 @@ import re
 import sys
 
 from qtools.motor.connection import get_motor
-from qtools.motor.backends.motor import MotorBackend, list_devices
+from qtools.motor.backends.motor import MotorBackend, list_motors
 from qtools.motor.config import MotorConfigManager
 
 
@@ -45,36 +45,41 @@ def print_device_list(
     show_header: bool = True,
     connected_ports: set[str] | None = None,
     config_mgr: MotorConfigManager | None = None,
-    backend: str = "k10cr1",
+    backend: str | list[str] | None = None,
 ) -> list[tuple[str, str]]:
-    """Scan USB and print connected devices alongside their configured names."""
+    """Scan and print devices from one or more motor backends.
+
+    With ``backend=None`` every registered backend is scanned.
+    """
     if show_header:
         print("\n" + "=" * 60)
         print("Scanning for connected motor devices...")
         print("=" * 60)
 
     mgr = config_mgr or MotorConfigManager.resolve()
-    devices = list_devices(backend)
+    devices = list_motors(backend)
 
     if not devices:
         print("  No motor devices found.")
         print("    - Ensure the device is powered on.")
         print("    - Ensure the USB cable is firmly connected.")
     else:
-        for i, (port, label) in enumerate(devices, 1):
-            m = re.search(r"SN=([a-zA-Z0-9]+)", label)
-            sn = re.sub(r"\D", "", m.group(1)) if m else ""
-            entry = mgr.get_device(sn) or {} if sn else {}
+        for i, device in enumerate(devices, 1):
+            entry = mgr.get_device(device.serial) or {} if device.serial else {}
             name = entry.get("name") or entry.get("id") or "(unconfigured)"
-            connected_mark = " [connected]" if connected_ports and port in connected_ports else ""
+            connected_mark = (
+                " [connected]"
+                if connected_ports and device.target in connected_ports
+                else ""
+            )
             print(
-                f"  [{i}] Target: {port}  |  SN: {sn or 'N/A'}  |  "
-                f"Name: {name}{connected_mark}"
+                f"  [{i}] Backend: {device.backend}  |  Target: {device.target}  |  "
+                f"SN: {device.serial or 'N/A'}  |  Name: {name}{connected_mark}"
             )
 
     if show_header:
         print("=" * 60 + "\n")
-    return devices
+    return [(device.target, device.label) for device in devices]
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Command handlers
@@ -108,23 +113,35 @@ def _open_motor(
 
 
 def cmd_config(args: argparse.Namespace) -> None:
-    """Configure connected devices by prompting for their names."""
-    backend = getattr(args, "backend", "k10cr1")
-    devices = list_devices(backend)
+    """Configure devices discovered across one or more motor backends."""
+    backend = getattr(args, "backend", None)
+    devices = list_motors(backend)
     if not devices:
         print("\nNo Motor devices detected. Ensure they are powered on and connected.")
         return
 
-    print(f"\nFound {len(devices)} connected device(s). Starting configuration wizard...")
+    print(
+        f"\nFound {len(devices)} connected device(s). "
+        "Starting configuration wizard..."
+    )
     mgr = MotorConfigManager.resolve()
+    stage_settings = getattr(args, "stage_settings", None)
+    travel_mode = getattr(args, "travel_mode", None)
 
-    for port, label in devices:
-        m = re.search(r"SN=([a-zA-Z0-9]+)", label)
-        if not m:
-            logger.warning("Could not read serial number from device label on %s.", port)
+    for device in devices:
+        if not device.serial:
+            logger.warning(
+                "Could not read serial number from device label on %s.",
+                device.target,
+            )
             continue
-        serial_str = re.sub(r"\D", "", m.group(1))
-        mgr.prompt_device_info(serial_str)
+        extra: dict[str, object] = {"backend": device.backend}
+        if device.backend == "kdc101":
+            if stage_settings is not None:
+                extra["stage_settings"] = stage_settings
+            if travel_mode is not None:
+                extra["travel_mode"] = travel_mode
+        mgr.prompt_device_info(device.serial, **extra)
 
     mgr.save()
     print("\n" + "=" * 60)
@@ -133,8 +150,8 @@ def cmd_config(args: argparse.Namespace) -> None:
 
 
 def cmd_list(args: argparse.Namespace) -> None:
-    """Scan and list connected devices for the selected backend."""
-    backend = getattr(args, "backend", "k10cr1")
+    """Scan and list connected devices for the selected backend(s)."""
+    backend = getattr(args, "backend", None)
     _ = print_device_list(show_header=True, backend=backend)
 
 
@@ -376,7 +393,10 @@ def _add_runtime_options(
     """Add backend selection and backend-specific options to a parser."""
     backend_kwargs: dict[str, object] = {
         "choices": ("k10cr1", "kdc101"),
-        "help": "Motor backend (default: k10cr1)",
+        "help": (
+            "Motor backend; list/config scan all backends by default, "
+            "while device commands default to k10cr1"
+        ),
     }
     if backend_default is None:
         backend_kwargs["default"] = argparse.SUPPRESS
@@ -427,7 +447,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Thorlabs motor CLI (K10CR1 stepper and KDC101 DC servo)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    _add_runtime_options(parser, backend_default="k10cr1")
+    _add_runtime_options(parser)
     sub = parser.add_subparsers(title="commands", dest="command", required=True)
 
     # ------- list ----------------------------------------------------------

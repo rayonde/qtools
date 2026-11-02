@@ -7,7 +7,6 @@ while managing optical path role mappings and session lifecycle for polarization
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any, Dict
 
 import serial.tools.list_ports
@@ -15,8 +14,9 @@ import serial.tools.list_ports
 from qtools.pmeas.backends.motor import (
     MotorBackend,
     MotorConfigManager,
+    MotorDeviceInfo,
+    list_motors,
     get_motor as sm_get_motor,
-    list_devices as sm_list_devices,
 )
 from qtools.pmeas.config import ConfigManager
 
@@ -24,10 +24,29 @@ logger = logging.getLogger(__name__)
 
 
 def _check_availability(port: str | None) -> bool:
-    """Check if the motor port is available on the system."""
+    """Check if a pyserial COM port is available on the system."""
     if not port:
         return False
     return port in [p.device for p in serial.tools.list_ports.comports()]
+
+
+def _matching_discovered_device(
+    dev_info: dict[str, Any],
+    discovered: list[MotorDeviceInfo],
+) -> MotorDeviceInfo | None:
+    """Match a configured device against backend-aware discovery results."""
+    configured_serial = str(dev_info.get("serial") or "")
+    configured_port = str(dev_info.get("port") or "")
+    configured_backend = str(dev_info.get("backend") or "").lower()
+
+    for device in discovered:
+        if configured_backend and device.backend.lower() != configured_backend:
+            continue
+        if configured_serial and device.serial == configured_serial:
+            return device
+        if configured_port and device.target == configured_port:
+            return device
+    return None
 
 
 class MotorManager:
@@ -40,38 +59,74 @@ class MotorManager:
         self._init_configured_devices()
 
     def _init_configured_devices(self) -> None:
-        """Pre-populate motor handles for all configured devices into _available or _notavailable."""
+        """Pre-populate configured devices as available or not connected."""
+        discovered = list_motors()
         for dev_info in self.cfg.get_all_devices():
             dev_id = str(dev_info.get("id", ""))
-            dev_port = dev_info.get("port")
-            dev_serial = dev_info.get("serial")
-            dev_backend = dev_info.get("backend")
+            dev_port = str(dev_info.get("port") or "")
+            dev_serial = str(dev_info.get("serial") or "")
+            dev_backend = str(dev_info.get("backend") or "")
 
             if not dev_id or dev_id in self._available or dev_id in self._notavailable:
                 continue
 
-            # 1. Port is online: connect directly and add to _available pool
+            # 1. A pyserial COM port is physically present.
             if dev_port and _check_availability(dev_port):
                 try:
                     self._available[dev_id] = sm_get_motor(
-                        port=dev_port, blocking=False, backend=dev_backend
+                        port=dev_port,
+                        blocking=False,
+                        backend=dev_backend or "k10cr1",
                     )
                     logger.info("Motor '%s' port %s is available.", dev_id, dev_port)
                     continue
                 except Exception as exc:
-                    logger.warning("Motor '%s' port %s connect failed: %s", dev_id, dev_port, exc)
+                    logger.warning(
+                        "Motor '%s' port %s connect failed: %s",
+                        dev_id,
+                        dev_port,
+                        exc,
+                    )
 
-            # 2. Port is offline or serial-only: try resolving handle and add to _notavailable pool
+            # 2. A non-COM backend (for example KDC101) is physically present.
+            matched = _matching_discovered_device(dev_info, discovered)
+            if matched is not None:
+                try:
+                    self._available[dev_id] = sm_get_motor(
+                        target=matched.target,
+                        blocking=False,
+                        backend=dev_backend or matched.backend,
+                    )
+                    logger.info(
+                        "Motor '%s' target %s is available via %s.",
+                        dev_id,
+                        matched.target,
+                        matched.backend,
+                    )
+                    continue
+                except Exception as exc:
+                    logger.warning(
+                        "Motor '%s' target %s initialization failed: %s",
+                        dev_id,
+                        matched.target,
+                        exc,
+                    )
+
+            # 3. Keep a handle for configured-but-offline devices.
             target = dev_serial or dev_id
             motor = None
             try:
-                motor = sm_get_motor(target=target, blocking=False, backend=dev_backend)
+                motor = sm_get_motor(
+                    target=target,
+                    blocking=False,
+                    backend=dev_backend or None,
+                )
             except Exception:
                 logger.warning("Motor '%s' (target: %s) is not detected.", dev_id, target)
 
             self._notavailable[dev_id] = motor
 
-    def list_devices(self) -> dict[str, list[dict[str, Any]]]:
+    def list_motors(self) -> dict[str, list[dict[str, Any]]]:
         """Return categorized status for connected and not_connected devices without low-level USB scans."""
         def _build_item(dev_id: str, motor: MotorBackend, is_connected: bool) -> dict[str, Any]:
             dev = self.cfg.get_device(dev_id) or {}
@@ -84,6 +139,7 @@ class MotorManager:
                 "role": str(dev.get("role") or ""),
                 "serial": serial_no,
                 "port": port,
+                "backend": str(dev.get("backend") or ""),
                 "is_connected": is_connected,
                 "motor": motor,
             }
@@ -164,20 +220,34 @@ class MotorManager:
                 logger.warning("Error disconnecting motor: %s", exc)
 
     def __enter__(self) -> MotorManager:
-        """Session context manager enter — check for newly available motors."""
+        """Session context manager enter - recheck configured motors."""
+        discovered = list_motors()
         for dev_id in list(self._notavailable.keys()):
             dev_info = self.cfg.get_device(dev_id) or {}
-            dev_port = dev_info.get("port")
-            dev_backend = dev_info.get("backend")
+            dev_port = str(dev_info.get("port") or "")
+            dev_backend = str(dev_info.get("backend") or "")
 
-            if dev_port and _check_availability(dev_port):
-                try:
-                    motor = sm_get_motor(port=dev_port, blocking=False, backend=dev_backend)
-                    self._available[dev_id] = motor
-                    del self._notavailable[dev_id]
-                    logger.info("Motor '%s' on port %s detected and moved to available.", dev_id, dev_port)
-                except Exception as exc:
-                    logger.warning("Failed to initialize motor '%s' on port %s: %s", dev_id, dev_port, exc)
+            try:
+                if dev_port and _check_availability(dev_port):
+                    motor = sm_get_motor(
+                        port=dev_port,
+                        blocking=False,
+                        backend=dev_backend or "k10cr1",
+                    )
+                else:
+                    matched = _matching_discovered_device(dev_info, discovered)
+                    if matched is None:
+                        continue
+                    motor = sm_get_motor(
+                        target=matched.target,
+                        blocking=False,
+                        backend=dev_backend or matched.backend,
+                    )
+                self._available[dev_id] = motor
+                del self._notavailable[dev_id]
+                logger.info("Motor '%s' detected and moved to available.", dev_id)
+            except Exception as exc:
+                logger.warning("Failed to initialize motor '%s': %s", dev_id, exc)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

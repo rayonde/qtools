@@ -84,7 +84,7 @@ def _resolve_motor(
     except Exception:
         pass
 
-    dev_status = mm.list_devices()
+    dev_status = mm.list_motors()
     connected = dev_status.get("connected", [])
     if not connected:
         print("[ERROR] No motor devices detected. Check USB/power.")

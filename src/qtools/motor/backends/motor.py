@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 import logging
-from typing import Any
+import re
+from dataclasses import dataclass
+from typing import Any, Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -8,20 +11,112 @@ DEFAULT_BACKEND = "k10cr1"
 _BACKEND_REGISTRY: dict[str, type] = {}
 
 
-def list_devices(backend: str | type = DEFAULT_BACKEND) -> list[tuple[str, str]]:
-    """Scan and return [(port, label), ...] for devices supported by *backend*."""
-    backend_cls = backend if isinstance(backend, type) else get_backend_class(str(backend))
-    if hasattr(backend_cls, "list_devices"):
-        return backend_cls.list_devices()
-    return []
+@dataclass(frozen=True)
+class MotorDeviceInfo:
+    """A discovered motor together with the backend that found it."""
 
+    target: str
+    label: str
+    backend: str
+    serial: str = ""
+
+    @property
+    def port(self) -> str:
+        """Backward-compatible alias for the backend-specific target."""
+        return self.target
+
+
+def _serial_from_label(label: str, target: str) -> str:
+    match = re.search(r"SN=([a-zA-Z0-9]+)", label)
+    if match:
+        return re.sub(r"\D", "", match.group(1))
+    return target
+
+
+def _backend_entries(
+    backend: str | type | Iterable[str | type] | None,
+) -> list[tuple[str, type]]:
+    """Resolve one or more backend selectors into unique (name, class) pairs."""
+    _ensure_builtin_backends()
+
+    if backend is None or (isinstance(backend, str) and backend.lower() == "all"):
+        selectors: list[str | type] = list(_BACKEND_REGISTRY)
+    elif isinstance(backend, (str, type)):
+        selectors = [backend]
+    else:
+        selectors = list(backend)
+
+    entries: list[tuple[str, type]] = []
+    seen: set[str] = set()
+    for selector in selectors:
+        if isinstance(selector, type):
+            backend_cls = selector
+            name = next(
+                (
+                    registered_name
+                    for registered_name, registered_cls in _BACKEND_REGISTRY.items()
+                    if registered_cls is backend_cls
+                ),
+                backend_cls.__name__.lower(),
+            )
+        else:
+            name = str(selector).lower()
+            backend_cls = get_backend_class(name)
+        if name not in seen:
+            entries.append((name, backend_cls))
+            seen.add(name)
+    return entries
+
+
+def list_motors(
+    backend: str | type | Iterable[str | type] | None = None,
+) -> list[MotorDeviceInfo]:
+    """Scan selected backends and return backend-aware motor records.
+
+    ``backend=None`` and ``backend="all"`` scan every registered backend.
+    A single backend name/class or an iterable of selectors can be supplied to
+    restrict the scan.
+    """
+    motors: list[MotorDeviceInfo] = []
+    seen: set[tuple[str, str]] = set()
+
+    for backend_name, backend_cls in _backend_entries(backend):
+        list_method = getattr(backend_cls, "list_devices", None)
+        if list_method is None:
+            continue
+        try:
+            found = list_method()
+        except Exception as exc:
+            logger.warning("Scanning motor backend %s failed: %s", backend_name, exc)
+            continue
+
+        for item in found:
+            if not item:
+                continue
+            target = str(item[0])
+            label = str(item[1]) if len(item) > 1 else ""
+            key = (backend_name, target)
+            if key in seen:
+                continue
+            seen.add(key)
+            motors.append(
+                MotorDeviceInfo(
+                    target=target,
+                    label=label,
+                    backend=backend_name,
+                    serial=_serial_from_label(label, target),
+                )
+            )
+    return motors
 
 
 def register_backend(name: str):
     """Decorator to register a hardware backend class under a backend identifier."""
+
     def decorator(cls: type):
         _BACKEND_REGISTRY[name.lower()] = cls
         return cls
+
     return decorator
 
 

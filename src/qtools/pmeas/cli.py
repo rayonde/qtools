@@ -219,7 +219,7 @@ def main(argv: list[str] | None = None) -> None:
 
             cfg = ConfigManager.resolve(config_path)
             mm = MotorManager(cfg)
-            dev_dict = mm.list_devices()
+            dev_dict = mm.list_motors()
 
             print("\n" + "=" * 60)
             print("Scanning for connected motor devices...")

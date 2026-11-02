@@ -163,25 +163,27 @@ def _do_config_init(cfg: ConfigManager, args: argparse.Namespace) -> None:
         print("  TDC:  skipped (disabled)")
         detectors["tdc"] = {"backend": "", "port": ""}
 
-    print("\n── Scan for motors ──")
+    print("\n--- Scan for motors ---")
     try:
-        from qtools.motor.backends.motor import list_devices
-        import re as _re
-        motors = list_devices()
-        if not motors:
-            print("  [!] No K10CR1 motors detected. Ensure USB/power.")
-            print("  → Run 'pmeas motor config' later to connect devices.")
-        else:
-            print(f"  Found {len(motors)} device(s) on ports:")
-            for port, label in motors:
-                print(f"    {port}  —  {label}")
+        from qtools.motor.backends.motor import list_motors
 
-            print(f"\n  Configure each device:")
-            for port, label in motors:
-                m = _re.search(r"SN=([a-zA-Z0-9]+)", label)
-                sn = _re.sub(r"\D", "", m.group(1)) if m else port
+        motors = list_motors()
+        if not motors:
+            print("  [!] No motor devices detected. Ensure USB/power.")
+            print("  -> Run 'pmeas motor config' later to connect devices.")
+        else:
+            print(f"  Found {len(motors)} device(s):")
+            for device in motors:
+                print(f"    [{device.backend}] {device.target} -- {device.label}")
+
+            print("\n  Configure each device:")
+            for device in motors:
+                sn = device.serial or device.target
                 existing = cfg.get_device(sn) or {}
-                print(f"\n  --- Device on {port}  (SN={sn}) ---")
+                print(
+                    f"\n  --- Device on {device.target}  "
+                    f"(backend={device.backend}, SN={sn}) ---"
+                )
 
                 if existing.get("name"):
                     print(f"    Current config: name={existing.get('name', '?')}  "
@@ -206,8 +208,9 @@ def _do_config_init(cfg: ConfigManager, args: argparse.Namespace) -> None:
                     id=optical_path,
                     path=optical_path,
                     name=name,
-                    port=port,
+                    port=device.target,
                     serial=sn,
+                    backend=device.backend,
                     role=role,
                     waveplate=wp,
                     wavelength=wl,

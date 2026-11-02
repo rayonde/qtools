@@ -106,10 +106,18 @@ class KDC101Backend:
             self._configure_stage(entry)
             if not self._motor.is_rotational:
                 mode = self._motor.get_travel_mode()
+                try:
+                    params = self._motor.get_motor_params()
+                except Exception:
+                    params = None
                 raise RuntimeError(
-                    f"KDC101 {serial} is not configured as a rotational stage "
-                    f"(travel mode={mode}). Configure a rotational stage in "
-                    "Kinesis or pass stage_settings/steps_per_rev explicitly."
+                    f"KDC101 {serial} reports travel mode {mode} "
+                    "(1=linear/mm, 2=rotational/degree). "
+                    f"Motor parameters: {params}. "
+                    "A degree symbol on the controller display alone does not "
+                    "define the Kinesis travel mode. Load the correct rotational "
+                    "stage in Kinesis, or pass stage_settings "
+                    "(for example PRM1-Z8) when connecting."
                 )
 
             self.zero_offset = float((entry or {}).get("zero_offset", 0.0) or 0.0)

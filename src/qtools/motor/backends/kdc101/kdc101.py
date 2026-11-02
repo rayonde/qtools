@@ -293,6 +293,14 @@ class ThorlabsKDC101:
                 "Enabling KDC101 motor channel",
             )
             time.sleep(0.25)
+            # Best-effort settings refresh after enabling so cached travel
+            # mode and stage parameters are available to callers as early as
+            # possible.
+            try:
+                if self._lib.CC_RequestSettings(self._serial_bytes) == 0:
+                    time.sleep(max(0.05, self.poll_ms / 1000.0))
+            except Exception:
+                logger.debug("Initial KDC101 settings request failed", exc_info=True)
         except Exception:
             self.close()
             raise

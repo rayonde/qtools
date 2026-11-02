@@ -8,10 +8,9 @@ or via context managers.
 from __future__ import annotations
 
 import logging
-import re
 from typing import Tuple
 
-from qtools.motor.backends.motor import DEFAULT_BACKEND, MotorBackend, list_devices
+from qtools.motor.backends.motor import DEFAULT_BACKEND, MotorBackend, list_motors
 from qtools.motor.config import MotorConfigManager
 
 logger = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ def _parse_device_info(
     Resolution Flow:
     - If target is None (Auto-detect):
       1. Check Config: if a single device is configured, match its port/serial in USB scan.
-      2. Scan USB list_devices():
+      2. Scan all backends with list_motors():
          - 0 devices: raise ConnectionError.
          - 1 device: auto-select single connected device and fill config info.
          - >1 devices: raise ValueError requiring target specification.
@@ -38,7 +37,7 @@ def _parse_device_info(
       3. Physical device scan fallback (1-based index or serial/port substring).
     """
     cfg = config_mgr or MotorConfigManager.resolve()
-    devices = list_devices(backend)
+    devices = list_motors(backend)
 
     # ── Scenario A: target is None (Auto-detect mode) ───────────
     if target is None:
@@ -56,14 +55,13 @@ def _parse_device_info(
 
         # 2. USB Auto-detection fallback
         if len(devices) == 1:
-            port, label = devices[0]
-            m = re.search(r"SN=([a-zA-Z0-9]+)", label)
-            serial_no = re.sub(r"\D", "", m.group(1)) if m else ""
+            device = devices[0]
+            serial_no = device.serial
             entry = cfg.get_device(serial_no) if serial_no else None
             dev_name = str(entry.get("name") if entry else "")
-            return port, dev_name, serial_no
+            return device.target, dev_name, serial_no
 
-        ports = [p for p, _ in devices]
+        ports = [device.target for device in devices]
         raise ValueError(
             f"Multiple motor devices connected on ports {ports}. "
             "Please specify target device by name, serial, or port."
@@ -90,30 +88,30 @@ def _parse_device_info(
 
     # 3. Match serial number against connected USB devices
     if not resolved_port and serial_no:
-        for p, label in devices:
-            if serial_no in label:
-                resolved_port = p
+        for device in devices:
+            if serial_no == device.serial or serial_no in device.label:
+                resolved_port = device.target
                 break
 
     # 4. Fallback: exact serial/port, 1-based index, then substring match
     if not resolved_port:
-        for p, label in devices:
-            serial_match = re.search(r"SN=([a-zA-Z0-9]+)", label)
-            if p == target_str or (
-                serial_match and serial_match.group(1) == target_str
-            ):
-                resolved_port = p
+        for device in devices:
+            if device.target == target_str or device.serial == target_str:
+                resolved_port = device.target
                 break
 
     if not resolved_port and target_str.isdigit() and devices:
         idx = int(target_str) - 1
         if 0 <= idx < len(devices):
-            resolved_port = devices[idx][0]
+            resolved_port = devices[idx].target
 
     if not resolved_port:
-        for p, label in devices:
-            if target_str.lower() in label.lower() or target_str.lower() in p.lower():
-                resolved_port = p
+        for device in devices:
+            if (
+                target_str.lower() in device.label.lower()
+                or target_str.lower() in device.target.lower()
+            ):
+                resolved_port = device.target
                 break
 
     if not resolved_port:

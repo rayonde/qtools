@@ -6,7 +6,7 @@ import pytest
 
 from qtools.motor.connection import _parse_device_info
 from qtools.motor.backends.kdc101.stage import KDC101Backend
-from qtools.motor.backends.motor import get_backend_class
+from qtools.motor.backends.motor import MotorDeviceInfo, get_backend_class
 from qtools.motor.config import MotorConfigManager
 
 
@@ -181,11 +181,11 @@ def test_numeric_kdc101_serial_is_not_treated_as_index(
     config_mgr: MotorConfigManager,
 ) -> None:
     devices = [
-        ("27000001", "KDC101 (SN=27000001)"),
-        ("27000002", "KDC101 (SN=27000002)"),
+        MotorDeviceInfo("27000001", "KDC101 (SN=27000001)", "kdc101", "27000001"),
+        MotorDeviceInfo("27000002", "KDC101 (SN=27000002)", "kdc101", "27000002"),
     ]
     monkeypatch.setattr(
-        "qtools.motor.connection.list_devices",
+        "qtools.motor.connection.list_motors",
         lambda _backend: devices,
     )
 
@@ -204,11 +204,11 @@ def test_integer_target_selects_kdc101_by_index(
     config_mgr: MotorConfigManager,
 ) -> None:
     devices = [
-        ("27000001", "KDC101 (SN=27000001)"),
-        ("27000002", "KDC101 (SN=27000002)"),
+        MotorDeviceInfo("27000001", "KDC101 (SN=27000001)", "kdc101", "27000001"),
+        MotorDeviceInfo("27000002", "KDC101 (SN=27000002)", "kdc101", "27000002"),
     ]
     monkeypatch.setattr(
-        "qtools.motor.connection.list_devices",
+        "qtools.motor.connection.list_motors",
         lambda _backend: devices,
     )
 

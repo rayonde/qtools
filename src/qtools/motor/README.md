@@ -77,10 +77,13 @@ motor home COM3             # home device on COM3
 
 ### `list` — List connected K10CR1 devices
 
-Scans USB ports for connected Thorlabs K10CR1 devices and lists them.
+Scans every registered motor backend by default and lists K10CR1 and
+KDC101 devices together.
 
 ```bash
 motor list
+motor list --backend k10cr1
+motor list --backend kdc101
 ```
 
 > [!TIP]
@@ -249,11 +252,11 @@ motor repl
 ## Python API Usage
 
 ```python
-from qtools.motor import get_motor, list_devices, ThorlabsK10CR1
+from qtools.motor import get_motor, list_motors, ThorlabsK10CR1
 
-# 1. List all connected devices
-for port, label in list_devices():
-    print(port, label)
+# 1. List all connected devices across every backend
+for motor in list_motors():
+    print(motor.backend, motor.target, motor.serial, motor.label)
 
 # 2. Connect via convenience helper
 stage = get_motor(name="alice1550_basis_hwp")
