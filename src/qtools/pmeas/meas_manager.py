@@ -659,6 +659,8 @@ class TaskController:
         delay: int | None = None,
         window_start: int | None = None,
         window_stop: int | None = None,
+        fix_stages: Sequence[str] | None = None,
+        sweep_stages: Sequence[str] | None = None,
     ) -> dict:
         """Run CHSH Bell parameter S scan."""
         if self.meas_mgr is None:
@@ -684,6 +686,8 @@ class TaskController:
             delay=delay,
             window_start=window_start,
             window_stop=window_stop,
+            fix_stages=fix_stages,
+            sweep_stages=sweep_stages,
         )
 
     def optimize_basis(

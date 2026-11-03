@@ -95,6 +95,40 @@ key is initialized to `0`; explicitly configured values are preserved.
 
 This models the QWP-then-HWP basis structure while allowing each stage to be
 calibrated independently.
+
+### Bell-scan waveplate stacks
+
+A Bell-scan arm may contain either one HWP or a QWP followed by an HWP. If the
+stack is not specified, `pmeas` infers it from the devices sharing the arm's
+`optical_path`. To make the order explicit, add the stage names under `chsh`:
+
+```yaml
+chsh:
+  arms:
+    alice:
+      stages:
+        - alice_547_basis_qwp
+        - alice_547_basis_hwp
+    bob:
+      stages:
+        - bob_1550_basis_hwp
+```
+
+The list is in optical propagation order. Supported stacks are `[hwp]` and
+`[qwp, hwp]`. For a fixed arm, each stage moves to its own configured
+`bases[H/V/D/A]` angle; no QWP-HWP relative-angle formula is applied. Therefore
+D/A settings rotate both stages according to the configuration. Continuous
+offset scanning is currently supported only for a single-HWP swept arm. The
+same stack can be supplied directly through the Python API:
+
+```python
+ctrl.scan_bell(
+    fix="alice",
+    sweep="bob",
+    fix_stages=["alice_547_basis_qwp", "alice_547_basis_hwp"],
+    sweep_stages=["bob_1550_basis_hwp"],
+)
+```
 ## Python API
 
 `TaskController` manages configuration, motor connections, and measurement tasks.

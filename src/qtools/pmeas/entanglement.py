@@ -10,7 +10,7 @@ import ast
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -138,6 +138,264 @@ def _get_basis_angle(cfg: ConfigManager | None, target: str | int | None, basis:
     elif b == "L":
         return (theta_0 + 45.0) % 180.0
     raise ValueError(f"Unknown basis label or angle: {basis}")
+
+
+def _get_device_theta_0(dev: dict) -> float:
+    """Return the calibrated fast-axis zero for a configured device."""
+    cal = dev.get("calibration", {}) or {}
+    val = (
+        cal.get("theta_0")
+        if cal.get("theta_0") is not None
+        else dev.get("theta_0")
+        if dev.get("theta_0") is not None
+        else cal.get("zero_offset")
+        if cal.get("zero_offset") is not None
+        else dev.get("zero_offset")
+    )
+    return float(val) if val is not None else 0.0
+
+
+def _arm_override(chsh_cfg: dict, side: str) -> Any:
+    """Return the per-arm Bell configuration for *side*, case-insensitively."""
+    arms = chsh_cfg.get("arms", {}) if isinstance(chsh_cfg, dict) else {}
+    if not isinstance(arms, dict):
+        return None
+    for key, value in arms.items():
+        if str(key).strip().lower() == str(side).strip().lower():
+            return value
+    return None
+
+
+def _as_name_list(value: Any) -> list[str] | None:
+    """Normalize a config/API stage list, accepting a single string."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return [value] if value.strip() else None
+    values = [str(item).strip() for item in value if str(item).strip()]
+    return values or None
+
+
+def _resolve_basis_arm(
+    cfg: ConfigManager,
+    motor_mgr: MotorManager,
+    side: str,
+    *,
+    chsh_cfg: dict | None = None,
+    stage_override: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Resolve the ordered waveplate stack used by one Bell-scan arm.
+
+    Supported physical orders are a single HWP or QWP -> HWP.  The stack can
+    be inferred from devices sharing ``optical_path == side`` or specified as::
+
+        chsh:
+          arms:
+            alice:
+              stages: [alice_547_basis_qwp, alice_547_basis_hwp]
+            bob:
+              stages: [bob_1550_basis_hwp]
+    """
+    chsh_cfg = chsh_cfg or cfg.get("chsh", {}) or {}
+    override = _arm_override(chsh_cfg, side)
+    requested_stages = _as_name_list(stage_override)
+    requested_waveplates: list[str] | None = None
+    if override is not None:
+        if isinstance(override, dict):
+            if requested_stages is None:
+                requested_stages = _as_name_list(override.get("stages"))
+            requested_waveplates = _as_name_list(override.get("waveplates"))
+        elif requested_stages is None:
+            requested_stages = _as_name_list(override)
+
+    try:
+        group_devices = cfg.get_devices_by_group(side)
+    except Exception:
+        group_devices = []
+    if not group_devices:
+        try:
+            direct = cfg.get_device(side)
+        except ValueError:
+            direct = None
+        if direct:
+            group_devices = [direct]
+
+    if requested_stages:
+        devices = []
+        for selector in requested_stages:
+            dev = cfg.get_device(selector)
+            if dev is None:
+                raise ValueError(
+                    f"Bell arm '{side}' references unknown stage '{selector}'"
+                )
+            devices.append(dev)
+    elif requested_waveplates:
+        devices = []
+        for waveplate in requested_waveplates:
+            wp = waveplate.strip().lower()
+            matches = [
+                dev
+                for dev in group_devices
+                if str(dev.get("waveplate", "hwp")).strip().lower() == wp
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    f"Bell arm '{side}' needs exactly one {wp.upper()} stage, "
+                    f"found {len(matches)}"
+                )
+            devices.append(matches[0])
+    else:
+        candidates = [
+            dev
+            for dev in group_devices
+            if str(dev.get("waveplate", "hwp")).strip().lower() in {"hwp", "qwp"}
+        ]
+        if len(candidates) == 1:
+            devices = candidates
+        else:
+            qwps = [
+                dev for dev in candidates
+                if str(dev.get("waveplate", "")).strip().lower() == "qwp"
+            ]
+            hwps = [
+                dev for dev in candidates
+                if str(dev.get("waveplate", "hwp")).strip().lower() == "hwp"
+            ]
+            if len(qwps) == 1 and len(hwps) == 1:
+                # Alice's physical order is QWP followed by HWP.
+                devices = [qwps[0], hwps[0]]
+            else:
+                names = ", ".join(
+                    str(dev.get("name") or dev.get("id")) for dev in candidates
+                )
+                raise ValueError(
+                    f"Cannot infer Bell waveplate stack for arm '{side}'. "
+                    f"Candidates: {names}. Configure chsh.arms.{side}.stages "
+                    "or pass the stage list explicitly."
+                )
+
+    waveplates = [
+        str(dev.get("waveplate", "hwp")).strip().lower() for dev in devices
+    ]
+    if waveplates not in (["hwp"], ["qwp", "hwp"]):
+        raise ValueError(
+            f"Bell arm '{side}' uses unsupported waveplate order {waveplates}; "
+            "supported orders are ['hwp'] and ['qwp', 'hwp']"
+        )
+
+    specs = []
+    for dev, waveplate in zip(devices, waveplates):
+        target = str(dev.get("name") or dev.get("serial") or dev.get("id") or side)
+        stage = motor_mgr.get_motor(target)
+        specs.append(
+            {
+                "target": target,
+                "stage": stage,
+                "device": dev,
+                "waveplate": waveplate,
+                "theta_0": _get_device_theta_0(dev),
+                "bases": {
+                    label: _get_basis_angle(cfg, target, label)
+                    for label in ("H", "V", "D", "A", "R", "L")
+                },
+            }
+        )
+    return {"side": side, "waveplates": waveplates, "stages": specs}
+
+
+def _basis_arm_angles(arm: dict[str, Any], basis: str) -> list[tuple[Any, float]]:
+    """Return the configured motor angle for every stage at *basis*.
+
+    The device ``bases`` mapping is the source of truth. No QWP/HWP relative
+    angle formula is applied here.
+    """
+    label = str(basis).strip().upper()
+    angles = []
+    for spec in arm["stages"]:
+        bases = spec["bases"]
+        if label not in bases:
+            raise ValueError(
+                f"Stage '{spec['target']}' has no configured basis '{label}'"
+            )
+        angles.append((spec["stage"], float(bases[label]) % 360.0))
+    return angles
+
+
+def _single_hwp_arm_angles(
+    arm: dict[str, Any], hwp_offset: float
+) -> list[tuple[Any, float]]:
+    """Return sweep angles for a single-HWP arm.
+
+    Continuous Bell offsets only have configured values for a single HWP.
+    QWP-HWP arms must use discrete configured bias labels instead.
+    """
+    if arm["waveplates"] != ["hwp"]:
+        raise ValueError(
+            "Continuous Bell offset scanning currently supports only a single "
+            "HWP on the swept arm. Use discrete configured bases for QWP-HWP."
+        )
+    spec = arm["stages"][0]
+    angle = float(spec["bases"]["H"]) + float(hwp_offset)
+    return [(spec["stage"], angle % 360.0)]
+
+
+def _ensure_stage_connected(stage: Any, target: str) -> None:
+    """Connect a stage if necessary, without disconnecting it after homing."""
+    if bool(getattr(stage, "is_connected", False)):
+        return
+    if not hasattr(stage, "connect"):
+        return
+    connected = stage.connect()
+    if connected is False:
+        raise ConnectionError(f"Failed to connect motor '{target}'")
+
+
+def _move_basis_arm(arm: dict[str, Any], basis: str) -> list[float]:
+    """Move every waveplate in an arm to the configured basis angles."""
+    applied = []
+    for stage, angle in _basis_arm_angles(arm, basis):
+        stage.move_to(angle)
+        stage.wait_move()
+        applied.append(angle)
+    return applied
+
+
+def _move_single_hwp_arm(arm: dict[str, Any], hwp_offset: float) -> list[float]:
+    """Move a single-HWP sweep arm by an offset from its configured H angle."""
+    applied = []
+    for stage, angle in _single_hwp_arm_angles(arm, hwp_offset):
+        stage.move_to(angle)
+        stage.wait_move()
+        applied.append(angle)
+    return applied
+
+
+def _ensure_stage_connected(stage: Any, target: str) -> None:
+    """Connect a stage if necessary, without disconnecting it after homing."""
+    if bool(getattr(stage, "is_connected", False)):
+        return
+    if not hasattr(stage, "connect"):
+        return
+    connected = stage.connect()
+    if connected is False:
+        raise ConnectionError(f"Failed to connect motor '{target}'")
+
+
+def _move_basis_arm(arm: dict[str, Any], hwp_offset: float) -> list[float]:
+    """Move every waveplate in an arm and return the applied motor angles."""
+    applied = []
+    for stage, angle in _basis_arm_angles(arm, hwp_offset):
+        stage.move_to(angle)
+        stage.wait_move()
+        applied.append(angle)
+    return applied
+
+
+def _describe_basis_arm(arm: dict[str, Any]) -> str:
+    return " -> ".join(
+        spec["waveplate"].upper()
+        for spec in arm["stages"]
+    )
     
 # ═══════════════════════════════════════════════════════════════════════════
 # Singles / Power sweep scan
@@ -832,82 +1090,71 @@ def run_bell_scan(
     delay: int | None = None,
     window_start: int | None = None,
     window_stop: int | None = None,
+    fix_stages: Sequence[str] | None = None,
+    sweep_stages: Sequence[str] | None = None,
 ) -> dict:
     """Scan Bob basis offset β and compute CHSH S(β) curve."""
     if motor_mgr is None or meas_mgr is None or cfg is None:
         raise ValueError("motor_mgr, meas_mgr, and cfg are required parameters.")
 
-    try:
-        stage_a = motor_mgr.get_motor(fix)
-    except Exception:
-        stage_a = None
+    chsh_cfg = cfg.get("chsh", {}) or {}
+    arm_a = _resolve_basis_arm(
+        cfg,
+        motor_mgr,
+        fix,
+        chsh_cfg=chsh_cfg,
+        stage_override=fix_stages,
+    )
+    arm_b = _resolve_basis_arm(
+        cfg,
+        motor_mgr,
+        sweep,
+        chsh_cfg=chsh_cfg,
+        stage_override=sweep_stages,
+    )
 
-    try:
-        stage_b = motor_mgr.get_motor(sweep)
-    except Exception:
-        stage_b = None
-
-    # Home both motors first so absolute basis angles reference the hardware
-    # home position (matches the calibrate/singles flow).
-    for stage in (stage_a, stage_b):
-        if stage is not None:
+    # Keep every waveplate connected for the scan. Homing with ``with stage``
+    # disconnects again and used to leave the later move_to() calls offline.
+    for arm in (arm_a, arm_b):
+        for spec in arm["stages"]:
+            stage = spec["stage"]
+            _ensure_stage_connected(stage, spec["target"])
             try:
-                with stage:
-                    stage.home()
+                stage.home()
             except Exception:
-                logger.warning("Failed to home motor '%s'", getattr(stage, "name", fix))
-
-    name_a = getattr(stage_a, "name", fix)
-    name_b = getattr(stage_b, "name", sweep)
+                logger.warning(
+                    "Failed to home motor '%s'",
+                    getattr(stage, "name", spec["target"]),
+                )
 
     print("\n" + "=" * 60)
     print("  CHSH BELL INEQUALITY SCAN")
-    print(f"  Fixed Arm ({fix}): {name_a}  |  Swept Arm ({sweep}): {name_b}")
-    print(f"  Offset range: {start_offset}° → {end_offset}°")
+    print(f"  Fixed Arm ({fix}): {_describe_basis_arm(arm_a)}")
+    print(f"  Swept Arm ({sweep}): {_describe_basis_arm(arm_b)}")
+    print(f"  Offset range: {start_offset} deg -> {end_offset} deg")
     print("=" * 60)
 
-    serial_a = getattr(stage_a, "serial", "") if stage_a else ""
-    serial_b = getattr(stage_b, "serial", "") if stage_b else ""
-    target_a = serial_a or name_a or fix
-    target_b = serial_b or name_b or sweep
-
-    dev_a = cfg.get_device(target_a) if cfg is not None else {}
-    dev_b = cfg.get_device(target_b) if cfg is not None else {}
-
-    def _get_theta_0(dev: dict) -> float:
-        cal = dev.get("calibration", {})
-        val = cal.get("theta_0") or dev.get("theta_0") or cal.get("zero_offset") or dev.get("zero_offset")
-        return float(val) if val is not None else 15.0
-
-    theta_0_a = _get_theta_0(dev_a)
-    theta_0_b = _get_theta_0(dev_b)
-
+    if float(step_offset) == 0.0:
+        raise ValueError("step_offset must be non-zero")
     n_steps_off = round((end_offset - start_offset) / step_offset) + 1
     offsets = np.linspace(start_offset, start_offset + (n_steps_off - 1) * step_offset, n_steps_off)
     s_vals, s_errs = [], []
     coincidence_matrices = []
 
-    a = theta_0_a % 180.0
-    a_prime = (theta_0_a + 22.5) % 180.0
-    alice_set = [a, (a + 45.0) % 180.0, a_prime, (a_prime + 45.0) % 180.0]
+    # The fixed arm uses the configured H/V/D/A angles exactly. The swept arm
+    # scans a HWP motor offset; its H/V/D/A settings are offset from bases.H.
+    fixed_bases = ["H", "V", "D", "A"]
+    bob_offsets = [0.0, 45.0, 22.5, 67.5]
 
     for k, offset in enumerate(offsets, 1):
-        b = (theta_0_b + offset) % 180.0
-        b_prime = (theta_0_b + offset + 22.5) % 180.0
-        bob_set = [b, (b + 45.0) % 180.0, b_prime, (b_prime + 45.0) % 180.0]
-
         C = np.zeros((4, 4))
         Cerr = np.zeros((4, 4))
 
-        for i, ang_a in enumerate(alice_set):
-            if stage_a is not None:
-                stage_a.move_to(ang_a)
-                stage_a.wait_move()
-            for j, ang_b in enumerate(bob_set):
-                if stage_b is not None:
-                    stage_b.move_to(ang_b)
-                    stage_b.wait_move()
-                    time.sleep(0.1)
+        for i, basis in enumerate(fixed_bases):
+            _move_basis_arm(arm_a, basis)
+            for j, bob_offset in enumerate(bob_offsets):
+                _move_single_hwp_arm(arm_b, float(offset) + bob_offset)
+                time.sleep(0.1)
 
                 if meas_mgr is not None:
                     res = meas_mgr.measure(
