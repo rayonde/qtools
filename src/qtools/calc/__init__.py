@@ -2,7 +2,7 @@
 
 from importlib import import_module
 
-__all__ = ["gaussian"]
+__all__ = ["gaussian", "waveplate"]
 
 
 def __getattr__(name: str):
