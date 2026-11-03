@@ -355,18 +355,14 @@ def resolve_tdc_backend(configured: str) -> str:
     if not configured:
         return _DEFAULT_TDC1_BACKEND
     try:
-        from qtools import tdc  # noqa: F401 — importing tdc registers all backends
-        from qtools.tdc.connection import list_backends
+        from qtools import tdc as tdc_pkg
+        list_backends = tdc_pkg.list_backends
         registered = list_backends()
     except Exception:
         return configured
     if configured in registered:
         return configured
-    try:
-        from qtools.tdc.backends.s15_tdc1.config import DEFAULT_TDC1_BACKEND
-        fallback = DEFAULT_TDC1_BACKEND
-    except Exception:
-        fallback = _DEFAULT_TDC1_BACKEND
+    fallback = _DEFAULT_TDC1_BACKEND
     if fallback in registered:
         return fallback
     return configured

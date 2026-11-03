@@ -337,11 +337,9 @@ def display_devices(devices: Optional[List[DeviceInfo]] = None) -> None:
 
 
 def list_tdc(method: str = "all", timeout: float = 2.0) -> List[DeviceInfo]:
-    """Discover attached TDC hardware, print its details, and return device records.
+    """Discover attached TDC hardware and return device records.
 
     Returned records can be passed directly to ``get_tdc`` or ``TDC``.
     Discovery does not open a persistent measurement connection.
     """
-    devices = discover_all(method=method, timeout=timeout)
-    display_devices(devices)
-    return devices
+    return discover_all(method=method, timeout=timeout)

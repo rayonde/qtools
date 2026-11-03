@@ -65,7 +65,7 @@ class T1HistogramResult:
     channel: int
     histogram: NDArray[np.uint64]
     bin_width_ps: float
-    integration_time: float
+    duration: float
     resolution_ps: float
 
 
@@ -80,7 +80,7 @@ class ITTRResult:
 
     mode: str
     channels: tuple[int, ...]
-    integration_time: float
+    duration: float
     interval_us: int
     raw_blocks: tuple[bytes, ...]
     data_overflow: int | None = None

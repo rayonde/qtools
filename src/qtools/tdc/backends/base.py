@@ -126,7 +126,7 @@ class TDCBackend(ABC):
     Example::
 
         with MyTDCBackend("/dev/ttyUSB0") as tdc:
-            singles = tdc.get_singles(integration_time=1.0)
+            singles = tdc.get_singles(duration=1.0)
             print(singles)
     """
 
@@ -218,11 +218,11 @@ class TDCBackend(ABC):
     # -- data acquisition ---------------------------------------------------
 
     @abstractmethod
-    def get_singles(self, integration_time: float) -> SinglesResult:
+    def get_singles(self, duration: float) -> SinglesResult:
         """Acquire singles counts.
 
         Args:
-            integration_time: Integration time in seconds.
+            duration: Integration time in seconds.
 
         Returns:
             A ``SinglesResult`` containing per-channel counts and rates.
@@ -315,7 +315,7 @@ class TDCBackend(ABC):
         # their first-to-last span is shortened by random arrival gaps and can
         # be inflated by a corrupt or unwrapped timestamp.  ``total_time_ns``
         # is the backend-reported live time and is the correct rate denominator.
-        integration_time = res.total_time_ns * 1e-9
+        duration = res.total_time_ns * 1e-9
 
         ch_stop_delay_ps = time_to_ps(ch_stop_delay, unit)
 
@@ -331,7 +331,7 @@ class TDCBackend(ABC):
             bins=bins,
             resolution_ps=width,
             bin_offset=bin_offset,
-            integration_time=integration_time,
+            duration=duration,
             stop_delay=ch_stop_delay_ps,
         )
 
@@ -350,8 +350,8 @@ class TDCBackend(ABC):
         """Measure coincidence counts using software or backend hardware.
 
         The default software path acquires a g² histogram and counts bins in a
-        physical delay window. Bins outside that window provide a normalized
-        background estimate. If no window is supplied, the highest prominent
+        physical delay window. The returned histogram is limited to that
+        window; accidentals are estimated from the singles-rate product. If no window is supplied, the highest prominent
         peak is selected automatically and its recommended window is printed.
         Hardware-capable backends override this same method.
 
@@ -391,27 +391,23 @@ class TDCBackend(ABC):
 
         factor = time_to_ps(1, unit)
         width = self._bin_width(bin_width)
-        offset = 0
-        if window_start is None:
-            g2_bins = 500
-        else:
-            start_ps = time_to_ps(window_start, unit)
-            stop_ps = time_to_ps(window_stop, unit)
-            if stop_ps <= start_ps:
-                raise ValueError("window_stop must be greater than window_start")
-            start_bin = start_ps // width
-            stop_bin = math.ceil(stop_ps / width)
-            offset = min(0, start_bin)
-            sideband_bins = max(20, min(500, stop_bin - start_bin))
-            g2_bins = stop_bin - offset + sideband_bins
 
-        g2 = self.get_g2(
-            duration=duration, bins=g2_bins, ch_start=ch_start, ch_stop=ch_stop,
-            ch_stop_delay=ch_stop_delay, bin_offset=offset, unit=unit, method=method,
-            bin_width=bin_width,
-        )
-        histogram, edges = g2.histogram[0], g2.bin_edges[0]
         if window_start is None:
+            # Peak discovery needs a broad histogram. Once found, retain only
+            # the selected bin so the returned result is window-local.
+            broad = self.get_g2(
+                duration=duration,
+                bins=500,
+                ch_start=ch_start,
+                ch_stop=ch_stop,
+                ch_stop_delay=ch_stop_delay,
+                bin_offset=0,
+                unit=unit,
+                method=method,
+                bin_width=bin_width,
+            )
+            histogram = broad.histogram[0]
+            edges = broad.bin_edges[0]
             if histogram.size == 0 or np.max(histogram, initial=0) <= 0:
                 raise ValueError("Cannot detect a coincidence peak in an empty histogram")
             peak = _find_coincidence_peak(histogram)
@@ -423,20 +419,58 @@ class TDCBackend(ABC):
                 f"window_start={start_ps / factor:g} {unit}, "
                 f"window_stop={stop_ps / factor:g} {unit}"
             )
+            g2 = replace(
+                broad,
+                histogram=[histogram[peak : peak + 1].copy()],
+                bin_edges=[edges[peak : peak + 2].copy()],
+                n_bins=[1],
+                stop_offset=[start_ps],
+            )
         else:
-            start_ps = (time_to_ps(window_start, unit) // g2.bin_width) * g2.bin_width
-            stop_ps = math.ceil(time_to_ps(window_stop, unit) / g2.bin_width) * g2.bin_width
+            start_ps = time_to_ps(window_start, unit)
+            stop_ps = time_to_ps(window_stop, unit)
+            if stop_ps <= start_ps:
+                raise ValueError("window_stop must be greater than window_start")
+            start_bin = start_ps // width
+            stop_bin = math.ceil(stop_ps / width)
+            if stop_bin <= start_bin:
+                raise ValueError("coincidence window must span at least one bin")
+            start_ps = start_bin * width
+            stop_ps = stop_bin * width
+            g2 = self.get_g2(
+                duration=duration,
+                bins=stop_bin - start_bin,
+                ch_start=ch_start,
+                ch_stop=ch_stop,
+                ch_stop_delay=ch_stop_delay,
+                bin_offset=start_bin,
+                unit=unit,
+                method=method,
+                bin_width=bin_width,
+            )
 
-        from qtools.tdc.analysis.efficiency import compute_coincidence
-
-        count, per_bin, accidental = compute_coincidence(
-            histogram=histogram, bin_edges=edges,
-            window_start=start_ps, window_stop=stop_ps,
+        histogram = g2.histogram[0]
+        raw_count = int(np.sum(histogram, dtype=np.uint64))
+        window_width_ps = stop_ps - start_ps
+        result_duration = float(g2.duration[0])
+        accidental_count = float(
+            g2.singles_start[0]
+            * g2.singles_stop[0]
+            * window_width_ps
+            * 1e-12
+            * result_duration
         )
+        n_bins = g2.n_bins[0]
+        accidental_per_bin = accidental_count / n_bins
         return replace(
-            g2, mode="window_count", window_start=[start_ps], window_stop=[stop_ps],
-            raw_counts=[count], accidental_counts_per_bin=[per_bin],
-            accidental_counts=[accidental], accidental_method=["sideband"],
+            g2,
+            mode="window_count",
+            window_start=[start_ps],
+            window_stop=[stop_ps],
+            raw_counts=[raw_count],
+            accidental_counts_per_bin=[accidental_per_bin],
+            accidental_counts=[accidental_count],
+            accidental_method=["rate_product"],
         )
 
     # -- threshold control --------------------------------------------------

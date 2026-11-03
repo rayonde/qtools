@@ -8,23 +8,23 @@ from qtools.tdc.backends.s15_tdc1.exp_backend import ExpS15TDC1Backend
 from qtools.tdc.data import CoincidenceResult, TimestampResult
 
 
-def fake_g2(histogram, resolution_ps=1000.0):
+def fake_g2(histogram, resolution_ps=1000.0, offset=0):
     histogram = np.asarray(histogram, dtype=np.uint64)
     return CoincidenceResult(mode="histogram", bin_width=int(resolution_ps), channel_start=1, channel_stop=2,
             counts_start=[int(100.0 * 1.0)], counts_stop=[int(200.0 * 1.0)],
-            singles_start=[100.0], singles_stop=[200.0], integration_time=[1.0], stop_delay=[0],
-            n_bins=[len(histogram)], stop_offset=[0], histogram=[histogram],
-            bin_edges=[np.arange(len(histogram) + 1, dtype=np.int64) * int(resolution_ps)],
+            singles_start=[100.0], singles_stop=[200.0], duration=[1.0], stop_delay=[0],
+            n_bins=[len(histogram)], stop_offset=[offset * int(resolution_ps)], histogram=[histogram],
+            bin_edges=[(np.arange(len(histogram) + 1, dtype=np.int64) + offset) * int(resolution_ps)],
             )
 
 
-def test_software_coincidence_counts_window_and_normalized_background(monkeypatch):
+def test_software_coincidence_uses_window_local_histogram_and_rate_product(monkeypatch):
     backend = ExpS15TDC1Backend()
     captured = {}
 
     def get_g2(**kwargs):
         captured.update(kwargs)
-        return fake_g2([1, 2, 10, 3, 1, 2])
+        return fake_g2([10, 3], offset=kwargs["bin_offset"])
 
     monkeypatch.setattr(backend, "get_g2", get_g2)
 
@@ -35,20 +35,22 @@ def test_software_coincidence_counts_window_and_normalized_background(monkeypatc
         unit="ns",
         window_start=2,
         window_stop=4,
+        bin_width=1000,
     )
 
     assert result.raw_counts[0] == 13
-    assert result.accidental_counts_per_bin[0] == pytest.approx(1.5)
-    assert result.accidental_counts[0] == pytest.approx(3.0)
-    assert result.accidental_counts[0] == pytest.approx(3.0)
-    assert result.net_counts[0] == pytest.approx(10.0)
-    assert result.accidental_method[0] == "sideband"
+    assert result.accidental_counts_per_bin[0] == pytest.approx(2e-5)
+    assert result.accidental_counts[0] == pytest.approx(4e-5)
+    assert result.net_counts[0] == pytest.approx(13 - 4e-5)
+    assert result.accidental_method[0] == "rate_product"
     assert result.window_start[0] == pytest.approx(2000.0)
     assert result.window_stop[0] == pytest.approx(4000.0)
+    assert result.n_bins == [2]
+    assert result.stop_offset == [2000]
+    assert result.peak_bin == [2]
     assert result.method == "software"
-    assert captured["bins"] > 4
-    assert captured["bin_offset"] == 0
-
+    assert captured["bins"] == 2
+    assert captured["bin_offset"] == 2
 
 def test_software_coincidence_auto_detects_one_peak(monkeypatch, capsys):
     backend = ExpS15TDC1Backend()
@@ -68,6 +70,9 @@ def test_software_coincidence_auto_detects_one_peak(monkeypatch, capsys):
     assert "Recommended coincidence window: window_start=2 ns, window_stop=3 ns" in capsys.readouterr().out
     assert captured["bins"] == 500
     assert captured["bin_offset"] == 0
+    assert result.n_bins == [1]
+    assert result.stop_offset == [2000]
+    assert result.peak_bin == [2]
 
 
 def test_software_coincidence_supports_negative_window_start(monkeypatch):
@@ -81,14 +86,18 @@ def test_software_coincidence_supports_negative_window_start(monkeypatch):
             timestamps_ps=np.array([5000, 4000], dtype=np.int64),
             channels=np.array([1, 2], dtype=np.uint8), ch_start=1, ch_stop=2,
             bins=kwargs["bins"], bin_offset=kwargs["bin_offset"],
-            resolution_ps=backend.resolution_ps, integration_time=1.0,
+            resolution_ps=kwargs["bin_width"], duration=1.0,
         )
 
     monkeypatch.setattr(backend, "get_g2", acquire)
-    result = backend.get_coincidence(duration=1.0, window_start=-2, window_stop=2)
+    result = backend.get_coincidence(
+        duration=1.0, window_start=-2, window_stop=2, bin_width=1000
+    )
     assert result.raw_counts == [1]
     assert result.window_start == [-2000]
-    assert captured["bin_offset"] == -1
+    assert captured["bin_offset"] == -2
+    assert captured["bins"] == 4
+    assert result.peak_bin == [-1]
 
 
 def test_peak_width_bins_measures_fwhm():
@@ -198,7 +207,7 @@ def test_ciqtek_hardware_accord_mapping(monkeypatch):
     assert result.window_width[0] == 8000
     assert result.accidental_counts_per_bin is None
     assert result.accidental_counts[0] == pytest.approx(
-        101 * 202 * 8e-9 * result.integration_time[0]
+        101 * 202 * 8e-9 * result.duration[0]
     )
     assert result.accidental_method[0] == "rate_product"
     assert ("algorithm", 2) in calls

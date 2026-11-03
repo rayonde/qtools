@@ -206,7 +206,7 @@ class ExpS15TDC1Backend(TDCBackend):
         self._extra_terminator_patched = False
         self._init_mode = "singles"
         self._init_level = TTL_LEVEL
-        self._init_integration_time = 1.0
+        self._init_duration = 1.0
         self._init_threshold = 0.6
         self.accumulate_timestamps = False
         self.accumulated_timestamps_filename = "timestamps.raw"
@@ -256,8 +256,8 @@ class ExpS15TDC1Backend(TDCBackend):
             # settings unless the caller explicitly overrides them.
             self._init_mode = str(kwargs.get("mode", self._init_mode))
             self._init_level = str(kwargs.get("level", self._init_level))
-            self._init_integration_time = float(
-                kwargs.get("integration_time", self._init_integration_time)
+            self._init_duration = float(
+                kwargs.get("duration", self._init_duration)
             )
             self._init_threshold = float(
                 kwargs.get("threshold", self._init_threshold)
@@ -331,7 +331,7 @@ class ExpS15TDC1Backend(TDCBackend):
         """Apply the last requested mode/level/time/threshold to the device."""
         self.mode = self._init_mode
         self.level = self._init_level
-        self.int_time = self._init_integration_time
+        self.int_time = self._init_duration
         self.threshold = self._init_threshold
 
     # def _ensure_extra_terminator_patch(self) -> bool:
@@ -383,8 +383,8 @@ class ExpS15TDC1Backend(TDCBackend):
         """
         connection = self._require_connection()
         connection.write(b"time?\r\n")
-        integration_time = int(connection.readline())
-        return integration_time if integration_time >= 0 else integration_time + (1 << 16)
+        duration = int(connection.readline())
+        return duration if duration >= 0 else duration + (1 << 16)
 
     @int_time.setter
     def int_time(self, value: float):
@@ -394,7 +394,7 @@ class ExpS15TDC1Backend(TDCBackend):
             value: Integration time in **seconds** (converted to ms on the wire).
         """
         connection = self._require_connection()
-        self._init_integration_time = float(value)
+        self._init_duration = float(value)
         value_ms = float(value) * 1000
         if value_ms < 1:
             print("Invalid integration time.")
@@ -525,22 +525,22 @@ class ExpS15TDC1Backend(TDCBackend):
             self.int_time = duration_seconds
         return self._counts_from_response(b"singles;counts?\r\n", duration_seconds)
 
-    def get_singles(self, integration_time: float) -> SinglesResult:
+    def get_singles(self, duration: float) -> SinglesResult:
         self._require_connected()
-        counts = np.asarray(self._get_counts_raw(integration_time), dtype=np.uint64)
+        counts = np.asarray(self._get_counts_raw(duration), dtype=np.uint64)
         # Mirror stable backend: isolate text-protocol residue from later binary I/O.
         self._flush_serial_buffers()
         return SinglesResult(
-            integration_time=integration_time,
+            duration=duration,
             channels=np.arange(1, CHANNEL_COUNT + 1, dtype=np.uint8),
             counts=counts,
-            count_rates=counts.astype(np.float64) / integration_time,
+            count_rates=counts.astype(np.float64) / duration,
         )
 
-    def get_counts_and_coincidences(self, integration_time: float = 1) -> Tuple[int, ...]:
+    def get_counts_and_coincidences(self, duration: float = 1) -> Tuple[int, ...]:
         self._require_connected()
-        self.int_time = integration_time
-        return self._counts_from_response(b"pairs;counts?\r\n", integration_time)
+        self.int_time = duration
+        return self._counts_from_response(b"pairs;counts?\r\n", duration)
 
     def _stream_response_into_buffer(
         self, command: str, acquisition_time: float
@@ -771,7 +771,7 @@ class ExpS15TDC1Backend(TDCBackend):
             counts_start=[int(counts[ch_start - 1])], counts_stop=[int(counts[ch_stop - 1])],
             singles_start=[float(counts[ch_start - 1] / duration)],
             singles_stop=[float(counts[ch_stop - 1] / duration)],
-            integration_time=[duration], stop_delay=[0], raw_counts=[int(values[pair_index])],
+            duration=[duration], stop_delay=[0], raw_counts=[int(values[pair_index])],
         )
 
     def set_threshold(self, threshold: float, channel: int | None = None) -> None:

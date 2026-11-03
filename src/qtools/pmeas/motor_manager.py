@@ -129,7 +129,7 @@ class MotorManager:
     def list_motors(self) -> dict[str, list[dict[str, Any]]]:
         """Return categorized status for connected and not_connected devices without low-level USB scans."""
         def _build_item(dev_id: str, motor: MotorBackend, is_connected: bool) -> dict[str, Any]:
-            dev = self.cfg.get_device(dev_id) or {}
+            dev = self.cfg.get_device_by_id(dev_id) or {}
             serial_no = str(dev.get("serial") or getattr(motor, "serial", ""))
             port = str(dev.get("port") or getattr(motor, "_port", ""))
             return {
@@ -223,7 +223,7 @@ class MotorManager:
         """Session context manager enter - recheck configured motors."""
         discovered = list_motors()
         for dev_id in list(self._notavailable.keys()):
-            dev_info = self.cfg.get_device(dev_id) or {}
+            dev_info = self.cfg.get_device_by_id(dev_id) or {}
             dev_port = str(dev_info.get("port") or "")
             dev_backend = str(dev_info.get("backend") or "")
 

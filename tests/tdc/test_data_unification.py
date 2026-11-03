@@ -36,7 +36,7 @@ def window_result(**changes):
         counts_stop=[40],
         singles_start=[10.0],
         singles_stop=[20.0],
-        integration_time=[2.0],
+        duration=[2.0],
         stop_delay=[-1000],
         window_start=[0],
         window_stop=[5000],
@@ -66,7 +66,7 @@ def heralded(**options):
         ch_photons=[2, 7],
         bins=10,
         resolution_ps=1000,
-        integration_time=ts.duration_s,
+        duration=ts.duration_s,
         **options,
     )
 
@@ -85,7 +85,7 @@ def test_repetitions_use_each_live_time_and_sample_standard_deviation():
         counts_stop=[60],
         singles_start=[30.0],
         singles_stop=[60.0],
-        integration_time=[1.0],
+        duration=[1.0],
         raw_counts=[20],
         accidental_counts=[4.0],
     )
@@ -109,6 +109,7 @@ def test_unknown_background_stays_unknown_and_negative_net_is_preserved():
     assert unknown.net_counts is None
     assert unknown.net_pair_rate_mean is None
     assert unknown.net_pair_rate_std is None
+    assert unknown.peak_bin is None
     assert window_result(accidental_counts=[12.0]).net_counts == [-2.0]
 
 
@@ -119,8 +120,8 @@ def test_unknown_background_stays_unknown_and_negative_net_is_preserved():
         {"samples": True},
         {"samples": 2},
         {"bin_width": [1000]},
-        {"integration_time": [0]},
-        {"integration_time": [np.nan]},
+        {"duration": [0]},
+        {"duration": [np.nan]},
         {"counts_start": None},
         {"singles_start": [1.0]},
         {"raw_counts": None},
@@ -174,7 +175,7 @@ def test_histogram_metadata_and_normalization_are_physical():
         bins=4,
         resolution_ps=1000,
         bin_offset=-1,
-        integration_time=2,
+        duration=2,
         stop_delay=-1000,
     )
     assert result.mode == "histogram"
@@ -182,10 +183,12 @@ def test_histogram_metadata_and_normalization_are_physical():
     assert result.stop_offset == [-1000]
     np.testing.assert_array_equal(result.bin_edges[0], [-1000, 0, 1000, 2000, 3000])
     np.testing.assert_array_equal(result.histogram[0], [0, 1, 1, 0])
+    assert result.peak_bin == [0]
     np.testing.assert_allclose(result.normalized[0], [0, 1e9, 1e9, 0])
     converted = convert_time_unit(result, "ns")
     assert converted.bin_width == 1
     assert converted.stop_delay == [-1]
+    assert converted.peak_bin == result.peak_bin
     np.testing.assert_allclose(converted.normalized[0], result.normalized[0])
     np.testing.assert_array_equal(
         convert_time_unit(converted, "ps").bin_edges[0], result.bin_edges[0]
@@ -211,9 +214,10 @@ def test_zero_singles_normalization_is_finite():
         7,
         bins=2,
         resolution_ps=1,
-        integration_time=1,
+        duration=1,
     )
     np.testing.assert_array_equal(result.normalized[0], [0.0, 0.0])
+    assert result.peak_bin is None
 
 
 def test_sub_bin_stop_delay_is_applied_once_before_quantization():
@@ -224,7 +228,7 @@ def test_sub_bin_stop_delay_is_applied_once_before_quantization():
         7,
         bins=3,
         resolution_ps=1000,
-        integration_time=1,
+        duration=1,
         stop_delay=200,
     )
     np.testing.assert_array_equal(result.histogram[0], [0, 1, 0])
@@ -243,7 +247,7 @@ def test_heralding_sub_bin_delay_is_applied_before_quantization():
         ch_photons=[2],
         bins=3,
         resolution_ps=1000,
-        integration_time=1,
+        duration=1,
         stop_delay={2: 200},
         store_events=True,
     )
@@ -267,7 +271,7 @@ def test_multi_channel_ids_directed_axes_and_distinct_count_definitions(
         5,
         bins=5,
         resolution_ps=1,
-        integration_time=1,
+        duration=1,
         store_events=True,
     )
     gate = analysis.compute_gate_coincidence(
@@ -277,7 +281,7 @@ def test_multi_channel_ids_directed_axes_and_distinct_count_definitions(
         [2, 5, 7],
         bins=5,
         resolution_ps=1,
-        integration_time=1,
+        duration=1,
         store_events=True,
     )
     assert isinstance(triplet, MultiCoincidenceResult)
@@ -311,13 +315,13 @@ def test_multi_summary_omits_events_and_dedup_does_not_change_combination_count(
         np.array([0, 2, 2, 5], dtype=np.uint8),
     )
     result = analysis.compute_triplet_g2(
-        *args, 0, 2, 5, bins=5, resolution_ps=1000, integration_time=1, deduplicate=True
+        *args, 0, 2, 5, bins=5, resolution_ps=1000, duration=1, deduplicate=True
     )
     assert result.raw_counts == [2]
     assert result.pair_hist(0, 2)[0].sum() == 1
     assert result.events is None
     other_group = analysis.compute_triplet_g2(
-        *args, 7, 2, 5, bins=5, resolution_ps=1000, integration_time=1
+        *args, 7, 2, 5, bins=5, resolution_ps=1000, duration=1
     )
     groups = {result.channels: result, other_group.channels: other_group}
     assert groups[(0, 2, 5)].pair_hist(2, 5)[0].sum() == 1
@@ -337,7 +341,7 @@ def test_multi_repetition_statistics_and_event_conversion():
         5,
         bins=5,
         resolution_ps=1000,
-        integration_time=1,
+        duration=1,
         bin_offset=-1,
         store_events=True,
     )
@@ -349,7 +353,7 @@ def test_multi_repetition_statistics_and_event_conversion():
         5,
         bins=5,
         resolution_ps=1000,
-        integration_time=2,
+        duration=2,
         bin_offset=-1,
         store_events=True,
     )
@@ -396,7 +400,7 @@ def test_heralding_summary_retains_counts_and_each_channel_statistics():
     first = heralded(store_histogram=False)
     second = replace(
         first,
-        integration_time=[2.0],
+        duration=[2.0],
         singles_heralding=[1.5],
         singles_gated={2: [1.0], 7: [0.5]},
     )
@@ -430,7 +434,7 @@ def test_zero_heralds_and_zero_photons_are_distinct_from_missing_details():
         [2, 7],
         bins=3,
         resolution_ps=1,
-        integration_time=1,
+        duration=1,
         store_events=True,
     )
     assert result.n_gates == [0]
@@ -443,7 +447,7 @@ def test_zero_heralds_and_zero_photons_are_distinct_from_missing_details():
         [2, 7],
         bins=3,
         resolution_ps=1,
-        integration_time=1,
+        duration=1,
         store_events=True,
     )
     assert empty.gate_hits(0, 0) == []
@@ -522,7 +526,7 @@ def test_measurement_repeats_in_same_class_and_uses_actual_live_times():
     backend = SimpleNamespace(get_timestamps=lambda duration: next(acquisitions))
     result = TDC(backend).measure_heralding_gate(1, 0, [2, 7], bins=10, samples=2)
     assert isinstance(result, HeraldingGateResult)
-    assert result.integration_time == [1, 2]
+    assert result.duration == [1, 2]
     assert result.raw_pair_rate_mean[2] == 2.25
     assert result.samples == 2
     with pytest.raises(ValueError):
@@ -534,7 +538,7 @@ def test_measurement_repeats_in_same_class_and_uses_actual_live_times():
     [
         (
             api.coincidence,
-            {"ch_start": 0, "ch_stop": 2, "window_start": 0, "window_stop": 10},
+            {"ch_start": 0, "ch_stop": 2, "window_start": 0, "window_stop": 10, "bin_width": 1000},
             CoincidenceResult,
         ),
     ],
@@ -551,7 +555,7 @@ def test_public_measurements_keep_the_same_model_when_repeating(
     result = function(duration=1, samples=2, **options)
     assert isinstance(result, model)
     assert result.samples == 2
-    assert result.integration_time == [1, 2]
+    assert result.duration == [1, 2]
     assert result.unit == "ps"
     assert result.bin_width == 1000
 
@@ -563,8 +567,12 @@ def test_automatic_window_is_fixed_when_the_peak_moves_between_samples(monkeypat
     def acquire_histogram(**kwargs):
         calls.append(kwargs)
         duration = len(calls)
+        offset = kwargs["bin_offset"]
         hist = np.zeros(kwargs["bins"], dtype=np.uint64)
-        hist[2:4] = [10, 1] if duration == 1 else [2, 20]
+        if duration == 1:
+            hist[2:4] = [10, 1]
+        else:
+            hist[0] = 2
         return CoincidenceResult(
             mode="histogram",
             channel_start=0,
@@ -574,12 +582,14 @@ def test_automatic_window_is_fixed_when_the_peak_moves_between_samples(monkeypat
             counts_stop=[200 * duration],
             singles_start=[100.0],
             singles_stop=[200.0],
-            integration_time=[duration],
+            duration=[duration],
             stop_delay=[0],
             n_bins=[len(hist)],
-            stop_offset=[0],
+            stop_offset=[offset * 1000],
             histogram=[hist],
-            bin_edges=[np.arange(len(hist) + 1, dtype=np.int64) * 1000],
+            bin_edges=[
+                (np.arange(len(hist) + 1, dtype=np.int64) + offset) * 1000
+            ],
         )
 
     monkeypatch.setattr(backend, "get_g2", acquire_histogram)
@@ -589,5 +599,9 @@ def test_automatic_window_is_fixed_when_the_peak_moves_between_samples(monkeypat
     assert result.raw_counts == [10, 2]
     assert result.raw_pair_rate == [10, 1]
     assert result.raw_pair_rate_mean == 5.5
-    assert [call["bins"] for call in calls] == [500, 500]
+    assert [call["bins"] for call in calls] == [500, 1]
+    assert [call["bin_offset"] for call in calls] == [0, 2]
+    assert result.peak_bin == [2, 2]
+    assert result.n_bins == [1, 1]
+    assert result.stop_offset == [2000, 2000]
     np.testing.assert_array_equal(result.bin_edges[0], result.bin_edges[1])

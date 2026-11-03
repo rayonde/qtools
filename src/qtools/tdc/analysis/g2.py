@@ -119,7 +119,7 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 
 
-def _infer_integration_time(timestamps_ps: np.ndarray) -> float:
+def _infer_duration(timestamps_ps: np.ndarray) -> float:
     """Estimate integration time from the span of recorded timestamps."""
     if len(timestamps_ps) > 1:
         return float(timestamps_ps[-1] - timestamps_ps[0]) * 1e-12
@@ -133,9 +133,9 @@ def _relative_events(events, offset, width):
     ]
 
 
-def _singles_rate(counts: int, integration_time: float) -> float:
+def _singles_rate(counts: int, duration: float) -> float:
     """Singles count rate in cps."""
-    return counts / integration_time if integration_time > 0 else 0.0
+    return counts / duration if duration > 0 else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +417,7 @@ def compute_g2(
     bins: int = 500,
     resolution_ps: float = 1000.0,
     bin_offset: int = 0,
-    integration_time: Optional[float] = None,
+    duration: Optional[float] = None,
     stop_delay: int = 0,
 ) -> CoincidenceResult:
     """Compute the second-order correlation histogram g²(τ).
@@ -433,7 +433,7 @@ def compute_g2(
         bins:          Number of histogram bins (must be > 0).
         resolution_ps: Time resolution in picoseconds per bin.
         bin_offset:    Start of the correlation window in bins.
-        integration_time: Total integration time in seconds (optional).
+        duration: Total integration time in seconds (optional).
         stop_delay:    Delay added to ch_stop in integer ps.
 
     Returns:
@@ -459,8 +459,8 @@ def compute_g2(
     t2_bins = np.floor_divide(t2_ps + stop_delay, resolution_ps)
 
     # Calculate actual integration time if not supplied
-    if integration_time is None:
-        integration_time = _infer_integration_time(timestamps_ps)
+    if duration is None:
+        duration = _infer_duration(timestamps_ps)
 
     # Compute correlation histogram
     hist = np.zeros(bins, dtype=np.uint64)
@@ -471,9 +471,9 @@ def compute_g2(
     # Convert the internal bin axis to physical picoseconds below.
     bin_edges = np.arange(bin_offset, bin_offset + bins + 1)
 
-    # Singles count rate (counts / integration_time)
-    rate_start = _singles_rate(len(t1_ps), integration_time)
-    rate_stop = _singles_rate(len(t2_ps), integration_time)
+    # Singles count rate (counts / duration)
+    rate_start = _singles_rate(len(t1_ps), duration)
+    rate_stop = _singles_rate(len(t2_ps), duration)
 
     return CoincidenceResult(
         mode="histogram",
@@ -484,7 +484,7 @@ def compute_g2(
         counts_stop=[len(t2_ps)],
         singles_start=[rate_start],
         singles_stop=[rate_stop],
-        integration_time=[integration_time],
+        duration=[duration],
         stop_delay=[int(stop_delay)],
         n_bins=[bins],
         stop_offset=[bin_offset * resolution_ps],
@@ -507,7 +507,7 @@ def compute_triplet_g2(
     bins: int = 500,
     resolution_ps: float = 1000.0,
     bin_offset: int = 0,
-    integration_time: Optional[float] = None,
+    duration: Optional[float] = None,
     deduplicate: bool = False,
     store_events: bool = False,
 ) -> MultiCoincidenceResult:
@@ -527,7 +527,7 @@ def compute_triplet_g2(
         bins:          Number of histogram bins.
         resolution_ps: Time resolution in picoseconds per bin.
         bin_offset:    Start of the correlation window in bins.
-        integration_time: Total integration time in seconds.
+        duration: Total integration time in seconds.
         deduplicate:   If True, each unique delay per reference event is
             counted at most once per histogram bin.
         store_events:  Retain relative event details when True.
@@ -551,8 +551,8 @@ def compute_triplet_g2(
     t2_adj = np.floor_divide(t2_ps, resolution_ps) - bin_offset
     t3_adj = np.floor_divide(t3_ps, resolution_ps) - bin_offset
 
-    if integration_time is None:
-        integration_time = _infer_integration_time(timestamps_ps)
+    if duration is None:
+        duration = _infer_duration(timestamps_ps)
 
     events: list = []
 
@@ -628,7 +628,7 @@ def compute_triplet_g2(
 
     # Singles rates
     rates = tuple(
-        _singles_rate(len(t), integration_time) for t in (t1_ps, t2_ps, t3_ps)
+        _singles_rate(len(t), duration) for t in (t1_ps, t2_ps, t3_ps)
     )
 
     channel_ids = (ch_ref, ch_sig1, ch_sig2)
@@ -653,7 +653,7 @@ def compute_triplet_g2(
         deduplicate=deduplicate,
         counts={ch: [len(ts)] for ch, ts in zip(channel_ids, (t1_ps, t2_ps, t3_ps))},
         singles={ch: [rate] for ch, rate in zip(channel_ids, rates)},
-        integration_time=[integration_time],
+        duration=[duration],
         channel_delays={ch: [0] for ch in channel_ids},
         window_start=[bin_offset * resolution_ps],
         window_stop=[(bin_offset + bins) * resolution_ps],
@@ -685,7 +685,7 @@ def compute_gate_coincidence(
     bins: int = 500,
     resolution_ps: float = 1000.0,
     bin_offset: int = 0,
-    integration_time: Optional[float] = None,
+    duration: Optional[float] = None,
     deduplicate: bool = False,
     store_events: bool = False,
 ) -> MultiCoincidenceResult:
@@ -709,7 +709,7 @@ def compute_gate_coincidence(
         bins:          Number of histogram bins.
         resolution_ps: Time resolution in picoseconds per bin.
         bin_offset:    Start of the correlation window in bins.
-        integration_time: Total integration time in seconds.
+        duration: Total integration time in seconds.
         deduplicate:   If True, each unique delay per ref per channel is
             counted at most once.
         store_events:  Retain relative event details when True.
@@ -736,8 +736,8 @@ def compute_gate_coincidence(
     sig_ps_list = [timestamps_ps[channels == ch] for ch in ch_signals]
     sig_list = [np.floor_divide(s, resolution_ps) - bin_offset for s in sig_ps_list]
 
-    if integration_time is None:
-        integration_time = _infer_integration_time(timestamps_ps)
+    if duration is None:
+        duration = _infer_duration(timestamps_ps)
 
     events: list = []
 
@@ -820,7 +820,7 @@ def compute_gate_coincidence(
     # Singles rates
     all_channels = [ch_ref] + list(ch_signals)
     all_ts = [t_ref_ps] + sig_ps_list
-    singles = [_singles_rate(len(t), integration_time) for t in all_ts]
+    singles = [_singles_rate(len(t), duration) for t in all_ts]
 
     return MultiCoincidenceResult(
         channels=tuple(all_channels),
@@ -831,7 +831,7 @@ def compute_gate_coincidence(
         deduplicate=deduplicate,
         counts={ch: [len(ts)] for ch, ts in zip(all_channels, all_ts)},
         singles={ch: [rate] for ch, rate in zip(all_channels, singles)},
-        integration_time=[integration_time],
+        duration=[duration],
         channel_delays={ch: [0] for ch in all_channels},
         window_start=[bin_offset * resolution_ps],
         window_stop=[(bin_offset + bins) * resolution_ps],
@@ -858,7 +858,7 @@ def compute_gate_photons(
     bins: int = 500,
     resolution_ps: float = 1000.0,
     bin_offset: int = 0,
-    integration_time: Optional[float] = None,
+    duration: Optional[float] = None,
     *,
     stop_delay: dict[int, int] | None = None,
     store_events: bool = False,
@@ -887,9 +887,9 @@ def compute_gate_photons(
     ):
         raise ValueError("stop_delay must map every gated channel to integer ps")
     duration = (
-        _infer_integration_time(timestamps_ps)
-        if integration_time is None
-        else integration_time
+        _infer_duration(timestamps_ps)
+        if duration is None
+        else duration
     )
     herald = np.floor_divide(timestamps_ps[channels == ch_gate], width)
     signals = {
@@ -1014,7 +1014,7 @@ def compute_gate_photons(
         singles_gated={
             ch: [_singles_rate(len(signal), duration)] for ch, signal in signals.items()
         },
-        integration_time=[duration],
+        duration=[duration],
         stop_delay={ch: [delay] for ch, delay in delays.items()},
         window_start=[start],
         window_stop=[stop],
@@ -1089,7 +1089,7 @@ def measure_multiple_g2(
             bins=bins,
             resolution_ps=res_ps,
             bin_offset=bin_offset_from_peak(peak, loffset),
-            integration_time=ts_res.duration_s,
+            duration=ts_res.duration_s,
         )
         histograms.append(g2_res.histogram[0])
         if bin_centers is None:

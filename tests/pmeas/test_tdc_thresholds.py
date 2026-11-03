@@ -25,7 +25,7 @@ class _FakeTDC:
                 counts_stop=[100],
                 singles_start=[100.0],
                 singles_stop=[100.0],
-                integration_time=[1.0],
+                duration=[1.0],
                 stop_delay=[0],
                 window_start=[10],
                 window_stop=[20],

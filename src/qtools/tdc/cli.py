@@ -284,7 +284,7 @@ def monitor_pairs(args):
     hist = np.asarray(result["histogram"])
     bin_edges = np.asarray(result.get("bin_edges", np.arange(len(hist) + 1)))
 
-    print(f"Integration time: {result['integration_time']:.3f} s")
+    print(f"Duration: {result['duration']:.3f} s")
     print(f"Histogram bins: {len(hist)}")
     if hist.size:
         peak = int(np.argmax(hist))
@@ -345,7 +345,7 @@ def _monitor_pairs_hardware(args):
         ch_stop=args.ch_stop,
         method="hardware",
     )
-    print(f"Integration time: {result.integration_time[0]:.3f} s")
+    print(f"Duration: {result.duration[0]:.3f} s")
     print(f"Coincidence pairs (hardware): {result.raw_counts[0]}")
     print(f"Channel {args.ch_start} rate: {result.singles_start[0]:.1f} cps")
     print(f"Channel {args.ch_stop} rate: {result.singles_stop[0]:.1f} cps")
@@ -359,7 +359,7 @@ def _singles_ratio(singles1, singles2):
 
 def _coincidence_rates(result):
     """Return the display rates and efficiencies from a pairs result."""
-    integration_time = float(result["integration_time"])
+    duration = float(result["duration"])
     return (
         float(result["net_pair_rate"]),
         float(result["acc_pair_rate"]),
@@ -368,7 +368,7 @@ def _coincidence_rates(result):
         float(result["eff_start"]),
         float(result["eff_stop"]),
         float(result["eff_avg"]),
-        integration_time,
+        duration,
     )
 
 
@@ -463,7 +463,7 @@ def _monitor_coincidence_hardware(args):
             ratio = _singles_ratio(result.singles_start[0], result.singles_stop[0])
             print_fixedwidth(
                 timestamp,
-                f"{result.integration_time[0]:.2f}",
+                f"{result.duration[0]:.2f}",
                 style(f"{float(result.raw_counts[0]):.1f}", fg="green"),
                 f"{result.singles_start[0]:.1f}",
                 f"{result.singles_stop[0]:.1f}",
@@ -471,7 +471,7 @@ def _monitor_coincidence_hardware(args):
             )
             if writer:
                 writer.writerow([
-                    timestamp, iteration + 1, f"{result.integration_time[0]:.2f}", f"{result.raw_counts[0]:.6f}",
+                    timestamp, iteration + 1, f"{result.duration[0]:.2f}", f"{result.raw_counts[0]:.6f}",
                     f"{result.singles_start[0]:.6f}", f"{result.singles_stop[0]:.6f}",
                     f"{ratio:.3f}",
                 ])
@@ -667,7 +667,7 @@ def run_service(args):
         # Report rates, integration time, and efficiencies, mirroring the
         # legacy tuple ordering: (inttime, pairs, acc, s1, s2, e1, e2, eavg).
         return (
-            float(res["integration_time"]),
+            float(res["duration"]),
             float(res["net_pair_rate"]),
             float(res["acc_pair_rate"]),
             float(res["start_rate"]),

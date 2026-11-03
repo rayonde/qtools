@@ -535,7 +535,7 @@ def run_calibration(
     serial = str(getattr(stage, "serial", "") or "")
     dev_id = target
     if cfg is not None:
-        dev_info = cfg.get_device(serial) or cfg.get_device(dev_id)
+        dev_info = cfg.get_device(serial) or cfg.get_device_by_id(dev_id)
         if dev_info:
             dev_id = str(dev_info.get("id") or dev_info.get("name") or target)
     device_key = serial or dev_id
@@ -543,7 +543,7 @@ def run_calibration(
     # device_name priority: explicit parameter > config "name" field > stage.name > target
     resolved_device_name = device_name
     if not resolved_device_name and cfg is not None:
-        dev_info = cfg.get_device(serial) or cfg.get_device(dev_id)
+        dev_info = cfg.get_device(serial) or cfg.get_device_by_id(dev_id)
         if dev_info:
             resolved_device_name = str(dev_info.get("name") or dev_info.get("id") or "")
     resolved_device_name = resolved_device_name or str(getattr(stage, "name", "") or "").strip() or target

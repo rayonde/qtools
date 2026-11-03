@@ -17,7 +17,7 @@ class _FakeTDC:
                 channel_start=1, channel_stop=4,
                 counts_start=[100, 100], counts_stop=[100, 100],
                 singles_start=[100.0, 100.0], singles_stop=[100.0, 100.0],
-                integration_time=[1.0, 1.0], stop_delay=[0, 0],
+                duration=[1.0, 1.0], stop_delay=[0, 0],
                 window_start=[218_000, 218_000], window_stop=[220_000, 220_000],
                 raw_counts=[14, 15], accidental_counts=[1, 1],
                 accidental_method=["sideband", "sideband"],

@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_KDC101_STAGE_SETTINGS = "PRM1-Z8"
 DEFAULT_KDC101_TRAVEL_MODE = 2
+DEFAULT_KDC101_VELOCITY_DEG_S = 40.0
 
 
 @register_backend("kdc101")
@@ -108,6 +109,7 @@ class KDC101Backend:
 
             entry = self._get_config_entry()
             self._configure_stage(entry)
+            self._motor.set_velocity(DEFAULT_KDC101_VELOCITY_DEG_S)
             if not self._motor.is_rotational:
                 mode = self._motor.get_travel_mode()
                 try:
@@ -274,7 +276,19 @@ class KDC101Backend:
     def home(self) -> None:
         self._require_connected()
         self._motor.home()
-
+        # Always block at the wrapper level, even when the backend was created
+        # with ``blocking=False``. pmeas scan workflows expect the stage to be
+        # settled when home() returns.
+        self.wait_move()
+        deadline = time.monotonic() + self._move_timeout
+        while not self._motor.is_homed:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"KDC101 {self.serial} did not report homed within "
+                    f"{self._move_timeout:.0f}s."
+                )
+            time.sleep(0.1)
+        self.wait_move()
     def zero(self) -> None:
         self.move_to(0.0)
 

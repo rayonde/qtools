@@ -136,12 +136,18 @@ def compute_target_angles(theta_0: float, waveplate: str = "hwp") -> dict[str, f
     if waveplate == "hwp":
         return {
             "H": _normalize_basis_angle(theta_0),
-            "D": _normalize_basis_angle(theta_0 + 22.5),
             "V": _normalize_basis_angle(theta_0 + 45.0),
+            "D": _normalize_basis_angle(theta_0 + 22.5),
             "A": _normalize_basis_angle(theta_0 + 67.5),
+            "R": 0.0,
+            "L": 0.0,
         }
     else:  # qwp
         return {
+            "H": 0.0,
+            "V": 0.0,
+            "D": 0.0,
+            "A": 0.0,
             "R": _normalize_basis_angle(theta_0 - 45.0),
             "L": _normalize_basis_angle(theta_0 + 45.0),
         }

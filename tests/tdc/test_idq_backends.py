@@ -115,9 +115,9 @@ def test_id1000_get_singles(mock_zmq_ctx, mock_socket):
     dev = ID1000Backend()
     dev.connect("169.254.99.100")
 
-    singles = dev.get_singles(integration_time=0.1)
+    singles = dev.get_singles(duration=0.1)
     assert isinstance(singles, SinglesResult)
-    assert singles.integration_time == 0.1
+    assert singles.duration == 0.1
     np.testing.assert_array_equal(singles.channels, [1, 2, 3, 4, 5])
     np.testing.assert_array_equal(singles.counts, [1000, 2000, 3000, 4000, 50000])
     assert singles.count_rates[0] == 10000.0
@@ -210,5 +210,5 @@ def test_id1000_get_g2_hardware(mock_zmq_ctx, mock_socket):
         ch_stop=2,
     )
     assert isinstance(g2, CoincidenceResult)
-    assert g2.integration_time[0] == 0.1
+    assert g2.duration[0] == 0.1
     np.testing.assert_array_equal(g2.histogram[0], [0, 5, 20, 150, 20, 5, 0])

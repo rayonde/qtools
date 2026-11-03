@@ -417,7 +417,7 @@ class TestCountAcquisition:
     def test_singles_returns_singles_result(self) -> None:
         fake = _FakeSerial(counts_response=b"1 2 3 4\n")
         backend = self._make_backend(fake)
-        result = backend.get_singles(integration_time=1.0)
+        result = backend.get_singles(duration=1.0)
         assert isinstance(result, SinglesResult)
         assert result.channels.tolist() == [1, 2, 3, 4]
         assert result.counts.tolist() == [1, 2, 3, 4]
@@ -489,14 +489,14 @@ class TestConnectionLifecycle:
             devices[0].device_path,
             mode="singles",
             level="NIM",
-            integration_time=0.5,
+            duration=0.5,
             threshold=0.8,
         )
         assert self.backend.is_connected()
         # kwargs should be stored
         assert self.backend._init_mode == "singles"
         assert self.backend._init_level == "NIM"
-        assert self.backend._init_integration_time == 0.5
+        assert self.backend._init_duration == 0.5
         assert self.backend._init_threshold == 0.8
 
     def test_connect_nonexistent_path_raises(self) -> None:
@@ -669,29 +669,29 @@ class TestDataAcquisition:
     # -- singles ------------------------------------------------------------
 
     def test_get_singles_returns_correct_type(self) -> None:
-        result = self.backend.get_singles(integration_time=0.1)
+        result = self.backend.get_singles(duration=0.1)
         assert isinstance(result, SinglesResult)
-        assert result.integration_time == pytest.approx(0.1, abs=0.01)
+        assert result.duration == pytest.approx(0.1, abs=0.01)
         assert len(result.counts) == CHANNEL_COUNT
         assert len(result.count_rates) == CHANNEL_COUNT
         assert result.counts.dtype == np.uint64
         assert result.count_rates.dtype == np.float64
 
     def test_get_singles_counts_are_non_negative(self) -> None:
-        result = self.backend.get_singles(integration_time=0.1)
+        result = self.backend.get_singles(duration=0.1)
         assert (result.counts >= 0).all()
 
     def test_get_singles_count_rates_match(self) -> None:
-        result = self.backend.get_singles(integration_time=0.2)
-        expected_rates = result.counts.astype(np.float64) / result.integration_time
+        result = self.backend.get_singles(duration=0.2)
+        expected_rates = result.counts.astype(np.float64) / result.duration
         np.testing.assert_allclose(result.count_rates, expected_rates)
 
     def test_get_singles_total_counts(self) -> None:
-        result = self.backend.get_singles(integration_time=0.1)
+        result = self.backend.get_singles(duration=0.1)
         assert result.total_counts == int(np.sum(result.counts))
 
     def test_get_singles_repr(self) -> None:
-        result = self.backend.get_singles(integration_time=0.1)
+        result = self.backend.get_singles(duration=0.1)
         r = repr(result)
         assert "SinglesResult" in r
 
@@ -733,7 +733,7 @@ class TestDataAcquisition:
 
     def test_get_counts_and_coincidences(self) -> None:
         self.backend.mode = "pairs"
-        tup = self.backend.get_counts_and_coincidences(integration_time=0.1)
+        tup = self.backend.get_counts_and_coincidences(duration=0.1)
         assert isinstance(tup, tuple)
         assert len(tup) > 0
         for val in tup:
@@ -789,7 +789,7 @@ class TestErrorPaths:
     def test_get_singles_requires_connection(self) -> None:
         backend = ExpS15TDC1Backend()
         with pytest.raises(RuntimeError, match="not connected"):
-            backend.get_singles(integration_time=0.1)
+            backend.get_singles(duration=0.1)
 
     def test_get_timestamps_requires_connection(self) -> None:
         backend = ExpS15TDC1Backend()

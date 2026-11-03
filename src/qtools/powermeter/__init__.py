@@ -12,7 +12,7 @@ from qtools.powermeter.backends.powermeter import (
     list_available_backends,
 )
 from qtools.powermeter.backends.base import BasePowerMeter
-from qtools.powermeter.connection import get_device
+from qtools.powermeter.connection import auto_detect_connected_device, get_device
 from qtools.powermeter.measurement import read, measure_power, compute_statistics, export, format_power
 from qtools.powermeter.api import measure
 
@@ -23,6 +23,7 @@ __all__ = [
     "get_backend_class",
     "list_available_backends",
     "get_device",
+    "auto_detect_connected_device",
     "read",
     "measure_power",
     "compute_statistics",

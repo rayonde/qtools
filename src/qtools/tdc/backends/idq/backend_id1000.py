@@ -277,11 +277,11 @@ class ID1000Backend(TDCBackend):
             block = _INPUT_BLOCK_MAP[ch]
             self.exec_scpi(f"{block}:EDGE {edge_val}")
 
-    def get_singles(self, integration_time: float) -> SinglesResult:
+    def get_singles(self, duration: float) -> SinglesResult:
         """Measure singles count rate for all channels.
         
         Args:
-            integration_time: Exposure duration in seconds.
+            duration: Exposure duration in seconds.
             
         Returns:
             SinglesResult containing counts and count rates for channels 1..4 and Start.
@@ -289,10 +289,10 @@ class ID1000Backend(TDCBackend):
         if not self.is_connected():
             raise RuntimeError("Device not connected")
 
-        if integration_time <= 0:
-            raise ValueError("integration_time must be positive")
+        if duration <= 0:
+            raise ValueError("duration must be positive")
 
-        exp_ns = max(int(integration_time * 1e9), 1)
+        exp_ns = max(int(duration * 1e9), 1)
 
         # Configure all 4 input channels and START channel counters
         setup_cmds = [
@@ -301,7 +301,7 @@ class ID1000Backend(TDCBackend):
         self.exec_scpi(";".join(setup_cmds))
 
         # Sleep integration duration
-        time.sleep(integration_time)
+        time.sleep(duration)
 
         # Read counters in a single batch
         query = ";:".join([f"INPU{i}:COUNter?" for i in range(1, 5)] + ["STARt:COUNter?"])
@@ -316,10 +316,10 @@ class ID1000Backend(TDCBackend):
             raw_counts.append(int(self.exec_scpi("STARt:COUN?").strip()))
 
         counts = np.array(raw_counts[:5], dtype=np.uint64)
-        count_rates = counts.astype(np.float64) / integration_time
+        count_rates = counts.astype(np.float64) / duration
 
         return SinglesResult(
-            integration_time=integration_time,
+            duration=duration,
             channels=np.arange(1, self.channel_count + 1, dtype=np.uint8),
             counts=counts,
             count_rates=count_rates,
@@ -415,7 +415,7 @@ class ID1000Backend(TDCBackend):
             mode="window_count", bin_width=width, method="hardware",
             channel_start=ch_start, channel_stop=ch_stop,
             counts_start=[count1], counts_stop=[count2],
-            singles_start=[rate1], singles_stop=[rate2], integration_time=[duration],
+            singles_start=[rate1], singles_stop=[rate2], duration=[duration],
             stop_delay=[0], raw_counts=[coinc_count],
             window_start=[window_start_ps], window_stop=[window_stop_ps],
             accidental_counts=[accidental_count], accidental_method=["rate_product"],
@@ -531,7 +531,7 @@ class ID1000Backend(TDCBackend):
             channel_start=ch_start, channel_stop=ch_stop,
             counts_start=[count_start], counts_stop=[count_stop],
             histogram=[histogram], bin_edges=[bin_edges],
-            singles_start=[rate_start], singles_stop=[rate_stop], integration_time=[duration],
+            singles_start=[rate_start], singles_stop=[rate_stop], duration=[duration],
             stop_delay=[delay_ps], n_bins=[len(histogram)], stop_offset=[0],
         )
 

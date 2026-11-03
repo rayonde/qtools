@@ -182,7 +182,7 @@ Discover attached hardware and configure an analysis bin width in integer ps:
 ```python
 from qtools.tdc import TDC, get_tdc, list_tdc
 
-devices = list_tdc()  # Scan attached hardware, print a table, return DeviceInfo records
+devices = list_tdc()  # Scan attached hardware and return DeviceInfo records
 
 tdc = TDC(backend="exp_s15_tdc1", bin_width=2_000)
 # Equivalent factory form:
@@ -209,7 +209,7 @@ Import the library as `qtools.tdc`. Channel IDs follow the selected backend; the
 from qtools.tdc import get_tdc
 
 with get_tdc("exp_s15_tdc1") as device:
-    singles = device.measure_singles(duration=1.0, num=1)
+    singles = device.measure_singles(duration=1.0, samples=1)
     duration, counts = singles[0]
 
     result = device.measure_coincidence(
@@ -233,7 +233,7 @@ with get_tdc("exp_s15_tdc1") as device:
 
 `CoincidenceResult`, `MultiCoincidenceResult`, and `HeraldingGateResult` all use `samples=1` by default. Measurement values are lists even for one acquisition; `bin_width` is one shared integer. Rates divide each acquisition's counts by its actual live time in seconds. Means are arithmetic means of those rates, and standard deviations use `ddof=1`; a single sample has `std=None`. Net rates remain `None` when no accidental estimate is available.
 
-Delay and window inputs to `measure_g2`/`measure_coincidence` use `unit` (`ps`, `ns`, `us`, or `ms`). `bins` and `bin_offset` use bins. Returned axes, offsets, windows, and delays use integer ps; `convert_time_unit(result, "ns")` converts all physical time fields together and rejects fractional integers. Windows are half open, `[start, stop)`. Software coincidence windows are expanded outward to bin edges. Automatic window selection is fixed after the first repetition.
+Delay and window inputs to `measure_g2`/`measure_coincidence` use `unit` (`ps`, `ns`, `us`, or `ms`). `bins` and `bin_offset` use bins. Returned axes, offsets, windows, and delays use integer ps; `convert_time_unit(result, "ns")` converts all physical time fields together and rejects fractional integers. Windows are half open, `[start, stop)`. Software coincidence windows are expanded outward to bin edges. `measure_coincidence` takes no explicit `bin_offset`: it derives the offset from `window_start` and the bin count from `[window_start, window_stop)`, so its histogram contains only the selected window. Accidentals use the singles-rate product. Automatic window selection is fixed after the first repetition.
 
 For hardware counters, request `method="hardware"`. A device that supplies only singles rates reports `counts_start/counts_stop=None`. A fixed hardware gate with unavailable width reports both window boundaries as `None`. Counts are never reconstructed by rounding rates.
 

@@ -17,7 +17,7 @@ def pair_result():
     return {
         "histogram": np.asarray([1, 4, 2], dtype=np.uint64),
         "bin_edges": np.asarray([0, 1, 2, 3], dtype=np.float64),
-        "integration_time": 1.0,
+        "duration": 1.0,
         "net_pair_rate": 10.0,
         "acc_pair_rate": 2.0,
         "start_rate": 100.0,
@@ -108,7 +108,7 @@ def test_pairs_hardware_uses_hardware_counter(capsys):
             calls.append(kwargs)
             return CoincidenceResult(mode="window_count", bin_width=2000, channel_start=1, channel_stop=3,
                 counts_start=[int(50.0 * 2.0)], counts_stop=[int(200.0 * 2.0)],
-                singles_start=[50.0], singles_stop=[200.0], integration_time=[2.0],
+                singles_start=[50.0], singles_stop=[200.0], duration=[2.0],
                 stop_delay=[0], raw_counts=[12], method="hardware",
             )
 
@@ -317,7 +317,7 @@ def test_coincidences_auto_detects_window_and_prints(capsys):
         def measure_g2(self, **kwargs):
             return CoincidenceResult(mode="histogram", bin_width=int(2000.0), channel_start=1, channel_stop=2,
             counts_start=[int(100.0 * 1.0)], counts_stop=[int(200.0 * 1.0)],
-            singles_start=[100.0], singles_stop=[200.0], integration_time=[1.0], stop_delay=[0],
+            singles_start=[100.0], singles_stop=[200.0], duration=[1.0], stop_delay=[0],
             n_bins=[(6 - 1)], stop_offset=[0], histogram=[np.asarray([0, 1, 10, 1, 0], dtype=np.uint64)],
             bin_edges=[np.arange((6 - 1) + 1, dtype=np.int64) * int(2000.0)],
             )
@@ -360,7 +360,7 @@ def test_coincidences_auto_sizes_window_to_peak_width(capsys):
             # the narrow-peak case above, not a fixed +/- 5.
             return CoincidenceResult(mode="histogram", bin_width=int(2000.0), channel_start=1, channel_stop=2,
             counts_start=[int(100.0 * 1.0)], counts_stop=[int(200.0 * 1.0)],
-            singles_start=[100.0], singles_stop=[200.0], integration_time=[1.0], stop_delay=[0],
+            singles_start=[100.0], singles_stop=[200.0], duration=[1.0], stop_delay=[0],
             n_bins=[(11 - 1)], stop_offset=[0], histogram=[np.asarray([0, 0, 1, 3, 8, 6, 4, 2, 1, 0], dtype=np.uint64)],
             bin_edges=[np.arange((11 - 1) + 1, dtype=np.int64) * int(2000.0)],
             )
@@ -418,7 +418,7 @@ def test_coincidences_hardware_loop():
             calls.append(kwargs)
             return CoincidenceResult(mode="window_count", bin_width=2000, channel_start=1, channel_stop=3,
                 counts_start=[int(50.0 * 2.0)], counts_stop=[int(200.0 * 2.0)],
-                singles_start=[50.0], singles_stop=[200.0], integration_time=[2.0],
+                singles_start=[50.0], singles_stop=[200.0], duration=[2.0],
                 stop_delay=[0], raw_counts=[12], method="hardware",
             )
 
@@ -535,7 +535,7 @@ def test_coincidences_hardware_export_flushes_each_row(tmp_path):
                 observed_during_run.append(export_path.read_text(encoding="utf-8"))
             return CoincidenceResult(mode="window_count", bin_width=2000, channel_start=1, channel_stop=3,
                 counts_start=[int(50.0 * 2.0)], counts_stop=[int(200.0 * 2.0)],
-                singles_start=[50.0], singles_stop=[200.0], integration_time=[2.0],
+                singles_start=[50.0], singles_stop=[200.0], duration=[2.0],
                 stop_delay=[0], raw_counts=[12], method="hardware",
             )
 

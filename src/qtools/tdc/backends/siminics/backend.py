@@ -372,12 +372,12 @@ class SiminicsBackend(TDCBackend):
 
     # -- generic acquisition ---------------------------------------------
 
-    def get_singles(self, integration_time: float) -> SinglesResult:
+    def get_singles(self, duration: float) -> SinglesResult:
         self._ensure_connected()
-        integration_time = _check_positive(integration_time, "integration_time")
+        duration = _check_positive(duration, "duration")
         mode = MODE_T1
         self._sdk.check("SetFileMode", mode, 0, 0)
-        self._sdk.check("SetStatisticsTime", mode, integration_time)
+        self._sdk.check("SetStatisticsTime", mode, duration)
         self._sdk.check("EnableT1", self._dev_id, self._board, (1 << self._channel_count) - 1)
         self._sdk.check("StartTask", mode)
         self._active_mode = mode
@@ -395,10 +395,10 @@ class SiminicsBackend(TDCBackend):
             finally:
                 self._active_mode = None
         return SinglesResult(
-            integration_time=integration_time,
+            duration=duration,
             channels=np.arange(1, self._channel_count + 1, dtype=np.uint8),
             counts=counts,
-            count_rates=counts.astype(np.float64) / integration_time,
+            count_rates=counts.astype(np.float64) / duration,
         )
 
     def get_timestamps(self, duration: float) -> TimestampResult:
@@ -505,7 +505,7 @@ class SiminicsBackend(TDCBackend):
             channel=channel,
             histogram=histogram,
             bin_width_ps=self._resolution_ps,
-            integration_time=duration,
+            duration=duration,
             resolution_ps=self._resolution_ps,
         )
 
@@ -547,7 +547,7 @@ class SiminicsBackend(TDCBackend):
         result = ITTRResult(
             mode=normalized,
             channels=selected,
-            integration_time=duration,
+            duration=duration,
             interval_us=int(interval_us),
             raw_blocks=blocks,
             data_overflow=overflow_value,
@@ -618,7 +618,7 @@ class SiminicsBackend(TDCBackend):
             channel_start=ch_start, channel_stop=ch_stop,
             counts_start=[int(start_count)], counts_stop=[int(stop_count)],
             singles_start=[float(start_count) / duration], singles_stop=[float(stop_count) / duration],
-            integration_time=[duration], stop_delay=[delay_ps], raw_counts=[count],
+            duration=[duration], stop_delay=[delay_ps], raw_counts=[count],
             window_start=[0], window_stop=[width_ps],
         )
 

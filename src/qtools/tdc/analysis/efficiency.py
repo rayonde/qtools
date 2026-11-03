@@ -88,7 +88,7 @@ def compute_pairs(
     bin_edges: np.ndarray,
     singles_start: float,
     singles_stop: float,
-    integration_time: float,
+    duration: float,
     coinc_start: int,
     coinc_stop: int,
     acc_start: Optional[int] = None,
@@ -100,8 +100,8 @@ def compute_pairs(
     if coinc_start > coinc_stop:
         raise ValueError("coinc_start must not be greater than coinc_stop")
 
-    if not np.isfinite(integration_time) or integration_time <= 0:
-        raise ValueError("integration_time must be a positive finite value")
+    if not np.isfinite(duration) or duration <= 0:
+        raise ValueError("duration must be a positive finite value")
 
     if np.sum(histogram) == 0:
         return {
@@ -110,7 +110,7 @@ def compute_pairs(
             "raw_pair_rate": 0.0,
             "net_pair_rate": 0.0,
             "acc_pair_rate": 0.0,
-            "integration_time": integration_time,
+            "duration": duration,
             "start_rate": singles_start,
             "stop_rate": singles_stop,
             "eff_start": 0.0,
@@ -131,7 +131,7 @@ def compute_pairs(
     
        
     acc_in_coinc, acc_per_bin = compute_accidentals(histogram, coinc_window, acc_start)
-    acc_in_coinc_rate = acc_in_coinc / integration_time
+    acc_in_coinc_rate = acc_in_coinc / duration
 
     # pairs in the coincidence window 
     coinc_mask = (bin_left >= coinc_start) & (bin_left <= coinc_stop)
@@ -139,14 +139,14 @@ def compute_pairs(
     corr_coinc_counts = raw_coinc_counts - acc_in_coinc
     
     # net coincidence rate
-    net_pairs_rate = corr_coinc_counts / integration_time
-    raw_pairs_rate = raw_coinc_counts / integration_time
+    net_pairs_rate = corr_coinc_counts / duration
+    raw_pairs_rate = raw_coinc_counts / duration
 
     # heralding efficiency for start channel
     # singles_start and singles_stop are already rates (counts/s);
-    # convert to total counts by multiplying by integration_time.
-    total_singles_start = singles_start * integration_time
-    total_singles_stop = singles_stop * integration_time
+    # convert to total counts by multiplying by duration.
+    total_singles_start = singles_start * duration
+    total_singles_stop = singles_stop * duration
     eff_start = corr_coinc_counts / total_singles_start if total_singles_start > 0 else 0.0
     eff_stop = corr_coinc_counts / total_singles_stop if total_singles_stop > 0 else 0.0
 
@@ -167,7 +167,7 @@ def compute_pairs(
         "raw_pair_rate": raw_pairs_rate,
         "net_pair_rate": net_pairs_rate,
         "acc_pair_rate": acc_in_coinc_rate,
-        "integration_time": integration_time,
+        "duration": duration,
         "start_rate": start_rate,
         "stop_rate": stop_rate,
         "eff_start": eff_start,

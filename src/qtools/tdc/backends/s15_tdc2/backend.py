@@ -145,14 +145,14 @@ class S15TDC2Backend(TDCBackend):
     def is_connected(self) -> bool:
         return self._connected
 
-    def get_singles(self, integration_time: float) -> SinglesResult:
+    def get_singles(self, duration: float) -> SinglesResult:
         if not self._connected or self._dev is None:
             raise RuntimeError("Device not connected")
 
         # TimestampTDC2.get_counts returns:
         # [c1, c2, c3, c4, actual_duration_seconds] if return_actual_duration is True
         data = self._dev.get_counts(
-            duration=integration_time,
+            duration=duration,
             return_actual_duration=True,
             ignore_rollover=True,
         )
@@ -163,7 +163,7 @@ class S15TDC2Backend(TDCBackend):
         count_rates = counts.astype(np.float64) / actual_duration
 
         return SinglesResult(
-            integration_time=actual_duration,
+            duration=actual_duration,
             channels=np.arange(1, len(counts) + 1, dtype=np.uint8),
             counts=counts,
             count_rates=count_rates,

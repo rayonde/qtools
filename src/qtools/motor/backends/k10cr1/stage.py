@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 VELOCITY_SCALE = 7330128.3  # raw_max_vel per deg/s  (73301283 / 10 deg/s)
+DEFAULT_K10CR1_VELOCITY_DEG_S = 40.0
 
 
 @register_backend("k10cr1")
@@ -52,6 +53,10 @@ class K10CR1Backend:
                     self.zero_offset = float(entry.get("zero_offset", 0.0) or 0.0)
             except Exception as ex:
                 logger.warning(f"Could not load zero_offset config: {ex}")
+
+            self._motor.params_velocity = {
+                "max_velocity": int(DEFAULT_K10CR1_VELOCITY_DEG_S * VELOCITY_SCALE)
+            }
 
             logger.info(
                 f"Connected to K10CR1: model={self._model}, serial={self._serial_no}, zero_offset={self.zero_offset}°"

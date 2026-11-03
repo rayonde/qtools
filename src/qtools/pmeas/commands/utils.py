@@ -115,12 +115,45 @@ def _resolve_motor(
             sys.exit(1)
 
 
+def _register_resolved_motor(cfg: Any, stage: Any, default_optical_path: str) -> str:
+    """Persist a resolved stage without collapsing stages on one optical path.
+
+    Existing hardware metadata is preserved. New entries receive the serial
+    number as their unique id and keep the human-readable device name.
+    """
+    serial = str(getattr(stage, "serial", "") or "")
+    existing = cfg.get_device(serial) if serial else None
+    if existing:
+        device = existing
+    else:
+        device = {}
+    name = str(
+        device.get("name")
+        or getattr(stage, "name", "")
+        or serial
+        or default_optical_path
+    )
+    if not serial:
+        return name
+
+    cfg.register_device(
+        serial=serial,
+        id=serial,
+        name=name,
+        port=str(getattr(stage, "port", "") or device.get("port") or ""),
+        optical_path=str(device.get("optical_path") or default_optical_path),
+        role=str(device.get("role") or "basis"),
+        waveplate=str(device.get("waveplate") or "hwp"),
+        backend=str(device.get("backend") or getattr(stage, "backend", "") or ""),
+    )
+    return name
+
 def _motor_alias(stage) -> str:
     from qtools.pmeas.config import ConfigManager
     cfg = ConfigManager.resolve()
     serial = str(getattr(stage, "serial", "") or "")
     dev = cfg.get_device(serial) or {}
-    return dev.get("optical_path") or dev.get("path") or "A"
+    return dev.get("name") or dev.get("id") or dev.get("optical_path") or "A"
 
 
 def _has_device_flags(args: argparse.Namespace) -> bool:

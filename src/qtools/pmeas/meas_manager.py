@@ -78,6 +78,36 @@ def _calc_stats(values: Sequence[float] | np.ndarray) -> tuple[float, float]:
     return mean, std
 
 
+def _normalize_channels(channels: Any) -> list[int] | None:
+    """Normalize a channel selection to a list of 1-based channel numbers."""
+    if channels is None:
+        return None
+    if isinstance(channels, str):
+        parts = [part.strip() for part in channels.split(",") if part.strip()]
+        return [int(part) for part in parts] or None
+    if isinstance(channels, (int, np.integer)):
+        return [int(channels)]
+    selected = [int(channel) for channel in channels]
+    return selected or None
+
+
+def _sum_selected_channels(values: Any, channels: Any) -> float:
+    """Sum all channels, or only the selected 1-based TDC channels."""
+    arr = np.asarray(values)
+    selected = _normalize_channels(channels)
+    if selected is None:
+        return float(np.sum(arr))
+
+    indices = []
+    for channel in selected:
+        if channel < 1 or channel > arr.size:
+            raise ValueError(
+                f"TDC channel {channel} is out of range for {arr.size} channels"
+            )
+        indices.append(channel - 1)
+    return float(np.sum(arr[indices]))
+
+
 @dataclass
 class MeasurementResult:
     """Unified container for measurement results, supporting tuple unpacking and dict key access."""
@@ -134,8 +164,13 @@ class MeasManager:
             pm_cfg = scanned.get("powermeter", {})
             tdc_cfg = scanned.get("tdc", {})
 
-        pm_backend, pm_port = pm_cfg.get("backend"), pm_cfg.get("port")
-        if pm_backend and pm_port in available_ports:
+        pm_backend = str(pm_cfg.get("backend") or "").strip()
+        pm_port = str(pm_cfg.get("port") or "").strip()
+        if not pm_backend and not pm_port:
+            # An empty powermeter entry means "not configured". Do not warn for
+            # experiments that only use the TDC.
+            logger.debug("PowerMeter is not configured; skipping.")
+        elif pm_backend and pm_port in available_ports:
             try:
                 from qtools import powermeter
                 self.detectors["powermeter"] = powermeter.get_device(pm_backend, pm_port)
@@ -297,11 +332,12 @@ class MeasManager:
                 tdc.set_threshold(tdc_thresvolt)
 
                 if meas_type == "singles":
-                    res = tdc.measure_singles(duration=duration, num=samples)
+                    res = tdc.measure_singles(duration=duration, samples=samples)
                     counts = [
-                        float(np.sum(s.counts)) if hasattr(s, "counts")
-                        else float(np.sum(s[1])) if isinstance(s, (tuple, list)) and len(s) > 1
-                        else float(s)
+                        _sum_selected_channels(
+                            s.counts if hasattr(s, "counts") else s[1] if isinstance(s, (tuple, list)) and len(s) > 1 else s,
+                            channels,
+                        )
                         for s in res
                     ]
                     mean_cnt, std_cnt = _calc_stats(counts)
@@ -309,16 +345,17 @@ class MeasManager:
                         value=mean_cnt,
                         error=std_cnt,
                         unit="counts",
-                        metrics={"samples": res, "counts": counts},
+                        metrics={"samples": res, "counts": counts, "channels": _normalize_channels(channels)},
                         metadata={"detector": detector, "meas_type": meas_type, "duration": duration, "samples": samples, "task": task},
                     )
 
                 elif meas_type == "rates":
-                    res = tdc.measure_rates(duration=duration, num=samples)
+                    res = tdc.measure_rates(duration=duration, samples=samples)
                     rates = [
-                        float(np.sum(r.count_rates)) if hasattr(r, "count_rates")
-                        else float(np.sum(r[1])) if isinstance(r, (tuple, list)) and len(r) > 1
-                        else float(r)
+                        _sum_selected_channels(
+                            r.count_rates if hasattr(r, "count_rates") else r[1] if isinstance(r, (tuple, list)) and len(r) > 1 else r,
+                            channels,
+                        )
                         for r in res
                     ]
                     mean_rate, std_rate = _calc_stats(rates)
@@ -326,7 +363,7 @@ class MeasManager:
                         value=mean_rate,
                         error=std_rate,
                         unit="cps",
-                        metrics={"samples": res, "rates": rates},
+                        metrics={"samples": res, "rates": rates, "channels": _normalize_channels(channels)},
                         metadata={"detector": detector, "meas_type": meas_type, "duration": duration, "samples": samples, "task": task},
                     )
 

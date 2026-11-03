@@ -157,10 +157,9 @@ class MeasManager:
 
     def _rescan_tdc(self) -> dict:
         """Discover a connected TDC and persist it to the main + cal/opt configs."""
-        from qtools.tdc.connection import discover_all as tdc_discover_all
-        devices = tdc_discover_all(method="usb", timeout=1.0)
-        if not devices:
-            devices = tdc_discover_all(method="ethernet", timeout=1.0)
+        from qtools import tdc as tdc_pkg
+
+        devices = tdc_pkg.list_tdc(method="all", timeout=1.0)
         if not devices:
             return {}
         dev = devices[0]
@@ -223,13 +222,13 @@ class MeasManager:
     def _measure_tdc(self, duration: float = 1, samples: int = 1,  channels: Optional[List[int]] = None) -> List:
         """Read from TDC — connect, measure singles, disconnect."""
         with self.tdc:
-            results = self.tdc.measure_singles(duration=duration, num=samples)
+            results = self.tdc.measure_singles(duration=duration, samples=samples)
         if not results:
             raise RuntimeError("TDC returned no singles measurements")
 
         def sample_time_and_values(sample):
-            if hasattr(sample, "integration_time"):
-                return float(sample.integration_time), np.asarray(sample.counts)
+            if hasattr(sample, "duration"):
+                return float(sample.duration), np.asarray(sample.counts)
             return float(sample[0]), np.asarray(sample[1])
 
         _, first_values = sample_time_and_values(results[0])
@@ -244,7 +243,7 @@ class MeasManager:
                 f"TDC channel(s) {invalid} out of range (1-{n_channels})"
             )
 
-        # Each result is an (integration_time, counts) tuple; convert the
+        # Each result is an (duration, counts) tuple; convert the
         # selected channel's raw counts to counts/s before averaging.
         rate_res = []
         for idx in channel_indices:
@@ -417,28 +416,43 @@ class MeasManager:
     # ── discovery + save ───────────────────────────────────────
 
     def discover_and_save(self) -> None:
-        """Auto-discover TDC/powermeter and write addresses to both configs."""
-        # TDC
+        """Auto-discover TDC/powermeter and persist their public API records."""
+        configs = [self.cal_cfg, self.opt_cfg]
+        if self.cfg is not None:
+            configs.insert(0, self.cfg)
+
+        # TDC discovery through the qtools.tdc public API.
         try:
-            candidates = tdc.auto_discover()
+            candidates = tdc.list_tdc(method="all", timeout=1.0)
             if candidates:
-                d = candidates[0]
-                for cfg in (self.cal_cfg, self.opt_cfg):
-                    cfg.set_device_port("tdc", d.device_path)
+                dev = candidates[0]
+                for cfg in configs:
+                    cfg._cfg.setdefault("detectors", {}).setdefault("tdc", {}).update(
+                        backend=dev.backend_name,
+                        port=dev.device_path,
+                    )
+                    cfg.set_device_port("tdc", dev.device_path)
                     cfg.save()
-                logger.info("Saved TDC config: %s (%s)", d.device_path, d.backend_name)
+                logger.info(
+                    "Saved TDC config: %s (%s)",
+                    dev.device_path,
+                    dev.backend_name,
+                )
         except Exception as e:
             logger.warning("TDC discovery failed: %s", e)
 
-        # Powermeter
+        # Powermeter discovery through the qtools.powermeter public API.
         try:
-            from qtools.powermeter.cli import auto_detect_connected_device
-            addr, backend = auto_detect_connected_device()
+            addr, backend = powermeter.auto_detect_connected_device()
         except Exception as e:
             logger.warning("Powermeter discovery failed: %s", e)
             addr, backend = None, None
         if addr:
-            for cfg in (self.cal_cfg, self.opt_cfg):
+            for cfg in configs:
+                cfg._cfg.setdefault("devices", {}).setdefault("powermeter", {}).update(
+                    backend=backend,
+                    port=addr,
+                )
                 cfg.set_device_port("powermeter", addr)
                 cfg.save()
             logger.info("Saved PM config: %s (%s)", addr, backend)

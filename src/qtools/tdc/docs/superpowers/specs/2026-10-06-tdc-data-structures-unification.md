@@ -69,7 +69,7 @@ class CoincidenceResult:
     ``mode="window_count"`` stores window counts with optional histograms.
     Every measurement list has length ``samples``.
     Time fields use ``unit``, with integer ps by default.
-    ``integration_time`` is always in seconds.
+    ``duration`` is always in seconds.
     """
 
     # Shared settings; samples counts completed acquisitions.
@@ -86,7 +86,7 @@ class CoincidenceResult:
     counts_stop: Optional[list[int]]
     singles_start: list[float]
     singles_stop: list[float]
-    integration_time: list[float]
+    duration: list[float]
 
     # Additional delay applied to the stop channel per acquisition.
     # Use [0] * samples for zero delay; negative delays are allowed.
@@ -144,7 +144,7 @@ class CoincidenceResult:
             self.bin_edges,
             self.singles_start,
             self.singles_stop,
-            self.integration_time,
+            self.duration,
             strict=True,
         ):
             bin_width_s = np.diff(edges) * unit_to_s[self.unit]
@@ -177,7 +177,7 @@ class CoincidenceResult:
         return [
             count / duration
             for count, duration in zip(
-                self.raw_counts, self.integration_time, strict=True
+                self.raw_counts, self.duration, strict=True
             )
         ]
 
@@ -188,7 +188,7 @@ class CoincidenceResult:
         return [
             count / duration
             for count, duration in zip(
-                self.accidental_counts, self.integration_time, strict=True
+                self.accidental_counts, self.duration, strict=True
             )
         ]
 
@@ -199,7 +199,7 @@ class CoincidenceResult:
             return None
         return [
             count / duration
-            for count, duration in zip(counts, self.integration_time, strict=True)
+            for count, duration in zip(counts, self.duration, strict=True)
         ]
 
     @property
@@ -234,13 +234,13 @@ class CoincidenceResult:
 - `mode`、`unit`、`method`、`channel_start`、`channel_stop`、`bin_width` 是整组公共配置，使用标量；起止通道必须不同。`bin_width: int` 表示单个 bin 的时间分辨率，所有采样共用；逐次计数、计数率、采集时间、延迟、`n_bins`、`stop_offset`、窗口参数及偶然估计方法使用列表。公共配置与 `*_mean`、`*_std` 汇总属性不属于逐次数据列表。
 - 所有必需列表以及非 `None` 的可选列表，长度必须严格等于 `samples`。索引 `i` 在所有列表中表示同一次采样。不接收标量作为列表的替代，不隐式广播或截断。
 - 可选字段为 `None` 表示整组采样未提供该信息；提供时必须包含每次采样的数据，不使用含 `None` 元素的列表，也不在求平均时静默跳过缺失项。
-- `counts_start[i]`、`counts_stop[i]` 是第 `i` 次采样的原始 singles 计数，`integration_time[i]` 是该次实际有效采集时间。`singles_start[i]`、`singles_stop[i]` 使用同一次有效采集时间计算。后端提供实际计数，不通过对计数率乘时间并取整来伪造原始计数。仅硬件接口确实不提供 singles 原始计数时（如 CIQTEK accord），对应 counts 列表允许整组为 `None`，保留设备直接报告的 singles 计数率。软件分析必须提供实际计数。
+- `counts_start[i]`、`counts_stop[i]` 是第 `i` 次采样的原始 singles 计数，`duration[i]` 是该次实际有效采集时间。`singles_start[i]`、`singles_stop[i]` 使用同一次有效采集时间计算。后端提供实际计数，不通过对计数率乘时间并取整来伪造原始计数。仅硬件接口确实不提供 singles 原始计数时（如 CIQTEK accord），对应 counts 列表允许整组为 `None`，保留设备直接报告的 singles 计数率。软件分析必须提供实际计数。
 - `bin_width > 0`，其单位由 `unit` 指定。明确采用延迟坐标 `tau = (t_stop + stop_delay[i]) - t_start`；`stop_delay[i]` 可正可负。`stop_offset[i]` 只决定直方图时间轴的起点，不对事件再次施加延迟。
 - `histogram` 模式必须提供 `histogram`、`bin_edges`、`n_bins`、`stop_offset` 四个列表；`window_count` 模式可整组省略它们，提供时也必须四者齐全。对每个 `i`：`len(histogram[i]) == n_bins[i]`，`len(bin_edges[i]) == n_bins[i] + 1`，`bin_edges[i][0] == stop_offset[i]`，相邻边界差均等于公共标量 `bin_width`。
 - `window_count` 模式必须提供 `raw_counts`，通常同时提供 `window_start`、`window_stop`；仅硬件固定门宽不可查询时（如 S15 TDC1 pairs），窗口两列表允许同时为 `None`，不捏造门宽；`histogram` 模式可以在提供窗口时附带这些统计。每次窗口都满足 `window_stop[i] > window_start[i]`；`window_width` 由边界派生，不另存可修改字段。
 - `window_n_bins` 表示窗口宽度对应的名义 bin 数。基于直方图积分得到 `raw_counts` 时，窗口边界须与该次 `bin_edges` 对齐并处于其覆盖范围内，避免把部分 bin 当成完整 bin 计数。
 - 一组采样使用相同的通道对、`stop_delay`、直方图时间轴及符合窗口；这些逐次配置列表中的值须一致，bin 分辨率则由公共标量 `bin_width` 记录。改变配置的扫描测量使用多个 `CoincidenceResult`，避免将不同物理窗口的计数率直接求平均。
-- 每次 `integration_time` 必须为有限正数；原始计数与偶然估计非负。没有偶然估计时，`net_counts`、`net_pair_rate` 及其统计属性返回 `None`，不将未知本底当成零；扣本底后的净计数允许为负，不做截零。
+- 每次 `duration` 必须为有限正数；原始计数与偶然估计非负。没有偶然估计时，`net_counts`、`net_pair_rate` 及其统计属性返回 `None`，不将未知本底当成零；扣本底后的净计数允许为负，不做截零。
 
 #### 均值与标准差
 
@@ -263,7 +263,7 @@ result = CoincidenceResult(
     counts_stop=[2000, 2200, 1800],
     singles_start=[1000.0, 1100.0, 900.0],
     singles_stop=[2000.0, 2200.0, 1800.0],
-    integration_time=[1.0, 1.0, 1.0],
+    duration=[1.0, 1.0, 1.0],
     bin_width=100,
     stop_delay=[0, 0, 0],
     window_start=[-500, -500, -500],
@@ -305,7 +305,7 @@ class MultiCoincidenceResult:
 
     channels[0] is the reference; remaining channels are signals.
     Keys are actual channel IDs; all measurement lists have length samples.
-    Time fields use unit; integration_time is always in seconds.
+    Time fields use unit; duration is always in seconds.
     """
 
     # Shared settings and channel IDs.
@@ -322,7 +322,7 @@ class MultiCoincidenceResult:
     # Use counts[channel][i] and singles[channel][i] with actual channel IDs.
     counts: dict[int, list[int]]
     singles: dict[int, list[float]]
-    integration_time: list[float]
+    duration: list[float]
 
     # Per-channel delay; reference delays are [0] * samples.
     channel_delays: dict[int, list[int]]
@@ -413,7 +413,7 @@ class MultiCoincidenceResult:
         return [
             count / duration
             for count, duration in zip(
-                self.raw_counts, self.integration_time, strict=True
+                self.raw_counts, self.duration, strict=True
             )
         ]
 
@@ -424,7 +424,7 @@ class MultiCoincidenceResult:
         return [
             count / duration
             for count, duration in zip(
-                self.accidental_counts, self.integration_time, strict=True
+                self.accidental_counts, self.duration, strict=True
             )
         ]
 
@@ -435,7 +435,7 @@ class MultiCoincidenceResult:
             return None
         return [
             count / duration
-            for count, duration in zip(counts, self.integration_time, strict=True)
+            for count, duration in zip(counts, self.duration, strict=True)
         ]
 
     @property
@@ -491,7 +491,7 @@ class MultiCoincidenceResult:
 
 - `channels` 至少含 3 个不重复的整数通道编号；第一项为参考通道。`samples` 是实际完成的正整数采样数，所有逐次列表长度严格等于它；不广播标量、不截断、不静默跳过缺失采样。可选字段整组为 `None` 或提供完整逐次数据。
 - `bin_width` 是唯一的公共标量分辨率，必须为正整数。延迟、窗口与各通道对时间轴在所有重复采样中保持一致；列表保留采样索引以对齐 3.1 节。改变通道、窗口或其它公共配置时另建结果，不把配置扫描当作重复测量求平均。
-- `integration_time[i]` 是有限正数；`counts[ch][i]` 与 `singles[ch][i]` 来自同一次有效采集，不能从浮点计数率反推并取整来伪造原始计数。原始计数及偶然估计非负，扣本底后的净值允许为负。
+- `duration[i]` 是有限正数；`counts[ch][i]` 与 `singles[ch][i]` 来自同一次有效采集，不能从浮点计数率反推并取整来伪造原始计数。原始计数及偶然估计非负，扣本底后的净值允许为负。
 - 窗口为所有信号通道相对参考通道的半开区间 `[window_start[i], window_stop[i])`，上界大于下界。参考通道的 `channel_delays` 恒为零，其它通道延迟可正可负。
 - `histogram` 模式要求非空的 `pairwise_hists` 与 `bin_edges`，二者键集相同；`window_count` 模式允许二者同时为 `None`。提供时，每个键包含组内两个不同的通道，每个方向包含完整的 `samples` 个数组；每个 histogram 长度为对应 edges 长度减 1，边界严格递增且相邻差等于 `bin_width`，计数为 `uint64`，边界为 `int64`。不要求不同通道对共用一个时间轴。
 - 提供直方图时，三通道交叉关联必须保留全部四个原有方向，N 通道星型门控必须保留全部 `(ref, signal)` 方向。可选事件明细还须校验每条延迟元组长度等于 `order`、参考位置为零及参考事件索引有效；未保存明细使用 `None`，保存但某次无事件使用空列表。
@@ -510,7 +510,7 @@ multi = MultiCoincidenceResult(
     singles={0: [1000.0, 1100.0, 900.0],
              2: [2000.0, 2200.0, 1800.0],
              5: [1500.0, 1600.0, 1400.0]},
-    integration_time=[1.0, 1.0, 1.0],
+    duration=[1.0, 1.0, 1.0],
     channel_delays={0: [0, 0, 0], 2: [0, 0, 0], 5: [0, 0, 0]},
     window_start=[0, 0, 0],
     window_stop=[200, 200, 200],
@@ -564,7 +564,7 @@ class HeraldingGateResult:
 
     Every herald opens a gate that records all gated-channel hits.
     Channels need not all hit; channel configuration is shared.
-    All measurement lists have length samples; integration_time is in seconds.
+    All measurement lists have length samples; duration is in seconds.
     Efficiency and CAR analysis belong to separate analysis functions.
     """
 
@@ -582,7 +582,7 @@ class HeraldingGateResult:
     singles_heralding: list[float]
     counts_gated: dict[int, list[int]]
     singles_gated: dict[int, list[float]]
-    integration_time: list[float]
+    duration: list[float]
 
     # Keys are actual gated channel IDs; the gate window is relative to heralding.
     stop_delay: dict[int, list[int]]
@@ -657,7 +657,7 @@ class HeraldingGateResult:
             ch: [
                 count / duration
                 for count, duration in zip(
-                    self.raw_counts[ch], self.integration_time, strict=True
+                    self.raw_counts[ch], self.duration, strict=True
                 )
             ]
             for ch in self.gated_channels
@@ -671,7 +671,7 @@ class HeraldingGateResult:
             ch: [
                 count / duration
                 for count, duration in zip(
-                    self.accidental_counts[ch], self.integration_time, strict=True
+                    self.accidental_counts[ch], self.duration, strict=True
                 )
             ]
             for ch in self.gated_channels
@@ -686,7 +686,7 @@ class HeraldingGateResult:
             ch: [
                 count / duration
                 for count, duration in zip(
-                    counts[ch], self.integration_time, strict=True
+                    counts[ch], self.duration, strict=True
                 )
             ]
             for ch in self.gated_channels
@@ -751,12 +751,12 @@ class HeraldingGateResult:
 - `histogram[ch][i]` 明确对应 `(heralding_channel, ch)`，延迟坐标为 `tau = (t_ch + stop_delay[ch][i]) - t_heralding`。所有 gated 通道共用同一个门区间和每次的 `bin_edges[i]`；`stop_offset[i]` 是时间轴起点，不再施加一次通道延迟。
 - `n_gates[i] == counts_heralding[i]`，每个有效 heralding 触发均打开一个门，包括没有击中的空门。`n_gates` 和 `total_photons` 从必需计数字段派生，不依赖可选明细，避免未保存明细时错误地返回零。
 - `total_photons[i]` 是所有 gated 通道的门内关联数之和。如果门重叠，同一个物理击中可以关联多个 heralding 门并分别计数，因此它不保证等于去重后的光子数，`raw_counts[ch][i]` 也可能大于该通道的 singles 计数。
-- `raw_pair_rate[ch]`、`acc_pair_rate[ch]`、`net_pair_rate[ch]` 分别是 `(heralding_channel, ch)` 的逐次门内关联计数率，使用各次 `integration_time[i]`，单位 counts/s。各通道的 `mean/std` 采用 3.1 节相同规则：算术平均、`ddof=1` 样本标准差；`samples=1` 时整个 `*_std` 属性为 `None`。
+- `raw_pair_rate[ch]`、`acc_pair_rate[ch]`、`net_pair_rate[ch]` 分别是 `(heralding_channel, ch)` 的逐次门内关联计数率，使用各次 `duration[i]`，单位 counts/s。各通道的 `mean/std` 采用 3.1 节相同规则：算术平均、`ddof=1` 样本标准差；`samples=1` 时整个 `*_std` 属性为 `None`。
 - 没有偶然估计时，`net_counts`、`net_pair_rate` 及其均值、标准差均为 `None`；有估计时逐通道扣除，净值允许为负。`accidental_counts_per_bin` 表示每个 gated 通道各自的每 bin 偶然基线。此处记录计数及计数率，不新增效率或 CAR 分析。
 
 #### 可选门内明细与构造校验
 
-- `samples` 为正整数；所有逐次列表，包括通道字典中的列表、histogram 列表及可选明细的外层列表，长度均严格等于 `samples`。`integration_time[i]` 为有限正数。`singles_heralding`、`singles_gated` 来自对应的实际计数和有效时间，不反推取整来伪造原始计数。
+- `samples` 为正整数；所有逐次列表，包括通道字典中的列表、histogram 列表及可选明细的外层列表，长度均严格等于 `samples`。`duration[i]` 为有限正数。`singles_heralding`、`singles_gated` 来自对应的实际计数和有效时间，不反推取整来伪造原始计数。
 - `heralding_channel` 为整数，`gated_channels` 至少包含一个整数通道、不重复且不包含 heralding 通道。所有以 gated 通道为键的字典，提供时必须恰好覆盖 `gated_channels`；不接受组内序号替代实际通道编号。可选字典整组为 `None` 或包含所有通道、所有采样，不静默跳过缺失项。
 - `stop_delay[ch]` 可正可负；同一通道的延迟、窗口和时间轴在所有重复采样中保持一致。每次窗口满足 `window_stop[i] > window_start[i]`，使用半开区间 `[start, stop)`。改变通道或测量配置时另建结果。
 - `histogram` 模式必须提供 `histogram`、`bin_edges`、`n_bins`、`stop_offset`；`window_count` 模式可同时省略四者，提供则须齐全。对每个 gated 通道与采样：histogram 长度等于 `n_bins[i]`，edges 长度为其加 1，首边界等于 `stop_offset[i]`，相邻差等于正整数 `bin_width`；计数数组为 `uint64`、边界为 `int64`。若由直方图积分得到门内计数，门边界必须对齐 bin 边界且在时间轴范围内。
@@ -780,7 +780,7 @@ heralded = HeraldingGateResult(
     counts_gated={2: [2000, 2200, 1800], 5: [1500, 1600, 1400]},
     singles_gated={2: [2000.0, 2200.0, 1800.0],
                    5: [1500.0, 1600.0, 1400.0]},
-    integration_time=[1.0, 1.0, 1.0],
+    duration=[1.0, 1.0, 1.0],
     stop_delay={2: [0, 0, 0], 5: [100, 100, 100]},
     window_start=[0, 0, 0],
     window_stop=[1000, 1000, 1000],
@@ -806,7 +806,7 @@ heralded.gate_hits(0, 0)            # None: details were not saved
 
 - 字段名称使用通用命名：`bin_width`、`window_start`、`window_stop`、`bin_edges`，不在名称中重复单位。
 - `unit` 保留在三个统一模型中，默认值为 ``"ps"``；它描述这些时间字段的单位。
-- 后端读取 ns、ps 或原生 tick 后，先转换为整数 ps，再创建默认结果对象。若调用方显式要求其他输出单位，适配层必须同时转换全部时间字段并更新 `unit`；三个模型都应转换每次采样的时间数据，多通道及门控模型还须覆盖所有通道、通道对及事件/光子明细；`integration_time` 仍以秒为单位，offset 索引数组不随时间单位缩放。
+- 后端读取 ns、ps 或原生 tick 后，先转换为整数 ps，再创建默认结果对象。若调用方显式要求其他输出单位，适配层必须同时转换全部时间字段并更新 `unit`；三个模型都应转换每次采样的时间数据，多通道及门控模型还须覆盖所有通道、通道对及事件/光子明细；`duration` 仍以秒为单位，offset 索引数组不随时间单位缩放。
 - 时间戳、延迟、窗口和 bin 边界使用整数，NumPy 时间数组使用 `int64`；histogram 计数使用 `uint64`；计数率、偶然估算和归一化结果使用浮点数，NumPy 数组使用 `float64`。三个模型的采样维度统一为列表；`MultiCoincidenceResult` 用通道或有向通道对作为字典键，`HeraldingGateResult` 用 gated 通道编号标记各通道数据，字典值保留逐次列表。`bin_width` 等公共配置保持标量，通道配置只保存一次。
 - `bin_width` 表示分析 histogram 的 bin 宽度，不表示设备原生时间分辨率；原生 tick 信息作为采集元数据单独保存。
 - 两个 coincidence 模型的 `window_width`、`window_n_bins`、`net_counts`、计数率及其 `mean/std` 通过 `@property` 派生，不重复存储。`CoincidenceResult.n_bins` 为逐次配置列表；`MultiCoincidenceResult` 的 `channel_ref`、`order`、`n_signals` 以及按通道对返回的 `n_bins`、`stop_offset`、`bin_centers` 由其自身字段派生。

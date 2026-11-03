@@ -882,18 +882,12 @@ def run_device_subcommand(config: str, device_type: str, device_args: list[str],
             else:
                 # No backend given — default to the registered TDC1 backend
                 # (exp_s15_tdc1 or s15_tdc1), which is what discovery returns.
-                try:
-                    from qtools.tdc.backends.s15_tdc1.config import DEFAULT_TDC1_BACKEND
-                    active_backend = DEFAULT_TDC1_BACKEND
-                except Exception:
-                    active_backend = "exp_s15_tdc1"
+                active_backend = "exp_s15_tdc1"
         else:
             print("Auto-scanning TDC...")
             try:
-                from qtools.tdc.connection import discover_all as tdc_discover_all
-                tdc_devices = tdc_discover_all(method="usb", timeout=1.0)
-                if not tdc_devices:
-                    tdc_devices = tdc_discover_all(method="ethernet", timeout=1.0)
+                from qtools import tdc as _tdc_pkg
+                tdc_devices = _tdc_pkg.list_tdc(method="all", timeout=1.0)
                 if tdc_devices:
                     active_path = tdc_devices[0].device_path
                     active_backend = tdc_devices[0].backend_name
@@ -937,8 +931,8 @@ def run_device_subcommand(config: str, device_type: str, device_args: list[str],
         else:
             print("Auto-discovering Powermeter...")
             try:
-                from qtools.powermeter.cli import auto_detect_connected_device
-                active_addr, active_backend = auto_detect_connected_device()
+                from qtools import powermeter as _pm
+                active_addr, active_backend = _pm.auto_detect_connected_device()
                 if active_addr:
                     print(f"Discovered Powermeter: {active_addr} (backend: {active_backend})")
                 else:
@@ -972,56 +966,141 @@ def run_device_subcommand(config: str, device_type: str, device_args: list[str],
 
 
 
+def _known_non_servo_ports(cfg: Any) -> set[str]:
+    """Return serial ports already owned by TDC, powermeter, or motor devices."""
+    ports: set[str] = set()
+    for attr in ("tdc_config", "pm_config"):
+        try:
+            value = getattr(cfg, attr, {}) or {}
+            if value.get("port"):
+                ports.add(str(value["port"]))
+        except Exception:
+            pass
+
+    # TDC discovery is bounded and closes its probe connection. Using the
+    # public API here prevents pctrl list from opening and holding a TDC port.
+    try:
+        from qtools import tdc as tdc_pkg
+        for device in tdc_pkg.list_tdc(method="all", timeout=1.0):
+            if device.device_path:
+                ports.add(str(device.device_path))
+    except Exception:
+        pass
+
+    try:
+        from qtools.motor import list_motors as list_qtools_motors
+        for device in list_qtools_motors():
+            target = str(device.target or "")
+            if target.upper().startswith("COM"):
+                ports.add(target)
+    except Exception:
+        pass
+    return ports
+
 def run_list(config: str, port: str | None = None, baud: int | None = None, full_scan: bool = False, servo_type: str | None = None, mock: bool = False) -> None:
-    """Scan the serial port and list all discovered online servos."""
+    """Scan serial ports and report every responding servo."""
     from qtools.pctrl.config import ConfigManager
     from qtools.pctrl.servo_manager import find_serial_ports
-    
+
     cfg = ConfigManager(config)
     cfg.load()
-    
+
     active_port = port if port else cfg.port
     active_baud = baud if baud else cfg.baudrate
     active_type = servo_type if servo_type else cfg.servo_type
     if mock and not active_port:
         active_port = "MOCK_PORT"
-    
-    if not active_port:
-        print("No serial port specified or configured. Scanning all USB serial ports...")
-        ports = find_serial_ports()
-        if not ports:
-            print("No USB serial ports detected. Check connections.")
-            return
-        for p in ports:
-            print(f"Scanning port {p} at baudrate {active_baud}...")
-            try:
-                backend = ServoBackend(port=p, baudrate=active_baud, servo_type=active_type, mock=mock)
-                found_ids = backend.list_servos(stop_on_empty=not full_scan)
-                backend.close()
-            except Exception:
-                found_ids = []
-                
-            if found_ids:
-                print(f"  Found online servos on port {p}: {found_ids}")
-            else:
-                print(f"  No servos found on port {p}.")
+
+    known_non_servo = _known_non_servo_ports(cfg)
+    if active_port and active_port in known_non_servo:
+        print(
+            f"Refusing to scan {active_port}: it is already identified as a "
+            "TDC, powermeter, or motor port, not a servo adapter."
+        )
+        return
+
+    if active_port:
+        ports = [active_port]
     else:
-        print(f"Scanning port {active_port} at baudrate {active_baud}...")
+        ports = find_serial_ports()
         try:
-            backend = ServoBackend(port=active_port, baudrate=active_baud, servo_type=active_type, mock=mock)
-            found_ids = backend.list_servos(stop_on_empty=not full_scan)
-            backend.close()
+            import serial.tools.list_ports
+            infos = {p.device: p for p in serial.tools.list_ports.comports()}
+            detector_ports = known_non_servo
+            excluded_words = ("APT USB", "TDC")
+
+            def _servo_score(port_name: str) -> int:
+                desc = str(getattr(infos.get(port_name), "description", "") or "")
+                if any(word.lower() in desc.lower() for word in ("ch340", "ch343", "cp210", "ftdi", "usb-serial")):
+                    return 0
+                return 1
+
+            def _is_non_servo(port_name: str) -> bool:
+                info = infos.get(port_name)
+                desc = str(getattr(info, "description", "") or "")
+                hwid = str(getattr(info, "hwid", "") or "")
+                return (
+                    port_name in detector_ports
+                    or "VID:PID=3137:1001" in hwid.upper()
+                    or "VID:PID=0403:FAF0" in hwid.upper()
+                    or any(word.lower() in desc.lower() for word in excluded_words)
+                )
+
+            ports = [port_name for port_name in ports if not _is_non_servo(port_name)]
+            ports.sort(key=_servo_score)
         except Exception:
+            pass
+    if not ports:
+        print("No USB serial ports detected. Check connections.")
+        return
+
+    if active_port:
+        print(f"Scanning configured port {active_port} at {active_baud} baud...")
+    else:
+        print("No serial port configured. Scanning all USB serial ports...")
+
+    found_any: dict[str, list[int]] = {}
+    for candidate in ports:
+        print(
+            f"  [{candidate}] scanning at {active_baud} baud "
+            f"(servo_type={active_type})..."
+        )
+        backend = None
+        try:
+            backend = ServoBackend(
+                port=candidate,
+                baudrate=active_baud,
+                servo_type=active_type,
+                mock=mock,
+            )
+            found_ids = backend.list_servos(stop_on_empty=not full_scan)
+        except Exception as exc:
+            print(f"    ERROR opening/scanning {candidate}: {exc}")
             found_ids = []
-            
+        finally:
+            if backend is not None:
+                try:
+                    backend.close()
+                except Exception:
+                    pass
+
         if found_ids:
-            print(f"Found online servos: {found_ids}")
+            found_any[candidate] = found_ids
+            print(f"    Found online servos: {found_ids}")
         else:
-            print("No online servos found. Check connection, power, and baudrate.")
+            print("    No servos found.")
 
-
-
-
+    if found_any:
+        selected_port = active_port or next(iter(found_any))
+        if selected_port != cfg.port:
+            cfg.port = selected_port
+            cfg.save()
+            print(f"Saved servo port {selected_port} to {cfg.config_path}.")
+    elif not active_port:
+        print(
+            "No servos found on any port. If the adapter is in use by another "
+            "program or notebook kernel, close that connection first."
+        )
 
 def resolve_config_path(config_arg: str) -> str:
     """Resolve config path to a file, scanning directories for any yaml files."""

@@ -22,6 +22,7 @@ class FakeThorlabsKDC101:
         self.velocity = 10.0
         self.identified = False
         self.stopped = False
+        self.wait_move_calls = 0
         self.loaded_settings: str | None = None
         self.motor_params: tuple[float, float, float] | None = None
         self.travel_mode = 2
@@ -85,8 +86,11 @@ class FakeThorlabsKDC101:
         self.position = 0.0
 
     def wait_move(self) -> None:
-        return None
+        self.wait_move_calls += 1
 
+    @property
+    def is_homed(self) -> bool:
+        return True
     def stop(self) -> None:
         self.stopped = True
 
@@ -125,6 +129,7 @@ def test_kdc101_backend_uses_shared_motor_api(fake_low_level, config_mgr):
     low_level = fake_low_level.instances[-1]
     assert low_level.loaded_settings == "PRM1-Z8"
     assert backend.serial == "27000001"
+    assert low_level.velocity == pytest.approx(40.0)
 
     backend.zero_offset = 10.0
     backend.move_to(45.0)
@@ -234,3 +239,18 @@ def test_integer_target_selects_kdc101_by_index(
     )
 
     assert port == "27000002"
+
+def test_kdc101_home_waits_for_completion(fake_low_level, config_mgr):
+    backend = KDC101Backend(
+        port="27000001",
+        blocking=False,
+        config_mgr=config_mgr,
+        stage_settings="PRM1-Z8",
+    )
+    assert backend.connect()
+    low_level = fake_low_level.instances[-1]
+
+    backend.home()
+
+    assert low_level.position == pytest.approx(0.0)
+    assert low_level.wait_move_calls >= 1

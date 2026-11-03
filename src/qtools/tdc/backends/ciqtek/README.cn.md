@@ -37,7 +37,7 @@
 
 | 方法 | 结果类型 | 状态 | 内容 | 厂商 SDK 数据来源 |
 |---|---|---|---|---|
-| `get_singles()` | `SinglesResult` | 支持 | `counts`（17, uint64）、`count_rates`（cps）、`integration_time` | `GetCpsByUser()` → 计数率 `[start, stop1..16]`；counts = `rate × 时长` |
+| `get_singles()` | `SinglesResult` | 支持 | `counts`（17, uint64）、`count_rates`（cps）、`duration` | `GetCpsByUser()` → 计数率 `[start, stop1..16]`；counts = `rate × 时长` |
 | `get_timestamps()` | `TimestampResult` | **不支持** | — | SDK 没有原始时间戳流 |
 | `compute_g2()` | `CoincidenceResult` | **不支持** | — | 软件 g² 需要原始时间戳 |
 
@@ -96,7 +96,7 @@ devices = backend.discover_devices()
 backend.connect()  # 或 backend.connect(devices[0].device_path)
 
 # 单光子计数（计数率）—— 支持：
-singles = backend.get_singles(integration_time=1.0)
+singles = backend.get_singles(duration=1.0)
 
 # 原始时间戳 / 软件 g2 —— 不支持（会抛 NotImplementedError）：
 # ts = backend.get_timestamps(duration=1.0)
@@ -149,6 +149,6 @@ backend.disconnect()
 
 ## 备注
 
-- `get_singles()` 使用 `GetCpsByUser()`（设备上报的每秒计数率）；counts 由 `rate × integration_time` 重构。
+- `get_singles()` 使用 `GetCpsByUser()`（设备上报的每秒计数率）；counts 由 `rate × duration` 重构。
 - `get_timestamps()` / `compute_g2()` 有意不支持：SDK 只返回逐通道直方图——详见上文"Raw Timestamps vs. 直方图"。
 - 厂商 SDK 在加载 DLL 时会向 stdout 打印一些启动信息，并且会缓存单例实例；这是上游 SDK 的行为。

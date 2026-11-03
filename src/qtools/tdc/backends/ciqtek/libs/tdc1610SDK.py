@@ -26,7 +26,6 @@ class Tdc1610():
         global projectPath
         projectPath = os.path.abspath(os.path.dirname(__file__))
         arch = platform.architecture()[0]
-        print("wd:",projectPath,"\r\narch: ",arch)
 
         dll_path = ""
 

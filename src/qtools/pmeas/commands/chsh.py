@@ -6,7 +6,11 @@ import argparse
 import json
 
 from qtools.pmeas.api import MeasController
-from qtools.pmeas.commands.utils import _parse_channel, _resolve_motor_pair
+from qtools.pmeas.commands.utils import (
+    _parse_channel,
+    _register_resolved_motor,
+    _resolve_motor_pair,
+)
 
 
 def cmd_chsh(args: argparse.Namespace) -> None:
@@ -31,19 +35,14 @@ def cmd_chsh(args: argparse.Namespace) -> None:
 
     with MeasController(config_path=args.config) as ctrl:
         stage_a, stage_b, name_a, name_b = _resolve_motor_pair(args, motor_mgr=ctrl.motor_mgr)
-        serial_a = str(getattr(stage_a, "serial", "") or "")
-        serial_b = str(getattr(stage_b, "serial", "") or "")
-        if serial_a:
-            ctrl.cfg.register_device(serial=serial_a, name=name_a, port=stage_a.port, role="hwp", optical_path="alice")
-            ctrl.motor_mgr.register_existing_motor("alice", stage_a)
-        if serial_b:
-            ctrl.cfg.register_device(serial=serial_b, name=name_b, port=stage_b.port, role="hwp", optical_path="bob")
-            ctrl.motor_mgr.register_existing_motor("bob", stage_b)
-        ctrl.cfg.save()
+        name_a = _register_resolved_motor(ctrl.cfg, stage_a, "alice")
+        name_b = _register_resolved_motor(ctrl.cfg, stage_b, "bob")
+        ctrl.motor_mgr.register_existing_motor(name_a, stage_a)
+        ctrl.motor_mgr.register_existing_motor(name_b, stage_b)
 
         if args.optimize:
-            s_a = str(getattr(ctrl.motor_mgr.get_motor("alice"), "serial", "") or "")
-            s_b = str(getattr(ctrl.motor_mgr.get_motor("bob"), "serial", "") or "")
+            s_a = str(getattr(ctrl.motor_mgr.get_motor(name_a), "serial", "") or "")
+            s_b = str(getattr(ctrl.motor_mgr.get_motor(name_b), "serial", "") or "")
             ctrl.optimize_basis(
                 serial_a=s_a,
                 serial_b=s_b,
@@ -56,8 +55,8 @@ def cmd_chsh(args: argparse.Namespace) -> None:
             if args.best:
                 print("[INFO] --best: full basis-angle optimization (not yet implemented)")
         elif args.live:
-            s_a = str(getattr(ctrl.motor_mgr.get_motor("alice"), "serial", "") or "")
-            s_b = str(getattr(ctrl.motor_mgr.get_motor("bob"), "serial", "") or "")
+            s_a = str(getattr(ctrl.motor_mgr.get_motor(name_a), "serial", "") or "")
+            s_b = str(getattr(ctrl.motor_mgr.get_motor(name_b), "serial", "") or "")
             ctrl.live_correction(
                 serial_a=s_a,
                 serial_b=s_b,
@@ -70,6 +69,8 @@ def cmd_chsh(args: argparse.Namespace) -> None:
             )
         else:
             ctrl.scan_coincidence(
+                fix=name_a,
+                sweep=name_b,
                 bases=bases,
                 start_angle=corr_start,
                 end_angle=corr_end,
@@ -81,6 +82,8 @@ def cmd_chsh(args: argparse.Namespace) -> None:
                 save_plot=save_plot,
             )
             ctrl.scan_bell(
+                fix=name_a,
+                sweep=name_b,
                 start_offset=bell_start,
                 end_offset=bell_end,
                 step_offset=bell_step,

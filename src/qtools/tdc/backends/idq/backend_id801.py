@@ -176,12 +176,12 @@ class ID801Backend(TDCBackend):
     def is_connected(self) -> bool:
         return self._connected
 
-    def get_singles(self, integration_time: float) -> SinglesResult:
+    def get_singles(self, duration: float) -> SinglesResult:
         if not self._connected or self._dev is None:
             raise RuntimeError("Device not connected")
 
         # Exposure time in milliseconds (min 1ms, round up)
-        exp_time_ms = max(int(integration_time * 1000.0), 1)
+        exp_time_ms = max(int(duration * 1000.0), 1)
 
         # wait_to_get_coinc_counters_for waits for self-exposure period
         counts_list, labels, updates = self._dev.wait_to_get_coinc_counters_for(
@@ -196,7 +196,7 @@ class ID801Backend(TDCBackend):
         count_rates = counts.astype(np.float64) / actual_duration
 
         return SinglesResult(
-            integration_time=actual_duration,
+            duration=actual_duration,
             channels=np.arange(1, len(counts) + 1, dtype=np.uint8),
             counts=counts,
             count_rates=count_rates,

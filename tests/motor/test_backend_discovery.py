@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from qtools.motor.backends.k10cr1.stage import K10CR1Backend
 from qtools.motor.backends.kdc101.stage import KDC101Backend
 from qtools.motor.backends.motor import list_motors
@@ -61,7 +63,7 @@ def test_list_motors_can_be_restricted_to_multiple_backends(monkeypatch) -> None
 def test_config_wizard_persists_backend_metadata(monkeypatch, tmp_path: Path) -> None:
     answers = iter(["alice", "1550", "basis", "hwp"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
-    manager = MotorConfigManager(tmp_path / "motor_config.yaml")
+    manager = MotorConfigManager(tmp_path / "polmeas_config.yaml")
     manager.load_or_create()
 
     manager.prompt_device_info(
@@ -76,3 +78,27 @@ def test_config_wizard_persists_backend_metadata(monkeypatch, tmp_path: Path) ->
     assert entry["backend"] == "kdc101"
     assert entry["stage_settings"] == "PRM1-Z8"
     assert entry["travel_mode"] == 2
+
+
+def test_config_wizard_keeps_multiple_devices_on_one_optical_path(
+    monkeypatch, tmp_path: Path
+) -> None:
+    answers = iter(
+        [
+            "alice", "547", "basis", "hwp",
+            "alice", "547", "basis", "qwp",
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    manager = MotorConfigManager(tmp_path / "polmeas_config.yaml")
+    manager.load_or_create()
+
+    manager.prompt_device_info("SN-HWP", backend="kdc101")
+    manager.prompt_device_info("SN-QWP", backend="kdc101")
+
+    assert len(manager.get_all_devices()) == 2
+    assert [dev["id"] for dev in manager.get_all_devices()] == [1, 2]
+    with pytest.raises(ValueError, match="matches multiple motors"):
+        manager.get_device("alice")
+    assert manager.get_device("alice:hwp")["serial"] == "SN-HWP"
+    assert manager.get_device("alice:qwp")["serial"] == "SN-QWP"

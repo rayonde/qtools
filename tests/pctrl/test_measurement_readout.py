@@ -71,3 +71,62 @@ def test_raw_timestamps_are_sorted_seconds(records, expected):
     assert result.shape == (len(expected),)
     assert np.allclose(result, expected, rtol=1e-12, atol=0)
     tdc.measure_timestamps.assert_called_once_with(duration=0.5, channels=[1, 2], unit="ps")
+
+def test_tdc_rescan_uses_public_list_tdc(monkeypatch):
+    import qtools.pctrl.meas_manager as meas_manager
+
+    cfg = SimpleNamespace(_cfg={}, set_device_port=MagicMock(), save=MagicMock())
+    cal = SimpleNamespace(_cfg={}, set_device_port=MagicMock(), save=MagicMock())
+    opt = SimpleNamespace(_cfg={}, set_device_port=MagicMock(), save=MagicMock())
+    mgr = object.__new__(MeasManager)
+    mgr.cfg = cfg
+    mgr.cal_cfg = cal
+    mgr.opt_cfg = opt
+
+    device = SimpleNamespace(
+        backend_name="exp_s15_tdc1",
+        device_path="COM17",
+    )
+    list_tdc = MagicMock(return_value=[device])
+    monkeypatch.setattr(meas_manager.tdc, "list_tdc", list_tdc)
+
+    assert mgr._rescan_tdc() == {
+        "backend": "exp_s15_tdc1",
+        "port": "COM17",
+    }
+    list_tdc.assert_called_once_with(method="all", timeout=1.0)
+    assert cfg._cfg["detectors"]["tdc"]["backend"] == "exp_s15_tdc1"
+    cfg.set_device_port.assert_called_once_with("tdc", "COM17")
+    assert cal._cfg["devices"]["tdc"]["backend"] == "exp_s15_tdc1"
+    assert opt._cfg["devices"]["tdc"]["backend"] == "exp_s15_tdc1"
+
+
+def test_discovery_saves_via_public_powermeter_api(monkeypatch):
+    import qtools.pctrl.meas_manager as meas_manager
+
+    cfg = SimpleNamespace(_cfg={}, set_device_port=MagicMock(), save=MagicMock())
+    cal = SimpleNamespace(_cfg={}, set_device_port=MagicMock(), save=MagicMock())
+    opt = SimpleNamespace(_cfg={}, set_device_port=MagicMock(), save=MagicMock())
+    mgr = object.__new__(MeasManager)
+    mgr.cfg = cfg
+    mgr.cal_cfg = cal
+    mgr.opt_cfg = opt
+
+    monkeypatch.setattr(meas_manager.tdc, "list_tdc", lambda **_kwargs: [])
+    detect = MagicMock(return_value=("GPIB0::1::INSTR", "thorlabs"))
+    monkeypatch.setattr(
+        meas_manager.powermeter,
+        "auto_detect_connected_device",
+        detect,
+    )
+
+    mgr.discover_and_save()
+
+    detect.assert_called_once_with()
+    assert cfg._cfg["devices"]["powermeter"] == {
+        "backend": "thorlabs",
+        "port": "GPIB0::1::INSTR",
+    }
+    cfg.set_device_port.assert_called_once_with(
+        "powermeter", "GPIB0::1::INSTR"
+    )

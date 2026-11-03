@@ -55,7 +55,7 @@ _DEFAULT_DEVICE_TEMPLATE: dict = {
         "r_squared": 1.0,
         "cal_file": "",
     },
-    "bases": {"H": 0.0, "V": 45.0, "D": 22.5, "A": 67.5},
+    "bases": {"H": 0.0, "V": 0.0, "D": 0.0, "A": 0.0, "R": 0.0, "L": 0.0},
 }
 
 
@@ -86,6 +86,9 @@ _DEFAULT_CONFIG: dict = {
     "updated_at": "",
 
     # ── Registered motor devices (list of entries with integer id) ──
+    # Devices are populated by the configuration wizard from discovered
+    # hardware. Empty defaults prevent phantom alice/bob entries from being
+    # merged with real motors that share the same optical path.
     "devices": [
         _create_device_entry(1, name="alice", optical_path="alice"),
         _create_device_entry(2, name="bob", optical_path="bob"),
@@ -318,6 +321,8 @@ class ConfigManager:
     def load_or_create(self) -> bool:
         """Load existing config, or create a fresh default one."""
         if self.load():
+            self.normalize_device_ids()
+            self.normalize_device_bases()
             return True
         self._cfg = copy.deepcopy(_DEFAULT_CONFIG)
         return False
@@ -329,8 +334,11 @@ class ConfigManager:
         if not self._cfg.get("created_at"):
             self._cfg["created_at"] = now
 
-        # Ensure devices is normalized
+        # Ensure devices are normalized and use stable numeric ids.
         _ = self.devices
+        self.normalize_device_ids()
+        self.normalize_device_bases()
+        self.devices.sort(key=lambda dev: int(dev["id"]))
 
         out = {k: v for k, v in self._cfg.items() if v not in ({}, [], "", None)}
         # Always keep structural keys even when empty
@@ -360,14 +368,92 @@ class ConfigManager:
             self._cfg["devices"] = devs
         return devs
 
-    def upsert_device(self, key: str | int = "", path: str = "", **kwargs) -> dict:
-        """Create or update a device by id / name / serial / optical_path / port.
+    def normalize_device_bases(self) -> None:
+        """Ensure standard bases exist, using zero only for missing values."""
+        def normalized(current: dict) -> dict[str, float]:
+            result: dict[str, float] = {}
+            for label in ("H", "V", "D", "A", "R", "L"):
+                value = current.get(label)
+                result[label] = 0.0 if value is None else float(value)
+            return result
 
-        Matching priority (first match wins):
-          1. *key*     — id, name, serial, port, or optical_path
-          2. *serial*  — from kwargs
-          3. *port*    — from kwargs
-          4. *optical_path* — from kwargs (or *path*)
+        for dev in self.devices:
+            current = dev.get("bases")
+            if not isinstance(current, dict):
+                current = {}
+            dev["bases"] = normalized(current)
+
+        for entry in self.calibration_results.values():
+            if not isinstance(entry, dict):
+                continue
+            current = entry.get("bases")
+            if not isinstance(current, dict):
+                continue
+            entry["bases"] = normalized(current)
+
+    def normalize_device_ids(self) -> None:
+        """Ensure every device id is a stable, unique integer.
+
+        Older polmeas configurations use ids ``1, 2, ...``. String ids from an
+        intermediate schema are migrated without changing device names,
+        serials, or calibration records.
+        """
+        devices = self.devices
+        used: set[int] = set()
+        for dev in devices:
+            try:
+                value = int(dev.get("id"))
+            except (TypeError, ValueError):
+                continue
+            if value not in used:
+                dev["id"] = value
+                used.add(value)
+
+        next_id = 1
+        kept: set[int] = set()
+        for dev in devices:
+            value = dev.get("id")
+            if isinstance(value, int) and value in used and value not in kept:
+                kept.add(value)
+                continue
+            while next_id in used:
+                next_id += 1
+            dev["id"] = next_id
+            used.add(next_id)
+            next_id += 1
+
+    def _next_device_id(self) -> int:
+        used = {
+            int(dev["id"])
+            for dev in self.devices
+            if str(dev.get("id", "")).isdigit()
+        }
+        candidate = 1
+        while candidate in used:
+            candidate += 1
+        return candidate
+
+    def claim_unconfigured_device(self, **fields) -> Optional[dict]:
+        """Bind a default placeholder slot to discovered hardware when possible."""
+        target_path = str(fields.get("optical_path") or "").strip().lower()
+        for dev in self.devices:
+            if dev.get("serial") or dev.get("port"):
+                continue
+            if str(dev.get("optical_path", "")).lower() != target_path:
+                continue
+            for key, value in fields.items():
+                if key != "id" and value is not None and value != "":
+                    dev[key] = value
+            return dev
+        return None
+
+    def upsert_device(self, key: str | int = "", path: str = "", **kwargs) -> dict:
+        """Create or update a device by its unique hardware identifiers.
+
+        Devices are matched by explicit key, serial, or port. Optical paths are
+        group labels and are never used to merge distinct stages. New devices
+        receive the next unused numeric sequence id for compatibility with the
+        original polmeas configuration schema.
         """
         devices = self.devices
         dev = self.get_device(key) if key != "" else None
@@ -376,11 +462,15 @@ class ConfigManager:
             dev = self.get_device(kwargs["serial"])
         if dev is None and kwargs.get("port"):
             dev = self.get_device(kwargs["port"])
-        if dev is None and path:
-            dev = self.get_device(path)
         if dev is None and kwargs.get("optical_path"):
-            dev = self.get_device(kwargs["optical_path"])
-
+            dev = self.claim_unconfigured_device(**kwargs)
+            if dev is not None:
+                return dev
+        # ``path`` / ``optical_path`` are group labels, not unique hardware
+        # identifiers. Never use them to select an existing device here:
+        # one optical path can legitimately contain an HWP, a QWP, and
+        # compensation stages. Creation/update must be keyed by serial,
+        # port, name, or an explicit unique key.
         if path:
             kwargs["optical_path"] = path
 
@@ -393,13 +483,10 @@ class ConfigManager:
                     dev[k] = v
             return dev
 
-        raw_id = kwargs.get("id")
-        try:
-            dev_id = int(raw_id) if raw_id is not None else len(devices) + 1
-        except (ValueError, TypeError):
-            dev_id = len(devices) + 1
-
-        new_dev = _create_device_entry(dev_id, **kwargs)
+        # polmeas configs store sequence ids as integers. Never persist a
+        # group/serial string in this field.
+        kwargs.pop("id", None)
+        new_dev = _create_device_entry(self._next_device_id(), **kwargs)
         devices.append(new_dev)
         return new_dev
 
@@ -409,7 +496,7 @@ class ConfigManager:
         return self.upsert_device(key=sn, serial=sn, **kwargs)
 
     def get_device(self, key: str | int) -> Optional[dict]:
-        """Find a unique device by id (int), name, serial, or port (fallback to optical_path).
+        """Find a unique device by id, name, serial, port, or optical path selector.
 
         Matching priority (best match first):
           1. serial  — exact match (strongest signal)
@@ -439,32 +526,78 @@ class ConfigManager:
             if str(dev.get("name", "")).lower() == k_str:
                 return dev
 
-        # 4. Integer id
+        # 4. Numeric id is authoritative; 1-based list index is only a
+        # backward-compatible fallback when no device has that id.
         if str(key).isdigit() or isinstance(key, int):
             idx = int(key)
             for dev in devices:
-                if dev.get("id") == idx:
+                if str(dev.get("id", "")) == str(idx):
                     return dev
+            if 1 <= idx <= len(devices):
+                return devices[idx - 1]
+        # 6. Convenience selector for one side with multiple stages:
+        #    ``alice:hwp``, ``alice/qwp``, or ``alice:compensation``.
+        for separator in (":", "/"):
+            if separator not in k_str:
+                continue
+            optical_path, qualifier = (
+                part.strip() for part in k_str.split(separator, 1)
+            )
+            matches = [
+                dev
+                for dev in devices
+                if str(dev.get("optical_path", "")).lower() == optical_path
+                and qualifier
+                in {
+                    str(dev.get("waveplate", "")).lower(),
+                    str(dev.get("role", "")).lower(),
+                }
+            ]
+            if len(matches) == 1:
+                return matches[0]
+            if len(matches) > 1:
+                names = ", ".join(
+                    str(dev.get("name") or dev.get("id")) for dev in matches
+                )
+                raise ValueError(
+                    f"Target '{key}' matches multiple devices on '{optical_path}': "
+                    f"{names}. Use a full device name or serial number."
+                )
+            return None
 
-        # 5. Fallback — id as string
-        for dev in devices:
-            if str(dev.get("id", "")).lower() == k_str:
-                return dev
-
-        # 6. Fallback — optical_path (return first only if unique)
+        # 7. optical_path is a group label. Return it only when unique;
+        #    otherwise fail loudly instead of silently controlling the first
+        #    HWP/QWP/compensation stage on that side.
         path_matches = [
-            dev for dev in devices
+            dev
+            for dev in devices
             if str(dev.get("optical_path", "")).lower() == k_str
         ]
         if len(path_matches) == 1:
             return path_matches[0]
-        if path_matches:
-            # Prefer one with a real port/serial over a bare entry
-            for dev in path_matches:
-                if dev.get("port") or dev.get("serial"):
-                    return dev
-            return path_matches[0]
+        if len(path_matches) > 1:
+            choices = ", ".join(
+                f"{dev.get('name') or dev.get('id')} (id={dev.get('id')})"
+                for dev in path_matches
+            )
+            raise ValueError(
+                f"Target '{key}' is ambiguous: multiple devices use optical path "
+                f"'{key}'. Choose one of: {choices}. You can also use "
+                f"'{key}:hwp', '{key}:qwp', a full name, or a serial number."
+            )
 
+        # 8. Fallback: id as a string
+        for dev in devices:
+            if str(dev.get("id", "")).lower() == k_str:
+                return dev
+        return None
+
+    def get_device_by_id(self, device_id: str | int) -> Optional[dict]:
+        """Return a device by its exact configured id, bypassing group selectors."""
+        target = str(device_id)
+        for dev in self.devices:
+            if str(dev.get("id", "")) == target:
+                return dev
         return None
 
     def get_devices_by_group(self, group: str) -> list[dict]:
@@ -518,6 +651,7 @@ class ConfigManager:
             if "phi_rad" in entry and "retardance" not in cal_update:
                 cal_update["retardance"] = float(np.degrees(entry["phi_rad"]))
             dev.setdefault("calibration", {}).update(cal_update)
+        self.normalize_device_bases()
 
     def get_calibration(self, device_key: str = "latest") -> Optional[dict]:
         cals = self.calibration_results
@@ -562,10 +696,10 @@ class ConfigManager:
         # 2. Scan TDC
         tdc_info = {"backend": "", "port": ""}
         try:
-            from qtools.tdc.connection import discover_all as tdc_discover_all
-            tdc_devs = tdc_discover_all(method="usb", timeout=1.0)
+            from qtools.tdc import list_tdc
+            tdc_devs = list_tdc(method="usb", timeout=1.0)
             if not tdc_devs:
-                tdc_devs = tdc_discover_all(method="ethernet", timeout=1.0)
+                tdc_devs = list_tdc(method="ethernet", timeout=1.0)
             if tdc_devs:
                 dev = tdc_devs[0]
                 tdc_info = {
@@ -608,8 +742,8 @@ class ConfigManager:
                 bases = dev.get("bases", {})
                 bases_s = "  ".join(f"{b}={a:.4f}" for b, a in bases.items()) if bases else ""
                 parts = [p for p in [
-                    dev.get("optical_path", "?"),
-                    dev.get("name", "?"),
+                    f"id={dev.get('id', '?')}",
+                    f"name={dev.get('name', '?')}",
                     f"role={dev.get('role','?')}",
                     f"wp={dev.get('waveplate','?')}",
                     f"wl={dev.get('wavelength','?')}nm",

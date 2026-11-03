@@ -43,7 +43,7 @@ _SM_DISPATCH = {
 }
 
 
-_BASIS_LABELS = {"H", "V", "D", "A"}
+_BASIS_LABELS = {"H", "V", "D", "A", "R", "L"}
 
 
 def _is_basis_label(value: str | None) -> bool:
@@ -63,7 +63,7 @@ def _resolve_move_basis_angle(target: str | None, angle: str) -> str:
 
 
 def _resolve_move_basis_args(args: argparse.Namespace) -> None:
-    """Translate H/V/D/A move angles before delegating to qtools.motor."""
+    """Translate configured basis labels before delegating to qtools.motor."""
     if getattr(args, "command", None) != "move":
         return
 
@@ -78,10 +78,26 @@ def _resolve_move_basis_args(args: argparse.Namespace) -> None:
         args.target = target
 
 
+def _resolve_motor_backend_args(args: argparse.Namespace) -> None:
+    """Select the configured backend for a pmeas motor target."""
+    target = getattr(args, "target", None) or getattr(args, "device", None)
+    if target is None:
+        return
+    from qtools.pmeas.config import ConfigManager
+
+    try:
+        cfg = ConfigManager.resolve(os.environ.get("MOTOR_CONFIG"))
+        dev = cfg.get_device(target)
+    except Exception:
+        dev = None
+    if dev and dev.get("backend"):
+        args.backend = str(dev["backend"])
+
 def _motor_main(argv: list[str]) -> None:
     """Delegate to qtools.motor CLI using its build_parser / cmd_* functions."""
     args = _sm_parse_args(argv)
     _resolve_move_basis_args(args)
+    _resolve_motor_backend_args(args)
     handler = _SM_DISPATCH.get(args.command)
     if handler is None:
         raise SystemExit(f"unknown qtools.motor command: {args.command}")
@@ -126,8 +142,8 @@ def _add_common_scan_args(
 ) -> None:
     _add_scan_args(p)
     _add_device_pair_args(p, suppress=True)
-    p.add_argument("--fix", default="alice", help="Device to fix (default: alice)")
-    p.add_argument("--sweep", default="bob", help="Device to sweep (default: bob)")
+    p.add_argument("--fix", default="alice", help="Device to fix; use a unique name or side:waveplate when one side has multiple motors (default: alice)")
+    p.add_argument("--sweep", default="bob", help="Device to sweep; use a unique name or side:waveplate when one side has multiple motors (default: bob)")
     p.add_argument("--fix-label", default=None, help="Display label for fixed device")
     p.add_argument("--sweep-label", default=None, help="Display label for swept device")
     p.add_argument("--channel", type=_parse_channel, default=None, help="Detector channel(s), e.g. 1 or 1,2")
@@ -160,7 +176,7 @@ def _add_chsh_args(p: argparse.ArgumentParser) -> None:
 def _add_calibrate_args(p: argparse.ArgumentParser, include_device: bool = True) -> None:
     if include_device:
         p.add_argument("device", nargs="?", default=None,
-                       help="Device identifier: id, name, optical_path, port")
+                       help="Device id, name, serial, port, optical_path, or side:waveplate selector")
     p.add_argument("--basis", "-b", default=None,
                    help="Measurement analyzer basis: H, V, D, A or angle in degrees (default: H)")
     p.add_argument("--input", "-i", default="H",
@@ -186,6 +202,191 @@ def _add_calibrate_args(p: argparse.ArgumentParser, include_device: bool = True)
                    help="Lock power unit for all scan points (default: auto-select from first measurement)")
 
 
+def _print_motor_status_body(config_path: str) -> None:
+    """Show every configured motor, its basis map, and live angle."""
+    from qtools.pmeas.config import ConfigManager
+    from qtools.pmeas.motor_manager import MotorManager
+
+    cfg = ConfigManager.resolve(config_path)
+    manager = MotorManager(cfg)
+    devices = manager.list_motors()
+
+    print("\n" + "=" * 78)
+    print("Polarization Measurement — Motor Status")
+    print("=" * 78)
+    print(f"Experiment: {cfg.get('exp') or '(unnamed)'}")
+    print(f"Config:     {cfg.config_path}")
+    red = "\033[31m" if sys.stdout.isatty() else ""
+    blue = "\033[34m" if sys.stdout.isatty() else ""
+    reset = "\033[0m" if sys.stdout.isatty() else ""
+
+    for title, key in (("Connected", "connected"), ("Not Connected", "not_connected")):
+        items = devices.get(key, [])
+        print(f"\n[{title} Motors]")
+        if not items:
+            print("  (none)")
+            continue
+        for item in items:
+            motor = item.get("motor")
+            angle = None
+            was_connected = bool(getattr(motor, "is_connected", False)) if motor else False
+            if key == "connected" and motor is not None:
+                try:
+                    if not was_connected:
+                        connected = motor.connect()
+                        if connected is False:
+                            raise ConnectionError("connect() returned False")
+                    angle = float(motor.get_position())
+                except Exception as exc:
+                    angle = None
+                    print(f"  [!] Could not read angle for [{item.get('id')}]: {exc}")
+                finally:
+                    if not was_connected:
+                        try:
+                            motor.disconnect()
+                        except Exception:
+                            pass
+
+            dev = cfg.get_device_by_id(item.get("id")) or {}
+            bases = dev.get("bases") or {}
+            bases_text = " ".join(
+                f"{label}={float(bases[label]):.4f}"
+                for label in ("H", "V", "D", "A", "R", "L")
+                if label in bases
+            )
+            angle_text = f"{angle:.4f}°" if angle is not None else "N/A"
+            print(f"\n  [{item.get('id')}] {red}{item.get('name') or '(unnamed)'}{reset}")
+            print(
+                f"      optical_path={item.get('optical_path') or '?'}  "
+                f"role={item.get('role') or '?'}  "
+                f"waveplate={dev.get('waveplate') or '?'}  "
+                f"wavelength={dev.get('wavelength') or '?'} nm"
+            )
+            print(
+                f"      backend={item.get('backend') or '?'}  "
+                f"port={item.get('port') or 'N/A'}  "
+                f"serial={item.get('serial') or 'N/A'}"
+            )
+            print(f"      bases: {blue}{bases_text or '(none)'}{reset}")
+            print(f"      current angle: {angle_text}")
+
+    detectors = cfg.get("detectors", {}) or {}
+    tdc = detectors.get("tdc", {}) or {}
+    pm = detectors.get("powermeter", {}) or {}
+    print("\n[Detectors]")
+    print(
+        f"  TDC:        {tdc.get('backend') or '(none)'} @ "
+        f"{tdc.get('port') or '(none)'}"
+    )
+    print(
+        f"  Powermeter: {pm.get('backend') or '(none)'} @ "
+        f"{pm.get('port') or '(none)'}"
+    )
+    print("=" * 78 + "\n")
+
+def _home_all_motors(config_path: str) -> None:
+    """Home every connected motor and wait for each to finish."""
+    from qtools.pmeas.config import ConfigManager
+    from qtools.pmeas.motor_manager import MotorManager
+
+    previous_disable = logging.root.manager.disable
+    logging.disable(logging.INFO)
+    failures: list[tuple[object, str]] = []
+    try:
+        cfg = ConfigManager.resolve(config_path)
+        manager = MotorManager(cfg)
+        motor_status = manager.list_motors()
+        connected = motor_status.get("connected", [])
+        not_connected = motor_status.get("not_connected", [])
+
+        print("\n" + "=" * 78)
+        print("Polarization Measurement — Home All Motors")
+        print("=" * 78)
+        if not connected:
+            print("No connected motors to home.")
+            return
+
+        for item in connected:
+            motor = item.get("motor")
+            label = f"[{item.get('id')}] {item.get('name') or '(unnamed)'}"
+            if motor is None:
+                failures.append((item.get("id"), "motor handle unavailable"))
+                print(f"  {label}: unavailable")
+                continue
+
+            was_connected = bool(getattr(motor, "is_connected", False))
+            try:
+                if not was_connected:
+                    connected_ok = motor.connect()
+                    if connected_ok is False:
+                        raise ConnectionError("connect() returned False")
+                print(f"  {label}: homing...", end="", flush=True)
+                motor.home()
+                angle = float(motor.get_position())
+                print(f" done ({angle:.4f}°)")
+            except Exception as exc:
+                failures.append((item.get("id"), str(exc)))
+                print(f" failed: {exc}")
+            finally:
+                if not was_connected:
+                    try:
+                        motor.disconnect()
+                    except Exception:
+                        pass
+
+        if not_connected:
+            print(f"  Skipped {len(not_connected)} not-connected motor(s).")
+        print("=" * 78 + "\n")
+    finally:
+        logging.disable(previous_disable)
+
+    if failures:
+        details = "; ".join(f"ID {dev_id}: {error}" for dev_id, error in failures)
+        raise SystemExit(f"Failed to home {len(failures)} motor(s): {details}")
+
+def _print_motor_status(config_path: str) -> None:
+    """Print full motor status without connection INFO chatter."""
+    previous_disable = logging.root.manager.disable
+    logging.disable(logging.INFO)
+    try:
+        _print_motor_status_body(config_path)
+    finally:
+        logging.disable(previous_disable)
+
+def _strip_config_options(argv: list[str]) -> list[str]:
+    """Remove pmeas global config options before delegating to motor CLI."""
+    result: list[str] = []
+    skip_next = False
+    for token in argv:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in {"-c", "--config"}:
+            skip_next = True
+            continue
+        if token.startswith("--config="):
+            continue
+        result.append(token)
+    return result
+
+def _command_index(argv: list[str]) -> int | None:
+    """Return the index of the first non-option command token."""
+    value_options = {"-c", "--config"}
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token in value_options:
+            index += 2
+            continue
+        if token.startswith("--config="):
+            index += 1
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        return index
+    return None
+
 def main(argv: list[str] | None = None) -> None:
     # Ensure UTF-8 output on Windows (GBK terminals can't render box-drawing chars)
     sys.stdout.reconfigure(encoding="utf-8", errors="replace") if hasattr(sys.stdout, "reconfigure") else None
@@ -201,18 +402,34 @@ def main(argv: list[str] | None = None) -> None:
                 config_path = raw_argv[idx + 1]
                 break
     os.environ.setdefault("MOTOR_CONFIG", config_path)
+    command_index = _command_index(raw_argv)
+    command = raw_argv[command_index] if command_index is not None else None
+    command_args = (
+        raw_argv[command_index + 1 :] if command_index is not None else []
+    )
+    motor_argv = _strip_config_options(command_args) if command == "motor" else []
 
 
     # ── Delegate 'motor', 'list', 'status' directly to qtools.motor CLI ──
-    if raw_argv and raw_argv[0] == "motor":
+
+    if command == "motor" and motor_argv and motor_argv[0] in {"status", "list"}:
+        _print_motor_status(config_path)
+        return
+
+    if command == "motor" and motor_argv and motor_argv[0] == "home":
+        home_args = _sm_parse_args(motor_argv)
+        if getattr(home_args, "device", None) is None:
+            _home_all_motors(config_path)
+            return
+    if command == "motor":
         try:
-            _motor_main(raw_argv[1:])
+            _motor_main(motor_argv)
         except KeyboardInterrupt:
             logger.info("Operation interrupted by user (Ctrl+C). Cleaning up...")
             sys.exit(130)
         return
 
-    if raw_argv and raw_argv[0] == "list":
+    if command == "list":
         try:
             from qtools.pmeas.config import ConfigManager
             from qtools.pmeas.motor_manager import MotorManager
@@ -224,48 +441,31 @@ def main(argv: list[str] | None = None) -> None:
             print("\n" + "=" * 60)
             print("Scanning for connected motor devices...")
             print("=" * 60)
-
-            connected = dev_dict["connected"]
-            print("\n [Connected Devices]")
-            if not connected:
-                print("  No connected motor devices found.")
-            else:
-                for item in connected:
-                    port = item["port"] or "N/A"
-                    sn = item["serial"] or "N/A"
-                    name = item["name"] or "(unconfigured)"
-                    path = item["optical_path"] or "N/A"
-                    dev_id = item["id"]
-                    print(f"  [{dev_id}] Port:  {port}  |  SN: {sn}  |  Name: {name}  |  Optical Path: {path}")
-
-            not_connected = dev_dict["not_connected"]
-            print("\n [Not Connected Devices]")
-            if not not_connected:
-                print("  No unconnected motor devices found.")
-            else:
-                for item in not_connected:
-                    port = item["port"] or "N/A"
-                    sn = item["serial"] or "N/A"
-                    name = item["name"] or "(unconfigured)"
-                    path = item["optical_path"] or "N/A"
-                    dev_id = item["id"]
-                    print(f"  [{dev_id}] Port:  {port}  |  SN: {sn}  |  Name: {name}  |  Optical Path: {path}")
-
+            for title, key in (
+                ("Connected Devices", "connected"),
+                ("Not Connected Devices", "not_connected"),
+            ):
+                items = dev_dict[key]
+                print(f"\n [{title}]")
+                if not items:
+                    print("  (none)")
+                    continue
+                for item in items:
+                    print(
+                        f"  [{item['id']}] Port: {item['port'] or 'N/A'}  |  "
+                        f"SN: {item['serial'] or 'N/A'}  |  "
+                        f"Name: {item['name'] or '(unconfigured)'}  |  "
+                        f"Optical Path: {item['optical_path'] or 'N/A'}"
+                    )
             print("=" * 60 + "\n")
             return
         except KeyboardInterrupt:
             logger.info("Operation interrupted by user (Ctrl+C). Cleaning up...")
             sys.exit(130)
 
-    if raw_argv and raw_argv[0] == "status":
-        try:
-            _motor_main(raw_argv)
-        except KeyboardInterrupt:
-            logger.info("Operation interrupted by user (Ctrl+C). Cleaning up...")
-            sys.exit(130)
+    if command == "status":
+        _print_motor_status(config_path)
         return
-
-    # ── Shared base parser for common options (-c / --config) ──
     base_parser = argparse.ArgumentParser(add_help=False)
     base_parser.add_argument(
         "-c", "--config",
@@ -330,7 +530,7 @@ def main(argv: list[str] | None = None) -> None:
     _add_common_scan_args(ps, is_coincidence=False)
 
     pc = scan_sub.add_parser("pairs", parents=[base_parser], help="Coincidence correlation scan: fix one arm, sweep the other")
-    pc.add_argument("--basis", default=None, help="Target basis label(s) or numeric angle to fix the --fix device at (e.g. H, V, D, A, or 22.5) [default: all bases (H,V,D,A)]")
+    pc.add_argument("--basis", default=None, help="Target basis label(s) or numeric angle to fix the --fix device at (e.g. H, V, D, A, R, L, or 22.5) [default: configured bases]")
     _add_common_scan_args(pc, is_coincidence=True, export_default=True)
 
     pch = scan_sub.add_parser("chsh", parents=[base_parser], help="CHSH Bell S(beta) scan")

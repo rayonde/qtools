@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
-from qtools.motor.cli import cmd_config as sm_cmd_config
 from qtools.pmeas.config import ConfigManager
 
 
@@ -19,9 +18,10 @@ def cmd_config(args: argparse.Namespace) -> None:
     cfg = ConfigManager.resolve(config_path)
 
     if args.sub is None:
-        cfg.load_or_create()
-        sm_cmd_config(args)
-        cfg.load()
+        # The default action belongs to pmeas, not the generic motor wizard:
+        # it must prompt for experiment metadata, scan both detectors, and
+        # configure every motor that can share an optical path.
+        _do_config_init(cfg, args)
         cfg.summary()
         return
 
@@ -104,13 +104,13 @@ def _auto_scan_powermeter() -> dict:
 
 def _auto_scan_tdc() -> dict:
     try:
-        from qtools.tdc.connection import discover_all as tdc_discover_all
-        tdc_devices = tdc_discover_all(method="usb", timeout=1.0)
+        from qtools.tdc import list_tdc
+        tdc_devices = list_tdc(method="usb", timeout=1.0)
         if tdc_devices:
             dev = tdc_devices[0]
             print(f"    {dev.device_path}  —  {dev.backend_name}")
             return {"backend": dev.backend_name or "", "port": dev.device_path or ""}
-        tdc_net = tdc_discover_all(method="ethernet", timeout=1.0)
+        tdc_net = list_tdc(method="ethernet", timeout=1.0)
         if tdc_net:
             dev = tdc_net[0]
             print(f"    {dev.device_path}  —  {dev.backend_name}  (network)")
@@ -135,12 +135,7 @@ def _do_config_init(cfg: ConfigManager, args: argparse.Namespace) -> None:
     cfg._cfg["author"] = _prompt("Author", cfg._cfg.get("author", ""))
 
     print("\n── Detectors ──")
-    existing = dict(cfg._cfg.get("detectors", {}))
-
-    use_tdc = _prompt_yn("  Use TDC?", bool(existing.get("tdc", {}).get("port")))
-    use_pm  = _prompt_yn("  Use Powermeter?", bool(existing.get("powermeter", {}).get("port")))
-
-    # 抑制 fpfind / numpy 的 extended-precision float 警告
+    # Suppress fpfind / numpy extended-precision warnings.
     import warnings
     warnings.filterwarnings(
         "ignore",
@@ -148,21 +143,32 @@ def _do_config_init(cfg: ConfigManager, args: argparse.Namespace) -> None:
         category=UserWarning,
     )
 
-    detectors = cfg._cfg.setdefault("detectors", {})
-
     print("  Scanning for connected detectors...")
-    if use_pm:
-        detectors["powermeter"] = _auto_scan_powermeter()
-    else:
-        print("  Powermeter:  skipped (disabled)")
-        detectors["powermeter"] = {"backend": "", "port": ""}
+    scanned_tdc = _auto_scan_tdc()
+    scanned_pm = _auto_scan_powermeter()
+    existing_pm = dict((cfg._cfg.get("detectors", {}) or {}).get("powermeter", {}))
+    existing_tdc = dict((cfg._cfg.get("detectors", {}) or {}).get("tdc", {}))
 
+    use_tdc = _prompt_yn(
+        "  Use TDC?",
+        bool(scanned_tdc.get("port") or existing_tdc.get("port")),
+    )
+    use_pm = _prompt_yn(
+        "  Use Powermeter?",
+        bool(scanned_pm.get("port") or existing_pm.get("port")),
+    )
+
+    detectors = cfg._cfg.setdefault("detectors", {})
     if use_tdc:
-        detectors["tdc"] = _auto_scan_tdc()
+        detectors["tdc"] = scanned_tdc if scanned_tdc.get("port") else existing_tdc
     else:
         print("  TDC:  skipped (disabled)")
         detectors["tdc"] = {"backend": "", "port": ""}
-
+    if use_pm:
+        detectors["powermeter"] = scanned_pm if scanned_pm.get("port") else existing_pm
+    else:
+        print("  Powermeter:  skipped (disabled)")
+        detectors["powermeter"] = {"backend": "", "port": ""}
     print("\n--- Scan for motors ---")
     try:
         from qtools.motor.backends.kdc101.stage import (
@@ -206,26 +212,40 @@ def _do_config_init(cfg: ConfigManager, args: argparse.Namespace) -> None:
                                  str(existing.get("wavelength", 1550))))
                 zero_off = float(existing.get("zero_offset", "0.0") or "0.0")
 
-                name = f"{optical_path}_{wl}_{role}_{wp}"
+                base_name = f"{optical_path}_{wl}_{role}_{wp}"
+                name = base_name
+                if any(
+                    str(dev.get("serial") or "") != str(sn)
+                    and str(dev.get("name") or "") == base_name
+                    for dev in cfg.devices
+                ):
+                    name = f"{base_name}_{sn}"
+
                 backend_fields: dict[str, object] = {}
                 if device.backend == "kdc101":
                     backend_fields.update(
                         stage_settings=DEFAULT_KDC101_STAGE_SETTINGS,
                         travel_mode=DEFAULT_KDC101_TRAVEL_MODE,
                     )
-                cfg.upsert_device(
-                    key=sn,
-                    id=optical_path,
-                    path=optical_path,
-                    name=name,
-                    port=device.target,
-                    serial=sn,
-                    backend=device.backend,
-                    role=role,
-                    waveplate=wp,
-                    wavelength=wl,
-                    zero_offset=zero_off,
+                device_fields = {
+                    "optical_path": optical_path,
+                    "name": name,
+                    "port": device.target,
+                    "serial": sn,
+                    "backend": device.backend,
+                    "role": role,
+                    "waveplate": wp,
+                    "wavelength": wl,
+                    "zero_offset": zero_off,
                     **backend_fields,
+                }
+                configured = cfg.claim_unconfigured_device(**device_fields)
+                if configured is None:
+                    configured = cfg.upsert_device(key=sn, **device_fields)
+                print(
+                    f"    Configured: id={configured.get('id')}  "
+                    f"name={configured.get('name')}  "
+                    f"path={configured.get('optical_path')}"
                 )
 
     except ImportError:

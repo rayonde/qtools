@@ -42,7 +42,7 @@ def test_python_gate_fallback_terminates_after_cartesian_product(monkeypatch) ->
         ch_signals=[1, 2],
         bins=5,
         resolution_ps=1.0,
-        integration_time=1.0,
+        duration=1.0,
         store_events=True,
     )
 

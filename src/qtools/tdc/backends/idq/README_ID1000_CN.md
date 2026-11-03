@@ -82,7 +82,7 @@ ID1000 内部硬件可在 FPGA 级配置符合窗口，直接输出各通道单�
 **Python 实现核心逻辑 (`utils/acquisitions/coincidences.py`)**：
 ```python
 # 1. 配置符合窗口与积分时间
-def configure_coincidences(tc, coincidence_window_ps: int, integration_time_ns: int = 1000):
+def configure_coincidences(tc, coincidence_window_ps: int, duration_ns: int = 1000):
     # 加载符合计数硬件模版
     zmq_exec(tc, "DEVI:CONFI:LOAD COUNT")
     
@@ -97,7 +97,7 @@ def configure_coincidences(tc, coincidence_window_ps: int, integration_time_ns: 
     # 3重符合: TSCO13(1/2/3), TSCO14(1/2/4), TSCO15(1/3/4), TSCO16(2/3/4)
     # 4重符合: TSCO24(1/2/3/4)
     # 设置计数器模式 (CYCL: 循环周期模式；ACCU: 累积模式)
-    zmq_exec(tc, f"INPU1:COUN:MODE CYCL;INTE {integration_time_ns};RESEt")
+    zmq_exec(tc, f"INPU1:COUN:MODE CYCL;INTE {duration_ns};RESEt")
 
 # 2. 一次性批量读取所有计数器
 def read_counters(tc):

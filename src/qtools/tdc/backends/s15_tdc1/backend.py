@@ -123,22 +123,22 @@ class S15TDC1Backend(TDCBackend):
     def is_connected(self) -> bool:
         return self._connected
 
-    def get_singles(self, integration_time: float) -> SinglesResult:
+    def get_singles(self, duration: float) -> SinglesResult:
         if not self._connected or self._dev is None:
             raise RuntimeError("Device not connected")
 
         # TDC1 get_counts returns a list/tuple of counts for 4 channels
-        counts_list = self._dev.get_counts(integration_time)
+        counts_list = self._dev.get_counts(duration)
         self._dev._com.reset_input_buffer()
         self._dev._com.reset_output_buffer()
         
         counts = np.array(counts_list, dtype=np.uint64)
         
         # Calculate count rates
-        count_rates = counts.astype(np.float64) / integration_time
+        count_rates = counts.astype(np.float64) / duration
 
         return SinglesResult(
-            integration_time=integration_time,
+            duration=duration,
             channels=np.arange(1, CHANNEL_COUNT + 1, dtype=np.uint8),
             counts=counts,
             count_rates=count_rates,
@@ -231,7 +231,7 @@ class S15TDC1Backend(TDCBackend):
             counts_start=[int(counts[ch_start - 1])], counts_stop=[int(counts[ch_stop - 1])],
             singles_start=[float(counts[ch_start - 1] / duration)],
             singles_stop=[float(counts[ch_stop - 1] / duration)],
-            integration_time=[duration], stop_delay=[0], raw_counts=[int(values[pair_index])],
+            duration=[duration], stop_delay=[0], raw_counts=[int(values[pair_index])],
         )
 
     def set_threshold(self, threshold: float, channel: int | None = None) -> None:

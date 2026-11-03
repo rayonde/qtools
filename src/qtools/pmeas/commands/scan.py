@@ -8,7 +8,12 @@ import logging
 import numpy as np
 
 from qtools.pmeas.api import MeasController
-from qtools.pmeas.commands.utils import _parse_channel, _resolve_motor_pair, _resolve_motor
+from qtools.pmeas.commands.utils import (
+    _parse_channel,
+    _register_resolved_motor,
+    _resolve_motor_pair,
+    _resolve_motor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +42,13 @@ def cmd_scan(args: argparse.Namespace) -> None:
             )
             return
 
-        stage_a, stage_b, name_a, name_b = _resolve_motor_pair(args, motor_mgr=ctrl.motor_mgr)
-        serial_a = str(getattr(stage_a, "serial", "") or "")
-        serial_b = str(getattr(stage_b, "serial", "") or "")
-
-        if serial_a:
-            ctrl.cfg.register_device(serial=serial_a, name=name_a, port=getattr(stage_a, 'port', ''), role="hwp", optical_path=name_a)
-            ctrl.motor_mgr.register_existing_motor(name_a, stage_a)
-        if serial_b:
-            ctrl.cfg.register_device(serial=serial_b, name=name_b, port=getattr(stage_b, 'port', ''), role="hwp", optical_path=name_b)
-            ctrl.motor_mgr.register_existing_motor(name_b, stage_b)
-        ctrl.cfg.save()
+        stage_a, stage_b, name_a, name_b = _resolve_motor_pair(
+            args, motor_mgr=ctrl.motor_mgr
+        )
+        name_a = _register_resolved_motor(ctrl.cfg, stage_a, "alice")
+        name_b = _register_resolved_motor(ctrl.cfg, stage_b, "bob")
+        ctrl.motor_mgr.register_existing_motor(name_a, stage_a)
+        ctrl.motor_mgr.register_existing_motor(name_b, stage_b)
 
         if args.scan_action in ("pairs", "coincidence"):
             export = (
@@ -56,8 +57,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
                 else getattr(args, "export", "default") or "default"
             )
             ctrl.scan_coincidence(
-                fix=getattr(args, "fix", "alice"),
-                sweep=getattr(args, "sweep", "bob"),
+                fix=name_a,
+                sweep=name_b,
                 fix_label=getattr(args, "fix_label", None),
                 sweep_label=getattr(args, "sweep_label", None),
                 fix_angles=getattr(args, "basis", None),
@@ -73,8 +74,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
             )
         elif args.scan_action == "chsh":
             ctrl.scan_bell(
-                fix=getattr(args, "fix", "alice"),
-                sweep=getattr(args, "sweep", "bob"),
+                fix=name_a,
+                sweep=name_b,
                 start_offset=args.start, end_offset=args.end, step_offset=args.step,
                 duration=duration, repetitions=samples,
                 subtract_accidentals=subtract_accidentals,

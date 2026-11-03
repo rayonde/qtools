@@ -15,11 +15,11 @@ class _FakeTDC:
     def __exit__(self, exc_type, exc_val, exc_tb):
         return False
 
-    def measure_singles(self, duration, num=1):
-        self.singles_calls.append((duration, num))
+    def measure_singles(self, duration, samples=1):
+        self.singles_calls.append((duration, samples))
         return [
             (duration, np.asarray(self.counts, dtype=float))
-            for _ in range(num)
+            for _ in range(samples)
         ]
 
 

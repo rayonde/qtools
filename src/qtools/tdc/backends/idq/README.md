@@ -56,7 +56,7 @@ src/qtools/tdc/backends/idq/
 - **动态握手与模式配置**：自动执行 SCPI `*IDN?` 识别设备版本，自动下发 `DEVIce:RESolution HIRES` 开启 1 ps 模式，并查询 `DEVI:RES:BWID?` 校准时间分辨率。
 
 ### 2.3 单道计数采集 (`get_singles`)
-- 按照传入的 `integration_time`（秒），为全部 4 个输入通道与 Start 通道配置周期计数模式 `COUN:MODE CYCL;INTE <ns>`。
+- 按照传入的 `duration`（秒），为全部 4 个输入通道与 Start 通道配置周期计数模式 `COUN:MODE CYCL;INTE <ns>`。
 - 批量下发 SCPI 计数查询 `INPU1:COUN?;:INPU2:COUN?;...;STARt:COUN?`，返回标准的 `SinglesResult`（包含计数值与每秒计数率）。
 
 ### 2.4 硬件加速符合计数 (`get_coincidence`)
@@ -164,7 +164,7 @@ tdc.backend.set_threshold(-0.2, channel=1)
 tdc.backend.set_threshold(-0.2, channel=2)
 
 # 3. 测量单道计数 (0.5 秒积分)
-singles = tdc.get_singles(integration_time=0.5)
+singles = tdc.get_singles(duration=0.5)
 print(f"通道 1 计数率: {singles.count_rates[0]:.1f} cps")
 print(f"通道 2 计数率: {singles.count_rates[1]:.1f} cps")
 

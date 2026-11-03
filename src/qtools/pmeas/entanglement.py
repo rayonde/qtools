@@ -132,6 +132,11 @@ def _get_basis_angle(cfg: ConfigManager | None, target: str | int | None, basis:
         return (theta_0 + 45.0) % 180.0
     elif b == "A":
         return (theta_0 + 67.5) % 180.0
+    elif b == "R":
+        angle = theta_0 - 45.0
+        return angle if angle < 0.0 else angle % 180.0
+    elif b == "L":
+        return (theta_0 + 45.0) % 180.0
     raise ValueError(f"Unknown basis label or angle: {basis}")
     
 # ═══════════════════════════════════════════════════════════════════════════

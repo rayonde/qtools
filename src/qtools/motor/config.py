@@ -111,7 +111,11 @@ def _normalize_device(info: dict[str, Any], serial: str = "") -> dict[str, Any]:
             or sn
             or "device"
         )
-    entry["id"] = str(entry["id"])
+    raw_id = entry["id"]
+    try:
+        entry["id"] = int(raw_id)
+    except (TypeError, ValueError):
+        entry["id"] = str(raw_id)
 
     entry.setdefault("name", entry["id"])
     entry.setdefault("optical_path", "")
@@ -274,20 +278,74 @@ class MotorConfigManager:
     # ── Device access ──────────────────────────────────────────────
 
     def get_device(self, key: str | int) -> dict[str, Any] | None:
-        """Find a device by id, name, optical_path, serial, or 1-based index."""
+        """Find a unique device by id, name, optical_path, serial, or index.
+
+        Group selectors such as ``alice:hwp`` and ``alice/qwp`` are accepted
+        when one optical path contains multiple stages. An ambiguous selector
+        raises instead of silently returning the first matching motor.
+        """
         devices = self.get_all_devices()
         k = str(key).strip()
+        k_lower = k.lower()
 
-        # 1-based index
+        # Numeric config id takes precedence; a 1-based list index remains a
+        # legacy fallback only when no device has that id.
         if k.isdigit():
             idx = int(k)
+            for dev in devices:
+                if str(dev.get("id", "")) == str(idx):
+                    return dev
             if 1 <= idx <= len(devices):
                 return devices[idx - 1]
 
-        for dev in devices:
-            if _match_device(dev, k):
-                return dev
-        return None
+        # Optical-path + waveplate/role selector
+        for separator in (":", "/"):
+            if separator not in k_lower:
+                continue
+            optical_path, qualifier = (
+                part.strip() for part in k_lower.split(separator, 1)
+            )
+            matches = [
+                dev
+                for dev in devices
+                if str(dev.get("optical_path", "")).lower() == optical_path
+                and qualifier
+                in {
+                    str(dev.get("waveplate", "")).lower(),
+                    str(dev.get("role", "")).lower(),
+                }
+            ]
+            return self._unique_match(matches, key)
+
+        matches = [dev for dev in devices if _match_device(dev, k)]
+        return self._unique_match(matches, key)
+
+    @staticmethod
+    def _unique_match(matches: list[dict[str, Any]], key: Any) -> dict[str, Any] | None:
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return matches[0]
+        choices = ", ".join(
+            f"{dev.get('name') or dev.get('id')} (id={dev.get('id')})"
+            for dev in matches
+        )
+        raise ValueError(
+            f"Target '{key}' matches multiple motors: {choices}. "
+            "Use a full name, serial number, or a selector such as "
+            "'alice:hwp' / 'alice:qwp'."
+        )
+
+    def _next_device_id(self) -> int:
+        used = {
+            int(dev["id"])
+            for dev in self._cfg.get("devices", [])
+            if str(dev.get("id", "")).isdigit()
+        }
+        candidate = 1
+        while candidate in used:
+            candidate += 1
+        return candidate
 
     def upsert_device(self, key: str | int = "", **fields: Any) -> dict[str, Any]:
         """Create or update a device entry.
@@ -320,7 +378,10 @@ class MotorConfigManager:
             return _normalize_device(existing, existing.get("serial", sn))
 
         entry = _normalize_device(fields, sn)
-        if k and not fields.get("id"):
+        if self.config_path.name.startswith("polmeas_config"):
+            # Embedded polmeas configs use sequence ids 1, 2, 3, ... .
+            entry["id"] = self._next_device_id()
+        elif k and not fields.get("id"):
             # use key as id when it doesn't look like a bare serial-only create
             if not k.isdigit() or not sn:
                 entry["id"] = k
@@ -349,7 +410,7 @@ class MotorConfigManager:
     ) -> dict[str, Any]:
         """Return the device entry for *serial_no*, prompting the user if new.
 
-        Name convention: ``<optical_path><wavelength>_<role>_<waveplate>``
+        Name convention: ``<optical_path>_<wavelength>_<role>_<waveplate>``
         e.g. ``alice1550_basis_hwp``.  ``id`` defaults to *optical_path*.
         Backend metadata is updated even when the device is already known.
         """
@@ -400,12 +461,12 @@ class MotorConfigManager:
                     break
                 print("   Must be 'hwp' or 'qwp'.")
 
-            name = f"{optical_path}{wavelength}_{role}_{waveplate}"
+            name = f"{optical_path}_{wavelength}_{role}_{waveplate}"
             print(f"\n[OK] Generated name: {name}")
 
             entry = self.upsert_device(
-                key=optical_path,
-                id=optical_path,
+                key=serial_str,
+                id=serial_str,
                 name=name,
                 optical_path=optical_path,
                 wavelength=wavelength,

@@ -45,11 +45,11 @@ class DeviceInfo:
     backend_name: str
     device_path: str
     serial_number: Optional[str] = None
-    description: Optional[str] = None
+    description: Optional[str] = field(default=None, repr=False)
     transport: str = "unknown"
-    host: Optional[str] = None
-    port: Optional[int] = None
-    protocol: Optional[str] = None
+    host: Optional[str] = field(default=None, repr=False)
+    port: Optional[int] = field(default=None, repr=False)
+    protocol: Optional[str] = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Infer Ethernet metadata from a network URI when needed.
@@ -114,25 +114,25 @@ class SinglesResult:
     Returned by ``TDCBackend.get_singles()``.
 
     Attributes:
-        integration_time: Integration time in seconds.
+        duration: Integration time in seconds.
         channel_indices: Indices of the channels for which counts are provided.
         counts:           Raw counts per channel, shape ``(n_channels,)``.
         count_rates:      Count rates per channel in counts/s, shape ``(n_channels,)``.
     """
 
-    integration_time: float
+    duration: float
     channels: NDArray[np.uint8]
     counts: NDArray[np.uint64]
     count_rates: NDArray[np.float64]
 
     def __iter__(self):
-        """Legacy tuple view: ``(integration_time, counts)``."""
-        yield self.integration_time
+        """Legacy tuple view: ``(duration, counts)``."""
+        yield self.duration
         yield self.counts
 
     def __getitem__(self, item):
         if item == 0:
-            return self.integration_time
+            return self.duration
         if item == 1:
             return self.counts
         if item == 2:
@@ -154,7 +154,7 @@ class SinglesResult:
     def __repr__(self) -> str:
         rates = ", ".join(f"{r:.1f}" for r in self.count_rates)
         return (
-            f"SinglesResult(t={self.integration_time:.3f}s, "
+            f"SinglesResult(t={self.duration:.3f}s, "
             f"counts={self.counts.tolist()}, rates=[{rates}] cps)"
         )
 
@@ -254,7 +254,7 @@ class CoincidenceResult:
 
     Channels and settings are fixed across samples. Measurement lists have
     length samples, including a single acquisition. Physical times use unit
-    (integer ps by default); integration_time is always seconds.
+    (integer ps by default); duration is always seconds.
     """
 
     mode: Literal["histogram", "window_count"]
@@ -268,7 +268,7 @@ class CoincidenceResult:
     counts_stop: Optional[list[int]]
     singles_start: list[float]
     singles_stop: list[float]
-    integration_time: list[float]
+    duration: list[float]
     stop_delay: list[int]
     n_bins: Optional[list[int]] = None
     stop_offset: Optional[list[int]] = None
@@ -301,6 +301,25 @@ class CoincidenceResult:
         return [(width + self.bin_width - 1) // self.bin_width for width in widths]
 
     @property
+    def peak_bin(self) -> Optional[list[int]]:
+        """Absolute bin index of each sample's histogram peak.
+
+        The returned index is ``bin_offset + argmax(histogram)``, where
+        ``bin_offset`` is the first bin edge in bin units. Returns ``None``
+        when histogram data is unavailable or a sample contains no counts.
+        """
+        if self.histogram is None or self.stop_offset is None:
+            return None
+        peaks = []
+        for histogram, offset in zip(
+            self.histogram, self.stop_offset, strict=True
+        ):
+            if histogram.size == 0 or not np.any(histogram):
+                return None
+            peaks.append(int(offset // self.bin_width + np.argmax(histogram)))
+        return peaks
+
+    @property
     def normalized(self) -> Optional[list[NDArray[np.float64]]]:
         if self.mode != "histogram" or self.histogram is None or self.bin_edges is None:
             return None
@@ -313,7 +332,7 @@ class CoincidenceResult:
             self.bin_edges,
             self.singles_start,
             self.singles_stop,
-            self.integration_time,
+            self.duration,
             strict=True,
         ):
             bin_width_s = np.diff(edges) * unit_to_s[self.unit]
@@ -346,7 +365,7 @@ class CoincidenceResult:
         return [
             count / duration
             for count, duration in zip(
-                self.raw_counts, self.integration_time, strict=True
+                self.raw_counts, self.duration, strict=True
             )
         ]
 
@@ -357,7 +376,7 @@ class CoincidenceResult:
         return [
             count / duration
             for count, duration in zip(
-                self.accidental_counts, self.integration_time, strict=True
+                self.accidental_counts, self.duration, strict=True
             )
         ]
 
@@ -380,7 +399,7 @@ class CoincidenceResult:
             return None
         return [
             count / duration
-            for count, duration in zip(counts, self.integration_time, strict=True)
+            for count, duration in zip(counts, self.duration, strict=True)
         ]
 
     @property
@@ -414,7 +433,7 @@ class MultiCoincidenceResult:
 
     The first channel is the reference. Dictionary keys are actual channel IDs
     or directed (start, stop) pairs. Lists retain acquisition order. Physical
-    times use unit (integer ps by default); integration_time is seconds.
+    times use unit (integer ps by default); duration is seconds.
     """
 
     channels: tuple[int, ...]
@@ -428,7 +447,7 @@ class MultiCoincidenceResult:
     deduplicate: bool = False
     counts: dict[int, list[int]]
     singles: dict[int, list[float]]
-    integration_time: list[float]
+    duration: list[float]
     channel_delays: dict[int, list[int]]
     window_start: list[int]
     window_stop: list[int]
@@ -502,7 +521,7 @@ class MultiCoincidenceResult:
         return [
             count / duration
             for count, duration in zip(
-                self.raw_counts, self.integration_time, strict=True
+                self.raw_counts, self.duration, strict=True
             )
         ]
 
@@ -513,7 +532,7 @@ class MultiCoincidenceResult:
         return [
             count / duration
             for count, duration in zip(
-                self.accidental_counts, self.integration_time, strict=True
+                self.accidental_counts, self.duration, strict=True
             )
         ]
 
@@ -524,7 +543,7 @@ class MultiCoincidenceResult:
             return None
         return [
             count / duration
-            for count, duration in zip(counts, self.integration_time, strict=True)
+            for count, duration in zip(counts, self.duration, strict=True)
         ]
 
     @property
@@ -563,7 +582,7 @@ class HeraldingGateResult:
 
     Every herald opens a gate, including empty gates. Dictionary keys identify
     actual gated channels and lists retain acquisition order. Physical times
-    use unit (integer ps by default); integration_time is seconds. Details may
+    use unit (integer ps by default); duration is seconds. Details may
     be omitted or retained in one of the flat or per_gate representations.
     """
 
@@ -578,7 +597,7 @@ class HeraldingGateResult:
     singles_heralding: list[float]
     counts_gated: dict[int, list[int]]
     singles_gated: dict[int, list[float]]
-    integration_time: list[float]
+    duration: list[float]
     stop_delay: dict[int, list[int]]
     window_start: list[int]
     window_stop: list[int]
@@ -645,7 +664,7 @@ class HeraldingGateResult:
             ch: [
                 count / duration
                 for count, duration in zip(
-                    self.raw_counts[ch], self.integration_time, strict=True
+                    self.raw_counts[ch], self.duration, strict=True
                 )
             ]
             for ch in self.gated_channels
@@ -659,7 +678,7 @@ class HeraldingGateResult:
             ch: [
                 count / duration
                 for count, duration in zip(
-                    self.accidental_counts[ch], self.integration_time, strict=True
+                    self.accidental_counts[ch], self.duration, strict=True
                 )
             ]
             for ch in self.gated_channels
@@ -674,7 +693,7 @@ class HeraldingGateResult:
             ch: [
                 count / duration
                 for count, duration in zip(
-                    counts[ch], self.integration_time, strict=True
+                    counts[ch], self.duration, strict=True
                 )
             ]
             for ch in self.gated_channels
@@ -979,7 +998,7 @@ def _common(result):
                 _series(series, f"{item.name}[{key}]", result.samples)
         else:
             _series(value, item.name, result.samples)
-    _numbers(result.integration_time, "integration_time", positive=True)
+    _numbers(result.duration, "duration", positive=True)
 
 
 def _singles(counts, rates, duration, name, *, allow_unknown=False):
@@ -1068,7 +1087,7 @@ def _validate_coincidence(result):
         _singles(
             getattr(result, "counts_" + role),
             getattr(result, "singles_" + role),
-            result.integration_time,
+            result.duration,
             role,
             allow_unknown=result.method == "hardware",
         )
@@ -1110,7 +1129,7 @@ def _validate_multi(result):
         _singles(
             result.counts[ch],
             result.singles[ch],
-            result.integration_time,
+            result.duration,
             f"channel {ch}",
         )
         _numbers(result.channel_delays[ch], "channel_delays", integer=True)
@@ -1179,7 +1198,7 @@ def _validate_heralding(result):
     _singles(
         result.counts_heralding,
         result.singles_heralding,
-        result.integration_time,
+        result.duration,
         "heralding",
     )
     required = ("counts_gated", "singles_gated", "stop_delay", "raw_counts")
@@ -1207,7 +1226,7 @@ def _validate_heralding(result):
         _singles(
             result.counts_gated[ch],
             result.singles_gated[ch],
-            result.integration_time,
+            result.duration,
             f"channel {ch}",
         )
         _numbers(result.stop_delay[ch], "stop_delay", integer=True)

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import replace
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -28,6 +27,7 @@ from qtools.tdc.data import (
     SinglesResult,
     TimestampResult,
     combine_samples,
+    time_to_ps,
     validate_bin_width,
 )
 
@@ -157,7 +157,7 @@ class TDC:
         for attempt in range(_MAX_SINGLES_RETRIES):
             try:
                 res = self.backend.get_singles(duration)
-                inttime = res.integration_time
+                inttime = res.duration
 
                 # Integration time validation check (0.75 to 2.0)
                 if not (0.75 < inttime / duration < 2.0):
@@ -187,15 +187,15 @@ class TDC:
     def measure_singles(
         self,
         duration: float,
-        num: int = 1,
+        samples: int = 1,
     ) -> List[Tuple[float, np.ndarray]]:
         """Perform singles raw-count measurement(s) with robustness retries.
 
         Args:
             duration: Integration time in seconds.
-            num: Number of measurements to take.
+            samples: Number of measurements to take.
 
-        Returns a list of ``(integration_time, counts)`` tuples for
+        Returns a list of ``(duration, counts)`` tuples for
         compatibility with the singles CLI.  The backend acquisition itself
         uses the unified :class:`SinglesResult` model.
 
@@ -203,33 +203,33 @@ class TDC:
             RuntimeError: If all retries are exhausted for a measurement.
         """
         results = []
-        for _ in range(num):
+        for _ in range(self._sample_count(samples)):
             res = self._acquire_singles(duration)
-            results.append((res.integration_time, res.counts))
+            results.append((res.duration, res.counts))
 
         return results
 
     def measure_rates(
         self,
         duration: float,
-        num: int = 1,
+        samples: int = 1,
     ) -> List[Tuple[float, np.ndarray]]:
         """Perform singles count-rate measurement(s) with robustness retries.
 
         Args:
             duration: Integration time in seconds.
-            num: Number of measurements to take.
+            samples: Number of measurements to take.
 
-        Returns a list of ``(integration_time, count_rates)`` tuples for
+        Returns a list of ``(duration, count_rates)`` tuples for
         compatibility with the singles CLI.
 
         Raises:
             RuntimeError: If all retries are exhausted for a measurement.
         """
         results = []
-        for _ in range(num):
+        for _ in range(self._sample_count(samples)):
             res = self._acquire_singles(duration)
-            results.append((res.integration_time, res.count_rates))
+            results.append((res.duration, res.count_rates))
 
         return results
 
@@ -336,7 +336,7 @@ class TDC:
         Returns:
             A dictionary with keys ``pair_counts``, ``acc_pair_counts``,
             ``raw_pair_rate``, ``net_pair_rate``, ``acc_pair_rate``,
-            ``integration_time``, ``start_rate``, ``stop_rate``, ``eff_start``,
+            ``duration``, ``start_rate``, ``stop_rate``, ``eff_start``,
             ``eff_stop``, ``eff_avg``, ``coinc_start``, ``coinc_stop``,
             ``bin_edges``, and ``histogram``.
         """
@@ -385,19 +385,19 @@ class TDC:
 
         hist = g2res.histogram[0]
         bin_edges = g2res.bin_edges[0] // g2res.bin_width
-        integration_time = g2res.integration_time[0]
+        reported_duration = g2res.duration[0]
         if (
-            integration_time is None
-            or not np.isfinite(integration_time)
-            or integration_time <= 0
+            reported_duration is None
+            or not np.isfinite(reported_duration)
+            or reported_duration <= 0
         ):
             logger.warning(
-                "TDC returned invalid integration_time %r; "
+                "TDC returned invalid duration %r; "
                 "falling back to requested duration %.3f s",
-                integration_time,
+                reported_duration,
                 duration,
             )
-            integration_time = duration
+            reported_duration = duration
         singles_start = g2res.singles_start[0]
         singles_stop = g2res.singles_stop[0]
 
@@ -406,7 +406,7 @@ class TDC:
             bin_edges=bin_edges,
             singles_start=singles_start,
             singles_stop=singles_stop,
-            integration_time=integration_time,
+            duration=reported_duration,
             coinc_start=window_start,
             coinc_stop=window_stop,
         )
@@ -465,41 +465,30 @@ class TDC:
         samples: int = 1,
         bin_width: int | None = None,
     ) -> CoincidenceResult:
-        """Measure repeated window counts, fixing an automatic window after the first sample."""
-        width = self._bin_width(bin_width)
-        from qtools.tdc.analysis.efficiency import compute_coincidence
+        """Measure repeated window counts with window-local histograms.
 
+        For software coincidence measurements, ``bin_offset`` and ``bins``
+        are derived from the requested window. The first automatic sample
+        searches a broad histogram for the peak, then subsequent samples reuse
+        the selected window.
+        """
+        width = self._bin_width(bin_width)
         results = []
         automatic = window_start is None and method == "software"
+        delay_ps = time_to_ps(ch_stop_delay, unit)
         for _ in range(self._sample_count(samples)):
             if automatic and results:
                 first = results[0]
-                hist = self.backend.get_g2(
+                result = self.backend.get_coincidence(
                     duration=duration,
-                    bins=first.n_bins[0],
                     ch_start=ch_start,
                     ch_stop=ch_stop,
-                    ch_stop_delay=ch_stop_delay,
-                    unit=unit,
-                    bin_width=first.bin_width,
-                    method=method,
-                    bin_offset=first.stop_offset[0] // first.bin_width,
-                )
-                raw, per_bin, accidental = compute_coincidence(
-                    histogram=hist.histogram[0],
-                    bin_edges=hist.bin_edges[0],
+                    ch_stop_delay=delay_ps,
+                    unit="ps",
                     window_start=first.window_start[0],
                     window_stop=first.window_stop[0],
-                )
-                result = replace(
-                    hist,
-                    mode="window_count",
-                    window_start=first.window_start.copy(),
-                    window_stop=first.window_stop.copy(),
-                    raw_counts=[raw],
-                    accidental_counts_per_bin=[per_bin],
-                    accidental_counts=[accidental],
-                    accidental_method=["sideband"],
+                    method=method,
+                    bin_width=first.bin_width,
                 )
             else:
                 result = self.backend.get_coincidence(
@@ -544,7 +533,7 @@ class TDC:
                     bins=bins,
                     resolution_ps=ts.resolution_ps if width is None else width,
                     bin_offset=bin_offset,
-                    integration_time=ts.duration_s,
+                    duration=ts.duration_s,
                     deduplicate=deduplicate,
                     store_events=store_events,
                 )
@@ -577,7 +566,7 @@ class TDC:
                     bins=bins,
                     resolution_ps=ts.resolution_ps if width is None else width,
                     bin_offset=bin_offset,
-                    integration_time=ts.duration_s,
+                    duration=ts.duration_s,
                     deduplicate=deduplicate,
                     store_events=store_events,
                 )
@@ -615,7 +604,7 @@ class TDC:
                     bins=bins,
                     resolution_ps=ts.resolution_ps if width is None else width,
                     bin_offset=bin_offset,
-                    integration_time=ts.duration_s,
+                    duration=ts.duration_s,
                     stop_delay=stop_delay,
                     store_events=store_events,
                     detail_format=detail_format,

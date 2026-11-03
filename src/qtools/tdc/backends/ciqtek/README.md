@@ -46,7 +46,7 @@ native units. Delays are in **picoseconds (ps)** (`-200000..200000`).
 
 | Method | Result type | Status | Content | Vendor SDK source |
 |---|---|---|---|---|
-| `get_singles()` | `SinglesResult` | supported | `counts` (17, uint64), `count_rates` (cps), `integration_time` | `GetCpsByUser()` → rates `[start, stop1..16]`; counts = `rate × duration` |
+| `get_singles()` | `SinglesResult` | supported | `counts` (17, uint64), `count_rates` (cps), `duration` | `GetCpsByUser()` → rates `[start, stop1..16]`; counts = `rate × duration` |
 | `get_timestamps()` | `TimestampResult` | **unsupported** | — | SDK has no raw timestamp stream |
 | `compute_g2()` | `CoincidenceResult` | **unsupported** | — | software g² needs raw timestamps |
 
@@ -133,7 +133,7 @@ devices = backend.discover_devices()
 backend.connect()  # or backend.connect(devices[0].device_path)
 
 # Singles (count rates) — supported:
-singles = backend.get_singles(integration_time=1.0)
+singles = backend.get_singles(duration=1.0)
 
 # Raw timestamps / software g2 — NOT supported (raise NotImplementedError):
 # ts = backend.get_timestamps(duration=1.0)
@@ -198,7 +198,7 @@ trigger mode / clock configuration, and the low-level error callback.
 ## Notes
 
 - `get_singles()` uses `GetCpsByUser()` (counts/s reported by the device);
-  counts are reconstructed as `rate × integration_time`.
+  counts are reconstructed as `rate × duration`.
 - `get_timestamps()` / `compute_g2()` are intentionally unsupported: the SDK
   only returns per-channel histograms — see "Raw Timestamps vs. Histogram"
   above.

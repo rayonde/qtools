@@ -7,7 +7,9 @@ from qtools.pmeas.config import ConfigManager
 def test_move_basis_uses_configured_angle(tmp_path, monkeypatch) -> None:
     config_path = tmp_path / "polmeas_config.yaml"
     cfg = ConfigManager(config_path)
-    device = cfg.get_device("1")
+    device = cfg.upsert_device(
+        key=1, id=1, name="alice", optical_path="alice"
+    )
     assert device is not None
     device["bases"] = {"H": 1.5, "V": 46.5, "D": 24.0, "A": 69.0}
     cfg.save()

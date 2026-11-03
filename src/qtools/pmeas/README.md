@@ -55,6 +55,46 @@ pmeas chsh --live
 Measurement commands require configured, connected hardware. Unit tests use
 fake devices and do not require laboratory instruments.
 
+## Configuration and multi-stage control
+
+`pmeas config` runs the full polarization-measurement wizard. It prompts for the
+experiment name and author, scans TDC and power-meter connections, then configures
+every discovered motor independently. Multiple stages may share one optical path
+(for example an Alice HWP and Alice QWP); each physical serial number receives a
+unique id and a distinct name.
+
+```bash
+pmeas config                 # Configure experiment, detectors, and motors
+pmeas config show            # Show ids, names, optical paths, and detectors
+pmeas list                   # Show connected/offline configured motors
+pmeas status                 # Show every motor with bases and live angle
+pmeas motor status           # Same full multi-motor status view
+```
+
+When an optical path contains multiple stages, use a qualified selector such as
+`alice:hwp`, `alice:qwp`, or the full configured name:
+
+```bash
+pmeas motor move to alice:hwp 22.5
+pmeas motor move to alice:qwp 45
+pmeas motor move to alice_547_basis_qwp 45 --backend k10cr1
+pmeas motor move 2 to 30     # numeric target is the config id, backend is selected automatically
+pmeas motor home            # Home every connected motor
+pmeas motor home 2          # Home only config id 2
+
+KDC101 and K10CR1 stage defaults use 40 deg/s; `--speed` overrides it per command.
+```
+
+Bare group names such as `alice` are rejected when more than one device uses that
+path, preventing accidental control of the first matching stage.
+Device basis maps always contain `H`, `V`, `D`, `A`, `R`, and `L`.
+New configurations initialize all six basis angles to `0`. Afterwards, basis
+angles are read from `polmeas_config.yaml` and are never recomputed from
+`theta_0` or the waveplate type during config loading or saving. A missing basis
+key is initialized to `0`; explicitly configured values are preserved.
+
+This models the QWP-then-HWP basis structure while allowing each stage to be
+calibrated independently.
 ## Python API
 
 `TaskController` manages configuration, motor connections, and measurement tasks.

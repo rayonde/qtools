@@ -365,21 +365,21 @@ class TDC1610Backend(TDCBackend):
 
     # -- data acquisition ---------------------------------------------------
 
-    def get_singles(self, integration_time: float) -> SinglesResult:
+    def get_singles(self, duration: float) -> SinglesResult:
         """Acquire singles count rates.
 
         The TDC1610 reports count rates directly (``GetCpsByUser``), so the
-        returned counts are reconstructed as ``rate * integration_time``.
+        returned counts are reconstructed as ``rate * duration``.
         """
         self._ensure_connected()
-        if integration_time <= 0:
-            raise ValueError(f"integration_time must be positive, got {integration_time}")
+        if duration <= 0:
+            raise ValueError(f"duration must be positive, got {duration}")
 
         if not self._collecting:
             self.start_collect()
         try:
             t0 = time.perf_counter()
-            time.sleep(integration_time)
+            time.sleep(duration)
             ret, is_new, cps_list = self._dev.GetCpsByUser()
             self._check(ret, "GetCpsByUser")
             actual_duration = time.perf_counter() - t0
@@ -395,7 +395,7 @@ class TDC1610Backend(TDCBackend):
 
         counts = (rates * actual_duration).astype(np.uint64)
         return SinglesResult(
-            integration_time=actual_duration,
+            duration=actual_duration,
             channels=np.arange(1, len(counts) + 1, dtype=np.uint8),
             counts=counts,
             count_rates=rates,
@@ -541,7 +541,7 @@ class TDC1610Backend(TDCBackend):
             channel_start=ch_start, channel_stop=ch_stop,
             counts_start=None, counts_stop=None,
             singles_start=[float(values[1])], singles_stop=[float(values[2])],
-            integration_time=[actual_duration], stop_delay=[delay_ps], raw_counts=[int(values[0])],
+            duration=[actual_duration], stop_delay=[delay_ps], raw_counts=[int(values[0])],
             window_start=[start_ps], window_stop=[width_ps],
             accidental_counts=[accidental_count], accidental_method=["rate_product"],
         )

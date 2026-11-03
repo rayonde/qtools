@@ -8,7 +8,7 @@ import pytest
 import qtools.tdc as tdc_package
 from qtools.tdc import TDC, api, connection, get_tdc, list_tdc
 from qtools.tdc.backends.s15_tdc1.exp_backend import ExpS15TDC1Backend
-from qtools.tdc.data import DeviceInfo, TimestampResult
+from qtools.tdc.data import DeviceInfo, SinglesResult, TimestampResult
 
 
 class OneNsBackend(ExpS15TDC1Backend):
@@ -225,18 +225,52 @@ def test_one_shot_measurements_accept_bin_width(
     backend.disconnect.assert_called_once()
 
 
-def test_list_tdc_scans_prints_and_returns_device_records(monkeypatch, capsys):
+def test_list_tdc_scans_and_returns_device_records_without_printing(
+    monkeypatch, capsys
+):
     devices = [DeviceInfo("fake", "fake://tdc", "SN-001", "Test TDC", "usb")]
     discover = MagicMock(return_value=devices)
     monkeypatch.setattr(connection, "discover_all", discover)
     assert list_tdc(method="usb") is devices
     discover.assert_called_once_with(method="usb", timeout=2.0)
-    output = capsys.readouterr().out
-    for text in ["Discovered devices (1)", "fake://tdc", "SN-001", "Test TDC"]:
-        assert text in output
+    assert capsys.readouterr().out == ""
 
 
-def test_list_tdc_handles_no_hardware(monkeypatch, capsys):
+def test_list_tdc_handles_no_hardware_without_printing(monkeypatch, capsys):
     monkeypatch.setattr(connection, "discover_all", lambda **kwargs: [])
     assert list_tdc() == []
-    assert "No devices found" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
+
+
+def test_device_info_repr_omits_connection_details():
+    device = DeviceInfo(
+        "fake",
+        "fake://tdc",
+        "SN-001",
+        "Test TDC",
+        "usb",
+        "192.0.2.1",
+        5555,
+        "tcp",
+    )
+    assert repr(device) == (
+        "DeviceInfo(backend_name='fake', device_path='fake://tdc', "
+        "serial_number='SN-001', transport='usb')"
+    )
+
+def test_singles_repetitions_use_samples_parameter(backend):
+    sample = SinglesResult(
+        duration=1.0,
+        channels=np.array([1, 2], dtype=np.uint8),
+        counts=np.array([10, 20], dtype=np.uint64),
+        count_rates=np.array([10.0, 20.0]),
+    )
+    device = TDC(backend)
+    device._acquire_singles = MagicMock(return_value=sample)
+
+    assert len(device.measure_singles(1.0, samples=2)) == 2
+    assert len(device.measure_rates(1.0, samples=3)) == 3
+    with pytest.raises(ValueError, match="samples"):
+        device.measure_singles(1.0, samples=0)
+    with pytest.raises(ValueError, match="samples"):
+        device.measure_rates(1.0, samples=True)

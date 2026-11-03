@@ -75,11 +75,11 @@ def test_g2_empty_input_returns_offset_histogram():
         bins=4,
         resolution_ps=2.0,
         bin_offset=-3,
-        integration_time=0.5,
+        duration=0.5,
     )
 
     np.testing.assert_array_equal(res.histogram[0], np.zeros(4, dtype=np.uint64))
     np.testing.assert_array_equal(res.bin_edges[0], np.arange(-3, 2, dtype=np.int64) * 2)
     assert res.singles_start[0] == 0.0
     assert res.singles_stop[0] == 0.0
-    assert res.integration_time[0] == 0.5
+    assert res.duration[0] == 0.5
